@@ -20,3 +20,6 @@ node_modules/
 
 # Journaux
 *.log
+
+# Configuration locale du déploiement (domaine, e-mail) : voir .env.example
+.env

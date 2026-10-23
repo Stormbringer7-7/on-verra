@@ -1,10 +1,15 @@
 # Déploiement de big-brother :
 #   extraction  : (Python) télécharge l'open data, compile et publie une base par législature, chaque jour
-#   publication : (nginx) sert le volume « publication » aux applications — http://localhost:8081
-#   web         : (nginx) app web « Nos administrés ont du talent », /donnees relaie « publication » — http://localhost:8080
+#   publication : (nginx) sert le volume « publication » aux applications
+#   web         : (nginx) app web « Nos administrés ont du talent » ; /donnees relaie « publication »
+#   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /donnees = publication)
 #
-#   docker compose up -d --build        # premier import ~5 min
+#   cp .env.example .env                 # DOMAINE, ACME_EMAIL
+#   docker compose up -d --build         # premier import ~5 min
 #   docker compose logs -f extraction
+#
+# web et publication restent joignables depuis la machine seulement (127.0.0.1:8080 et :8081),
+# pour le développement ; depuis l'extérieur, tout passe par Caddy.
 
 name: big-brother
 
@@ -30,7 +35,7 @@ services:
       context: ./opendata
       dockerfile: Dockerfile.nginx
     ports:
-      - "8081:80"                      # pour les apps mobiles : EXPO_PUBLIC_PUBLICATION_URL=https://<hôte>
+      - "127.0.0.1:8081:80"
     volumes:
       - publication:/srv/publication:ro
     restart: unless-stopped
@@ -39,13 +44,33 @@ services:
     build:
       context: ./augure
       args:
-        PUBLICATION_URL: /donnees      # relayé vers « publication » par le nginx de l'app
+        PUBLICATION_URL: /donnees      # même origine : Caddy (ou le nginx de l'app) relaie vers « publication »
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
+      - publication
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    environment:
+      DOMAINE: ${DOMAINE:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"                  # HTTP/3
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data               # certificats : à conserver (limites de Let's Encrypt)
+      - caddy_config:/config
+    depends_on:
+      - web
       - publication
     restart: unless-stopped
 
 volumes:
   cache:
   publication:
+  caddy_data:
+  caddy_config:
