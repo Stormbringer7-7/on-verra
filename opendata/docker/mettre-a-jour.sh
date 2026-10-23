@@ -10,6 +10,12 @@ if [ -f /app/data/on_verra.db ] && [ ! -f /srv/publication/index.json ]; then
   python -m src publier --dossier /srv/publication || echo "$(date -u +%FT%TZ) échec de la publication" >&2
 fi
 
+# Postgres vide ou en retard sur la publication (premier lancement, volume recréé) : on charge
+# tout de suite ce qui est publié. Rien n'est rechargé si Postgres est déjà à jour.
+if [ -f /srv/publication/index.json ] && [ -n "${DATABASE_URL:-}" ]; then
+  python -m src charger --dossier /srv/publication || echo "$(date -u +%FT%TZ) échec du chargement Postgres" >&2
+fi
+
 while true; do
   echo "$(date -u +%FT%TZ) mise à jour"
   # Fichiers redemandés au plus une fois par AGE_MAX heures, et seulement s'ils ont changé (HTTP 304 sinon).

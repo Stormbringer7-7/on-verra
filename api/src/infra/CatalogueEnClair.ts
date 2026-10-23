@@ -2,8 +2,8 @@
 // Règles de rédaction (design system Panoptique) : décrire ce que le texte change, jamais
 // s'il est bon ; verbe à l'infinitif, pas d'adjectif, pas de question orientée.
 
-import type { EnClair, ScrutinResume } from '../../core/domain/model';
-import type { EnClairProvider } from '../../core/ports';
+import type { EnClair, ScrutinResume } from '@contrat/domain/model';
+import type { EnClairProvider } from '../ports';
 
 export type Catalogue = Record<string, EnClair>;
 

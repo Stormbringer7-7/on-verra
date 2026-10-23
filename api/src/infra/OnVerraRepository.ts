@@ -1,6 +1,6 @@
-// Adapter du ParlementRepository sur une base opendata (src/schema/*.sql), découpée par
-// législature : chaque instance lit une seule législature. C'est le seul fichier qui connaît ce
-// schéma : quand opendata évoluera, on écrira un autre adapter.
+// Adapter du ParlementRepository sur le schéma opendata (opendata/src/schema/*.sql) chargé dans
+// Postgres, un schéma par législature : chaque instance lit une seule législature. C'est le seul
+// fichier qui connaît ce schéma : quand opendata évoluera, on écrira un autre adapter.
 
 import type {
   Alliance,
@@ -16,8 +16,8 @@ import type {
   PositionExprimee,
   ScrutinResume,
   VoteDepute,
-} from '../../core/domain/model';
-import { SEUIL_VOTE_UNI } from '../../core/domain/votes';
+} from '@contrat/domain/model';
+import { SEUIL_VOTE_UNI } from '@contrat/domain/votes';
 import type {
   ActiviteBrute,
   EntreeRecherche,
@@ -27,7 +27,7 @@ import type {
   ParlementRepository,
   SqlDatabase,
   SqlParams,
-} from '../../core/ports';
+} from '../ports';
 
 // Un scrutin sans texte rattaché (résolution, déclaration…) prend son intitulé pour titre.
 const COLONNES_SCRUTIN = `
@@ -122,9 +122,9 @@ export class OnVerraRepository implements ParlementRepository {
     const natures = f.natures ? liste('n', f.natures) : null;
     const rows = await this.db.all<LigneScrutin>(
       `SELECT ${COLONNES_SCRUTIN} FROM scrutins s LEFT JOIN lois l ON l.id = s.loi_id
-       WHERE ${natures ? `s.nature IN (${natures.sql})` : '1'}
-         AND ($niveau IS NULL OR l.niveau = $niveau)
-         AND ($resultat IS NULL OR s.sort LIKE $resultat || '%')
+       WHERE ${natures ? `s.nature IN (${natures.sql})` : 'TRUE'}
+         AND (CAST($niveau AS text) IS NULL OR l.niveau = $niveau)
+         AND (CAST($resultat AS text) IS NULL OR s.sort LIKE $resultat || '%')
        ORDER BY s.date DESC, s.numero DESC
        LIMIT $limite`,
       {
@@ -159,15 +159,15 @@ export class OnVerraRepository implements ParlementRepository {
   async membres(date: string): Promise<MembreAssemblee[]> {
     // Groupe : appartenance du jour. Siège : celui de son dernier vote du mois écoulé (publié depuis
     // la 17e), sinon le dernier connu du mandat. Un numéro de siège sert à ordonner, pas à dessiner.
-    // CROSS JOIN : partir des scrutins du mois ; sinon SQLite parcourt les ~1,3 M votes pour le GROUP BY (×100).
+    const depuis = new Date(Date.parse(date) - 30 * 86_400_000).toISOString().slice(0, 10);
     return this.db.all<MembreAssemblee>(
       `WITH dernieres AS (
-         SELECT v.acteur_ref, v.num_place, MAX(s.date)
-         FROM scrutins s CROSS JOIN votes v ON v.scrutin_uid = s.uid
-         WHERE s.date BETWEEN date($date, '-30 days') AND $date AND v.num_place IS NOT NULL
-         GROUP BY v.acteur_ref
+         SELECT DISTINCT ON (v.acteur_ref) v.acteur_ref, v.num_place
+         FROM scrutins s JOIN votes v ON v.scrutin_uid = s.uid
+         WHERE s.date BETWEEN $depuis AND $date AND v.num_place IS NOT NULL
+         ORDER BY v.acteur_ref, s.date DESC
        )
-       SELECT m.acteur_ref AS acteur, d.prenom, d.nom, d.civilite, d.departement, d.num_circo AS circonscription,
+       SELECT DISTINCT ON (m.acteur_ref) m.acteur_ref AS acteur, d.prenom, d.nom, d.civilite, d.departement, d.num_circo AS circonscription,
          (SELECT a.groupe_ref FROM appartenances a
            WHERE a.acteur_ref = m.acteur_ref AND a.date_debut <= $date
              AND (a.date_fin IS NULL OR a.date_fin >= $date)
@@ -178,8 +178,8 @@ export class OnVerraRepository implements ParlementRepository {
        JOIN deputes d ON d.acteur_ref = m.acteur_ref
        LEFT JOIN dernieres p ON p.acteur_ref = m.acteur_ref
        WHERE m.date_debut <= $date AND (m.date_fin IS NULL OR m.date_fin >= $date)
-       GROUP BY m.acteur_ref`,
-      { $date: date },
+       ORDER BY m.acteur_ref, m.date_debut DESC`,
+      { $date: date, $depuis: depuis },
     );
   }
 
@@ -268,7 +268,7 @@ export class OnVerraRepository implements ParlementRepository {
 
   async voteUni(ref: string): Promise<number | null> {
     const r = await this.db.first<{ uni: number | null }>(
-      `SELECT AVG(CASE WHEN MAX(pour, contre, abstentions) >= $seuil * (pour + contre + abstentions)
+      `SELECT AVG(CASE WHEN GREATEST(pour, contre, abstentions) >= CAST($seuil AS float8) * (pour + contre + abstentions)
                   THEN 1.0 ELSE 0.0 END) AS uni
        FROM positions_groupes WHERE groupe_ref = $ref AND pour + contre + abstentions > 0`,
       { $ref: ref, $seuil: SEUIL_VOTE_UNI },
@@ -306,7 +306,7 @@ export class OnVerraRepository implements ParlementRepository {
     // Le groupe est celui du moment du vote, et la ligne celle de ce groupe sur ce scrutin.
     const rows = await this.db.all<LigneScrutin & LigneGroupe & { position: Position; ligne: string | null }>(
       `WITH en_fonction AS (
-         SELECT ${COLONNES_SCRUTIN},
+         SELECT DISTINCT ON (s.uid) ${COLONNES_SCRUTIN},
            COALESCE(v.position, 'absent') AS position,
            COALESCE(v.groupe_ref,
              (SELECT a.groupe_ref FROM appartenances a
@@ -319,7 +319,7 @@ export class OnVerraRepository implements ParlementRepository {
            AND m.date_debut <= s.date AND (m.date_fin IS NULL OR m.date_fin >= s.date)
          LEFT JOIN votes v ON v.scrutin_uid = s.uid AND v.acteur_ref = $acteur
          WHERE s.date BETWEEN $debut AND $fin
-         GROUP BY s.uid
+         ORDER BY s.uid
        )
        SELECT f.*, g.organe_ref, g.abrege, g.libelle, g.couleur,
          CASE WHEN g.abrege != 'NI' THEN pg.ligne END AS ligne
@@ -385,12 +385,13 @@ export class OnVerraRepository implements ParlementRepository {
   async alliances(ref: string): Promise<Alliance[]> {
     // Scrutins où les deux groupes ont une ligne (position la plus fréquente, sans égalité).
     const rows = await this.db.all<LigneGroupe & { scrutins: number; accords: number }>(
-      `SELECT g.organe_ref, g.abrege, g.libelle, g.couleur, COUNT(*) AS scrutins, SUM(a.ligne = b.ligne) AS accords
+      `SELECT g.organe_ref, g.abrege, g.libelle, g.couleur, COUNT(*) AS scrutins,
+         COUNT(*) FILTER (WHERE a.ligne = b.ligne) AS accords
        FROM positions_groupes a
        JOIN positions_groupes b ON b.scrutin_uid = a.scrutin_uid AND b.groupe_ref != a.groupe_ref
        JOIN groupes g ON g.organe_ref = b.groupe_ref
        WHERE a.groupe_ref = $ref AND a.ligne IS NOT NULL AND b.ligne IS NOT NULL AND g.abrege != 'NI'
-       GROUP BY b.groupe_ref`,
+       GROUP BY g.organe_ref, g.abrege, g.libelle, g.couleur`,
       { $ref: ref },
     );
     return rows
@@ -405,7 +406,7 @@ export class OnVerraRepository implements ParlementRepository {
          1.0 * SUM(pg.pour + pg.contre + pg.abstentions) / SUM(pg.membres) AS presence
        FROM positions_groupes pg JOIN scrutins s ON s.uid = pg.scrutin_uid
        WHERE pg.groupe_ref = $ref AND pg.membres > 0
-       GROUP BY mois ORDER BY mois DESC LIMIT $mois`,
+       GROUP BY 1 ORDER BY 1 DESC LIMIT $mois`,
       { $ref: ref, $mois: mois },
     );
   }
@@ -413,7 +414,8 @@ export class OnVerraRepository implements ParlementRepository {
   async motionsSoutenues(ref: string, seuil: number): Promise<{ soutenues: number; total: number }> {
     const r = await this.db.first<{ soutenues: number; total: number }>(
       `SELECT COUNT(*) AS total,
-         SUM((SELECT COUNT(*) FROM votes_censure v WHERE v.scrutin_uid = m.scrutin_uid AND v.groupe_ref = $ref) >= $seuil)
+         COUNT(*) FILTER (WHERE (SELECT COUNT(*) FROM votes_censure v
+                                 WHERE v.scrutin_uid = m.scrutin_uid AND v.groupe_ref = $ref) >= CAST($seuil AS float8))
            AS soutenues
        FROM motions_censure m`,
       { $ref: ref, $seuil: seuil },
@@ -435,8 +437,9 @@ export class OnVerraRepository implements ParlementRepository {
     // Arrivées : appartenances commencées plus d'un mois après la création du groupe.
     const r = await this.db.first<{ arrivees: number; departs: number }>(
       `WITH a AS (SELECT * FROM appartenances WHERE groupe_ref = $ref)
-       SELECT SUM(date_debut > date((SELECT MIN(date_debut) FROM a), '+1 month')) AS arrivees,
-              SUM(date_fin IS NOT NULL) AS departs
+       SELECT COUNT(*) FILTER (WHERE date_debut >
+                to_char(CAST((SELECT MIN(date_debut) FROM a) AS date) + interval '1 month', 'YYYY-MM-DD')) AS arrivees,
+              COUNT(date_fin) AS departs
        FROM a`,
       { $ref: ref },
     );
@@ -471,7 +474,7 @@ export class OnVerraRepository implements ParlementRepository {
   activite(debut: string, fin: string): Promise<ActiviteBrute[]> {
     // Agrégats calculés par opendata (table activite_deputes, par député, mois et texte visé).
     return this.db.all(
-      `SELECT a.acteur_ref AS acteur, a.cle, COALESCE(l.titre, s.titre) AS titre,
+      `SELECT a.acteur_ref AS acteur, a.cle, MAX(COALESCE(l.titre, s.titre)) AS titre,
          SUM(a.votes) AS votes, SUM(a.exprimes) AS exprimes, SUM(a.pour) AS pour, SUM(a.ecarts) AS ecarts
        FROM activite_deputes a
        LEFT JOIN lois l ON l.id = a.cle

@@ -1,7 +1,6 @@
 // Ports : ce dont le cœur a besoin, sans dire comment c'est fait.
-// Les adapters (src/infra) les implémentent pour Expo, le web ou Node (tests).
+// Les adapters (src/infra) les implémentent : Postgres, thèmes, résumés.
 
-import type { FichierPublie, IndexPublication, Manifeste, PartitionPubliee } from '../domain/publication';
 import type {
   Alliance,
   DeputeTrouve,
@@ -14,7 +13,7 @@ import type {
   PositionDeGroupe,
   ScrutinResume,
   VoteDepute,
-} from '../domain/model';
+} from '@contrat/domain/model';
 
 // ---------- Stockage SQL ----------
 
@@ -24,33 +23,6 @@ export type SqlParams = Record<string, SqlValue>;
 export interface SqlDatabase {
   all<T>(sql: string, params?: SqlParams): Promise<T[]>;
   first<T>(sql: string, params?: SqlParams): Promise<T | null>;
-  /** Exécute les instructions dans une transaction : tout ou rien. */
-  transaction(statements: string[]): Promise<void>;
-  close(): Promise<void>;
-}
-
-/**
- * Bases locales, une par législature (la clé de partition de opendata).
- * Sur mobile, des fichiers : un correctif appliqué est enregistré. Sur le web, la mémoire.
- */
-export interface LocalDatabases {
-  /** Législatures dont une copie locale existe. */
-  installees(): Promise<string[]>;
-  ouvrir(legislature: string): Promise<SqlDatabase | null>;
-  /** Remplace la copie locale par cette base (fichier .db compressé en gzip) et l'ouvre. */
-  installer(legislature: string, gzip: Uint8Array): Promise<SqlDatabase>;
-}
-
-// ---------- Publication opendata (fichiers statiques, sans API) ----------
-
-export interface PublicationSource {
-  readonly configured: boolean;
-  index(): Promise<IndexPublication>;
-  manifeste(partition: PartitionPubliee): Promise<Manifeste>;
-  /** Fichier vérifié (taille, SHA-256) puis décompressé : pour les correctifs, petits. */
-  telecharger(partition: PartitionPubliee, f: FichierPublie): Promise<Uint8Array>;
-  /** Fichier vérifié, encore compressé : pour les bases, décompressées par LocalDatabases. */
-  telechargerCompresse(partition: PartitionPubliee, f: FichierPublie): Promise<Uint8Array>;
 }
 
 // ---------- Lecture des données parlementaires ----------

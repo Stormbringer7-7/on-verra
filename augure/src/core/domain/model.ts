@@ -28,8 +28,6 @@ export interface Legislature {
   debut: string;
   fin: string;
   scrutins: number;
-  /** Base de cette législature présente sur l'appareil (sinon téléchargée à la consultation). */
-  installee: boolean;
 }
 
 export interface ScrutinResume {
@@ -266,9 +264,8 @@ export interface EtatBase {
   version: number;
   date: string;
   schema: string;
-  origine: 'locale' | 'correctifs' | 'complete';
   nouveautes: Nouveaute[];
-  /** Mise à jour impossible mais une base locale existe : l'app reste utilisable. */
+  /** Message à afficher en tête de l'app (données en cours d'import…), sinon null. */
   avertissement: string | null;
 }
 

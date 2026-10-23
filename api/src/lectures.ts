@@ -1,4 +1,4 @@
-import { ordonnerDeGaucheADroite } from '../../domain/hemicycle';
+import { ordonnerDeGaucheADroite } from '@contrat/domain/hemicycle';
 import {
   NATURES_FINALES,
   type ActiviteTheme,
@@ -17,17 +17,17 @@ import {
   type ResultatRecherche,
   type ScrutinResume,
   type ThemeDeGroupe,
-} from '../../domain/model';
-import { compterEntre, debutDouzeMois, moinsUnAn, normaliser } from '../../domain/texte';
-import { bilan, estEcart } from '../../domain/votes';
-import { legislatureDuScrutin, type Partitions } from '../../partitions';
-import type { EnClairProvider, EntreeRecherche, ParlementRepository, SqlDatabase, ThemeClassifier } from '../../ports';
+} from '@contrat/domain/model';
+import { compterEntre, debutDouzeMois, moinsUnAn, normaliser } from '@contrat/domain/texte';
+import { bilan, estEcart } from '@contrat/domain/votes';
+import { legislatureDuScrutin, type Legislatures } from './legislatures';
+import type { EnClairProvider, EntreeRecherche, ParlementRepository, SqlDatabase, ThemeClassifier } from './ports';
 
 type EntreeIndexee = EntreeRecherche & { texte: string; theme: string };
 
 export interface LecturesDeps {
-  partitions: Partitions;
-  /** Repository d'une partition (une base = une législature). */
+  legislatures: Legislatures;
+  /** Repository d'une législature (une base = une législature). */
   repository: (db: SqlDatabase) => ParlementRepository;
   themes: ThemeClassifier;
   enClair: EnClairProvider;
@@ -48,10 +48,10 @@ async function hemicycle(r: ParlementRepository, date: string): Promise<{ membre
   return { membres, groupes };
 }
 
-export function lectures({ partitions, repository, themes, enClair }: LecturesDeps) {
+export function lectures({ legislatures, repository, themes, enClair }: LecturesDeps) {
   const repos = new WeakMap<SqlDatabase, ParlementRepository>();
   const repo = async (legislature: string): Promise<ParlementRepository> => {
-    const db = await partitions.db(legislature);
+    const db = await legislatures.db(legislature);
     let r = repos.get(db);
     if (!r) repos.set(db, (r = repository(db)));
     return r;
@@ -60,7 +60,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
   // Chaque frappe filtre ~9 000 scrutins en mémoire puis ne lit que les résultats en SQL.
   const index = new WeakMap<SqlDatabase, Promise<EntreeIndexee[]>>();
   const indexDe = async (legislature: string): Promise<EntreeIndexee[]> => {
-    const db = await partitions.db(legislature);
+    const db = await legislatures.db(legislature);
     let i = index.get(db);
     if (!i) {
       const r = await repo(legislature);
@@ -82,14 +82,14 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
 
   return {
     synchroniser: async (): Promise<EtatBase> => {
-      await partitions.chargerIndex();
-      return (await partitions.preparer(partitions.derniere())).etat;
+      await legislatures.chargerIndex();
+      return legislatures.etat(await legislatures.derniere());
     },
 
-    legislatures: () => partitions.legislatures(),
+    legislatures: () => legislatures.legislatures(),
 
     assemblee: async ({ legislature }: { legislature?: string }): Promise<Assemblee> => {
-      const leg = legislature ?? partitions.derniere();
+      const leg = legislature ?? (await legislatures.derniere());
       const r = await repo(leg);
       const scrutin = await r.dernierScrutin();
       const date = scrutin?.date ?? aujourdhui();
@@ -269,7 +269,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
       limite?: number;
     }): Promise<ScrutinResume[]> => {
       const { legislature, theme, texte, ...filtre } = f;
-      const leg = legislature ?? partitions.derniere();
+      const leg = legislature ?? (await legislatures.derniere());
       const r = await repo(leg);
       const limite = filtre.limite ?? 200;
       const natures = filtre.natures ?? NATURES_FINALES;
@@ -293,8 +293,8 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
     rechercher: async ({ texte, legislature }: { texte: string; legislature?: string }): Promise<ResultatRecherche> => {
       const t = normaliser(texte.trim());
       if (t.length < 2) return { deputes: [], scrutins: [] };
-      const r = await repo(legislature ?? partitions.derniere());
-      const leg = legislature ?? partitions.derniere();
+      const r = await repo(legislature ?? (await legislatures.derniere()));
+      const leg = legislature ?? (await legislatures.derniere());
       const [deputes, entrees] = await Promise.all([r.deputes(), indexDe(leg)]);
       const uids = entrees.filter((e) => e.texte.includes(t)).slice(0, 20).map((e) => e.uid);
       return {
@@ -304,7 +304,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
     },
 
     explorer: async ({ legislature }: { legislature?: string }): Promise<Catalogue> => {
-      const leg = legislature ?? partitions.derniere();
+      const leg = legislature ?? (await legislatures.derniere());
       const r = await repo(leg);
       const date = (await r.dernierScrutin())?.date ?? aujourdhui();
       const [deputes, { membres, groupes }, titres] = await Promise.all([r.deputes(), hemicycle(r, date), r.titres()]);
@@ -338,7 +338,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
     },
 
     champions: async ({ legislature }: { legislature?: string }): Promise<Champions> => {
-      const leg = legislature ?? partitions.derniere();
+      const leg = legislature ?? (await legislatures.derniere());
       const r = await repo(leg);
       const fin = (await r.dernierScrutin())?.date ?? aujourdhui();
       // 12 mois calendaires : la granularité de l'activité pré-calculée par opendata.

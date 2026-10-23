@@ -1,18 +1,25 @@
 # Déploiement de big-brother :
-#   extraction  : (Python) télécharge l'open data, compile et publie une base par législature, chaque jour
-#   publication : (nginx) sert le volume « publication » aux applications
-#   web         : (nginx) app web « Nos administrés ont du talent » ; /donnees relaie « publication »
-#   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /donnees = publication)
+#   extraction  : (Python) télécharge l'open data, compile et publie une base SQLite par législature
+#                 chaque jour, puis charge chaque nouvelle version dans Postgres
+#   postgres    : la base lue par l'API (un schéma par législature)
+#   api         : (Node) exécute les commandes de l'app sur Postgres ; l'app ne contient aucun SQL
+#   publication : (nginx) sert les bases SQLite publiées (instantanés, sauvegardes, open data)
+#   web         : (nginx) app web « Nos administrés ont du talent » ; /api relaie « api »
+#   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE
+#                 (/ = app, /api = api, /donnees = publication)
 #
-#   cp .env.example .env                 # DOMAINE
-#   docker compose up -d --build         # premier import ~5 min ; ensuite, rien n'est re-téléchargé au redémarrage
-#   Données persistées sur l'hôte : opendata/data (cache AN, base) et opendata/publication.
+#   cp .env.example .env                 # DOMAINE, POSTGRES_PASSWORD
+#   docker compose up -d --build         # premier import ~10 min ; ensuite, rien n'est re-téléchargé au redémarrage
 #   docker compose logs -f extraction
 #
-# web et publication restent joignables depuis la machine seulement (127.0.0.1:8080 et :8081),
-# pour le développement ; depuis l'extérieur, tout passe par Caddy.
+# Données persistées sur l'hôte : opendata/data (cache AN, base) et opendata/publication.
+# Postgres (volume « postgres ») se reconstruit seul depuis la publication s'il est perdu.
+# web, publication et api restent joignables depuis la machine seulement (127.0.0.1:8080, :8081
+# et :8082), pour le développement ; depuis l'extérieur, tout passe par Caddy.
 
 name: big-brother
+
+x-postgres-url: &postgres-url postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/big-brother
 
 services:
   extraction:
@@ -22,15 +29,46 @@ services:
     environment:
       INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
       AGE_MAX: "20"                    # heures avant de redemander un fichier à l'AN (304 s'il n'a pas changé)
+      DATABASE_URL: *postgres-url
     volumes:
       # Dossiers de l'hôte : survivent à down, rebuild, « down -v » et « volume prune ».
       - ./opendata/data:/app/data      # open data AN, base complète, partitions : privé
       - ./opendata/publication:/srv/publication
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       # Prêt dès que la première publication existe.
       test: ["CMD", "test", "-f", "/srv/publication/index.json"]
       interval: 30s
       start_period: 15m
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: big-brother
+      POSTGRES_DB: big-brother
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-big-brother}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "big-brother", "-d", "big-brother"]
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      DATABASE_URL: *postgres-url
+    ports:
+      - "127.0.0.1:8082:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   publication:
@@ -47,11 +85,11 @@ services:
     build:
       context: ./augure
       args:
-        PUBLICATION_URL: /donnees      # même origine : Caddy (ou le nginx de l'app) relaie vers « publication »
+        API_URL: /api                  # même origine : Caddy (ou le nginx de l'app) relaie vers « api »
     ports:
       - "127.0.0.1:8080:80"
     depends_on:
-      - publication
+      - api
     restart: unless-stopped
 
   caddy:
@@ -68,9 +106,11 @@ services:
       - caddy_config:/config
     depends_on:
       - web
+      - api
       - publication
     restart: unless-stopped
 
 volumes:
+  postgres:
   caddy_data:
   caddy_config:

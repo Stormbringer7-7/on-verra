@@ -1,0 +1,23 @@
+{
+  "name": "big-brother-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/serveur.ts",
+    "build": "esbuild src/serveur.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/serveur.mjs --external:pg-native --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "start": "node dist/serveur.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

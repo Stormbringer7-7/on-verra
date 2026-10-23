@@ -3,8 +3,10 @@
 La publication contient un index et un dossier par législature (partition.py) :
   index.json                      législatures publiées : période, version, manifeste, taille
   <leg>/manifest.json             version courante, base complète, correctifs disponibles, nouveautés
-  <leg>/on_verra-<v>.db.gz        base complète de la version v (première installation, rattrapage)
-  <leg>/maj-<v-1>-<v>.sql.gz      correctif : différences entre deux versions, en SQL
+  <leg>/on_verra-<v>-<h>.db.gz    base complète de la version v (première installation, rattrapage)
+  <leg>/maj-<v-1>-<v>-<h>.sql.gz  correctif : différences entre deux versions, en SQL
+<h> : début du SHA-256 du fichier. Servis « immutable » : un nom ne désigne jamais deux contenus,
+même si la publication est refaite de zéro (sinon les navigateurs resservent l'ancien fichier).
   <leg>/courante.db               copie de la dernière base publiée (référence du prochain correctif)
 
 Une version n'est publiée que si la législature a gagné un scrutin, une motion de censure ou un
@@ -112,12 +114,22 @@ def nouveautes(ancienne: Path | None, nouvelle: Path) -> list[dict]:
     return resultat
 
 
-def compresser(source: Path | bytes, cible: Path) -> dict:
+def ecrire(cible: Path, contenu: bytes):
+    """Écriture atomique : le service publication ne sert jamais un fichier à moitié écrit."""
+    partiel = cible.with_name(cible.name + ".partiel")
+    partiel.write_bytes(contenu)
+    partiel.replace(cible)
+
+
+def compresser(source: Path | bytes, dossier: Path, prefixe: str, extension: str) -> dict:
+    """Fichier <prefixe>-<empreinte>.<extension>.gz : le nom change dès que le contenu change."""
     donnees = source.read_bytes() if isinstance(source, Path) else source
     # mtime fixé : deux compressions des mêmes données donnent le même fichier (empreinte stable).
-    cible.write_bytes(gzip.compress(donnees, compresslevel=9, mtime=0))
-    contenu = cible.read_bytes()
-    return {"fichier": cible.name, "taille": len(contenu), "sha256": hashlib.sha256(contenu).hexdigest()}
+    contenu = gzip.compress(donnees, compresslevel=9, mtime=0)
+    sha256 = hashlib.sha256(contenu).hexdigest()
+    cible = dossier / f"{prefixe}-{sha256[:12]}.{extension}.gz"
+    ecrire(cible, contenu)
+    return {"fichier": cible.name, "taille": len(contenu), "sha256": sha256}
 
 
 def preparer_base(base: Path, cible: Path, version: int, date: str):
@@ -156,7 +168,7 @@ def publier(base: Path, dossier: Path, forcer: bool = False) -> dict | None:
     date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     preparee = dossier / f"on_verra-{version}.db"
     preparer_base(base, preparee, version, date)
-    complete = compresser(preparee, dossier / f"on_verra-{version}.db.gz")
+    complete = compresser(preparee, dossier, f"on_verra-{version}", "db")
 
     correctifs = [] if schema_change or not manifeste else manifeste["correctifs"]
     if instructions is not None and not schema_change:
@@ -172,7 +184,7 @@ def publier(base: Path, dossier: Path, forcer: bool = False) -> dict | None:
             "DROP TABLE verification_version;",
             "COMMIT;", "",
         ])
-        correctif = compresser(script.encode(), dossier / f"maj-{version - 1}-{version}.sql.gz")
+        correctif = compresser(script.encode(), dossier, f"maj-{version - 1}-{version}", "sql")
         correctifs = [*correctifs, {"de": version - 1, "vers": version, **correctif,
                                     "lignes": len(instructions)}]
 
@@ -195,7 +207,7 @@ def publier(base: Path, dossier: Path, forcer: bool = False) -> dict | None:
         "nouveautes": nouveautes(precedente, base),
     }
     shutil.move(preparee, courante)
-    chemin_manifeste.write_text(json.dumps(nouveau, ensure_ascii=False, indent=1))
+    ecrire(chemin_manifeste, json.dumps(nouveau, ensure_ascii=False, indent=1).encode())
     resume = ", ".join(f"{t} +{n}" for t, n in ajouts.items() if n and t in TABLES_DECLENCHEUSES)
     print(f"Version {version} publiée ({complete['taille'] / 1e6:.1f} Mo compressée"
           + (f", correctif {correctifs[-1]['taille'] / 1e3:.0f} ko : {resume}" if correctifs
@@ -222,7 +234,7 @@ def publier_legislatures(base: Path, dossier: Path, partitions: Path, schema: Pa
                         "taille": manifeste["base"]["taille"]})
     index = {"format": FORMAT_MANIFESTE, "date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
              "legislatures": entrees}
-    (dossier / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1))
+    ecrire(dossier / "index.json", json.dumps(index, ensure_ascii=False, indent=1).encode())
     print(f"index.json : {', '.join(e['legislature'] + 'e v' + str(e['version']) for e in entrees)} -> {dossier}")
     return index
 

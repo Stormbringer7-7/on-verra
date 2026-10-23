@@ -1,8 +1,8 @@
 // Thème d'un texte d'après les mots de son titre. Heuristique assumée et remplaçable
 // (classement manuel, modèle de langue…) : c'est un adapter du port ThemeClassifier.
 
-import type { ThemeClassifier } from '../../core/ports';
-import { normaliser } from '../../core/domain/texte';
+import type { ThemeClassifier } from '../ports';
+import { normaliser } from '@contrat/domain/texte';
 
 // Ordre significatif : la première règle qui correspond l'emporte
 // (« sécurité sociale » doit passer avant « sécurité »).

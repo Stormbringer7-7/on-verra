@@ -57,6 +57,10 @@ export class CommandBus {
     return this;
   }
 
+  connait(type: string): boolean {
+    return this.handlers.has(type);
+  }
+
   use(middleware: Middleware): this {
     this.middlewares.push(middleware);
     return this;

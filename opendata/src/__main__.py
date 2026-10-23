@@ -1,6 +1,7 @@
 """Point d'entrée : python -m src <commande>"""
 
 import argparse
+import os
 import sqlite3
 from itertools import groupby
 from pathlib import Path
@@ -229,6 +230,14 @@ def cmd_indicateurs(args):
               f"{r['exprimes']}/{r['scrutins'] - r['empeches']}")
 
 
+def charger_postgres(dossier: Path, forcer: bool = False):
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise SystemExit("DATABASE_URL manquante : adresse de la base Postgres de l'API")
+    from .postgres import charger                   # psycopg : seulement là où Postgres sert
+    charger(url, dossier, forcer)
+
+
 def main():
     p = argparse.ArgumentParser(prog="src", description="Votes finaux des députés sur chaque loi.")
     sp = p.add_subparsers(required=True)
@@ -291,6 +300,11 @@ def main():
     c.set_defaults(f=lambda a: publier_legislatures(BASE, a.dossier, PARTITIONS, compilation.SCHEMA,
                                                     a.legislatures.split(","), a.forcer))
 
+    c = sp.add_parser("charger", help="charge la publication dans Postgres (DATABASE_URL), lu par l'API")
+    c.add_argument("--dossier", type=Path, default=PUBLICATION)
+    c.add_argument("--forcer", action="store_true", help="recharge même les versions déjà chargées")
+    c.set_defaults(f=lambda a: charger_postgres(a.dossier, a.forcer))
+
     c = sp.add_parser("mettre-a-jour", help="re-télécharge les données AN modifiées, reconstruit et publie si nouveau scrutin")
     c.add_argument("--dossier", type=Path, default=PUBLICATION)
     # Ménage le site de l'Assemblée : un fichier en cache n'est redemandé qu'après ce délai,
@@ -298,7 +312,8 @@ def main():
     c.add_argument("--age-max", type=float, default=20, help="heures avant de revérifier un fichier (défaut : 20)")
     c.add_argument("--forcer", action="store_true", help="re-télécharge tout, même inchangé")
     c.set_defaults(f=lambda a: (compiler(BASE, BRUT, LEGISLATURES, a.forcer, a.age_max * 3600),
-                                publier_legislatures(BASE, a.dossier, PARTITIONS, compilation.SCHEMA, LEGISLATURES)))
+                                publier_legislatures(BASE, a.dossier, PARTITIONS, compilation.SCHEMA, LEGISLATURES),
+                                os.environ.get("DATABASE_URL") and charger_postgres(a.dossier)))
 
     args = p.parse_args()
     args.f(args)

@@ -1,5 +1,6 @@
 # Entrée publique de big-brother : HTTPS automatique (Let's Encrypt), un seul domaine.
 #   https://{$DOMAINE}/            app web « Nos administrés ont du talent » (service web)
+#   https://{$DOMAINE}/api/…       API (service api) : commandes de l'app
 #   https://{$DOMAINE}/donnees/…   publication opendata (service publication) : index.json, bases, correctifs
 #
 # Variable (fichier .env à la racine, voir .env.example) :
@@ -18,6 +19,11 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
 		-Server
+	}
+
+	# API : les commandes de l'app (POST /api/assemblee/consulter…). /api est retiré avant de transmettre.
+	handle_path /api/* {
+		reverse_proxy api:3000
 	}
 
 	# Publication opendata : directement depuis le service publication (CORS, cache, courante.db

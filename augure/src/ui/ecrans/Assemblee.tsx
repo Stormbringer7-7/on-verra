@@ -63,7 +63,7 @@ export function Assemblee() {
                       key={l.numero}
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
-                      accessibilityLabel={`${l.numero}e législature${l.installee ? '' : ', à télécharger'}`}
+                      accessibilityLabel={`${l.numero}e législature`}
                       hitSlop={8}
                       onPress={() => setLegislature(l.numero)}
                     >

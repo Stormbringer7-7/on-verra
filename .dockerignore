@@ -1,0 +1,6 @@
+# Contexte des images construites depuis la racine (api) : seulement l'API et le contrat de l'app.
+*
+!api
+!augure/src/core
+api/node_modules
+api/dist
