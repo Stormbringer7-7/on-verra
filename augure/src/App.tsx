@@ -17,6 +17,7 @@ import { createContainer } from './di/container';
 import { liens, type Onglets, type Pages } from './navigation';
 import { Label, T } from './ui/components/base';
 import { Chargement, Erreur, Navigation, NOM_APP, type Section } from './ui/components/Ecran';
+import { FiletErreurs } from './ui/components/FiletErreurs';
 import { Assemblee } from './ui/ecrans/Assemblee';
 import { Depute } from './ui/ecrans/Depute';
 import { Champions } from './ui/ecrans/Champions';
@@ -41,8 +42,17 @@ const SECTIONS: Record<keyof Onglets, Section> = {
 };
 
 export default function App() {
+  return (
+    <FiletErreurs>
+      <Application />
+    </FiletErreurs>
+  );
+}
+
+function Application() {
   const [bus] = useState(createContainer);
-  const [polices] = useFonts({
+  // Polices introuvables (réseau, vieux navigateur) : l'app s'affiche avec celles du système.
+  const [polices, erreurPolices] = useFonts({
     IBMPlexSansCondensed_400Regular,
     IBMPlexSansCondensed_600SemiBold,
     IBMPlexSansCondensed_700Bold,
@@ -54,7 +64,7 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <StatusBar style="light" />
-        <CoreProvider bus={bus}>{polices ? <Demarrage /> : <Fond />}</CoreProvider>
+        <CoreProvider bus={bus}>{polices || erreurPolices ? <Demarrage /> : <Fond />}</CoreProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

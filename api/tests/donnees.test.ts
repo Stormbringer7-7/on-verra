@@ -1,14 +1,7 @@
-// Le cœur complet sur la vraie publication d'opendata, avec les adapters Node.
-// Préalable : `python3 -m src importer && python3 -m src publier` dans opendata/.
+// Le cœur serveur complet sur les vraies données, chargées dans Postgres par opendata.
+// Préalable : `docker compose up -d postgres extraction` (Postgres sur 127.0.0.1:5433), ou DATABASE_URL.
 
-/// <reference types="node" />
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
-import { gzipSync } from 'fflate';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   ConsulterAssemblee,
@@ -22,26 +15,24 @@ import {
   Rechercher,
   Synchroniser,
   type Assemblee,
-} from '../src/core';
-import { HttpPublicationSource } from '../src/infra/publication/HttpPublicationSource';
-import { MemoireNodeSqlite } from '../src/infra/sql/NodeSqlite';
-import { creerCoreDeTest, fetchLocal, PUBLICATION, publicationDisponible, URL_TEST } from './support';
+} from '@contrat/index';
+import { baseDisponible, creerCoreDeTest } from './support';
 
-describe.skipIf(!publicationDisponible)('données opendata', () => {
-  const { bus, locales } = creerCoreDeTest();
+describe.skipIf(!baseDisponible)('données opendata', () => {
+  const { bus, fermer } = creerCoreDeTest();
+  afterAll(fermer);
   let assemblee: Assemblee;
 
   beforeAll(async () => {
     const etat = await bus.execute(Synchroniser({}));
-    expect(etat).toMatchObject({ legislature: '17', origine: 'complete' });
+    expect(etat).toMatchObject({ legislature: '17' });
     assemblee = await bus.execute(ConsulterAssemblee({}));
   }, 120_000);
 
-  it('liste les législatures publiées, seule la plus récente est installée au démarrage', async () => {
+  it('liste les législatures chargées, avec leurs dates et leurs scrutins', async () => {
     const l = await bus.execute(ListerLegislatures({}));
     expect(l.map((x) => x.numero)).toEqual(['14', '15', '16', '17']);
-    expect(l.filter((x) => x.installee).map((x) => x.numero)).toEqual(['17']);
-    expect(locales.installations).toEqual(['17']);
+    expect(l.every((x) => x.scrutins > 0 && x.debut < x.fin)).toBe(true);
   });
 
   it("dessine l'Assemblée du dernier scrutin, groupes ordonnés de la gauche vers la droite", () => {
@@ -67,13 +58,12 @@ describe.skipIf(!publicationDisponible)('données opendata', () => {
     expect(assemblee.membres.every((m) => m.position !== null)).toBe(true);
   });
 
-  it("télécharge une ancienne législature à sa consultation, avec ses propres groupes", async () => {
+  it('consulte une ancienne législature, avec ses propres groupes', async () => {
     const a15 = await bus.execute(ConsulterAssemblee({ legislature: '15' }));
     const abreges = a15.groupes.map((g) => g.abrege);
     expect(abreges).toContain('LAREM');
     expect(abreges).not.toContain('EPR');
-    expect(locales.installations).toEqual(['17', '15']);
-  }, 60_000);
+  });
 
   it('fiche groupe : effectif, présence, vote uni, derniers votes', async () => {
     const rn = assemblee.groupes.at(-1)!;
@@ -183,65 +173,4 @@ describe.skipIf(!publicationDisponible)('données opendata', () => {
     const lois = await bus.execute(Rechercher({ texte: 'SECURITE SOCIALE' }));
     expect(lois.scrutins.length).toBeGreaterThan(0);
   });
-});
-
-describe.skipIf(!publicationDisponible)('synchronisation par correctifs', () => {
-  const manifeste = JSON.parse(readFileSync(join(PUBLICATION, '17/manifest.json'), 'utf8'));
-  const v = manifeste.version;
-
-  /** Publication fictive v+1 de la 17e : un correctif au format opendata (vérification de la version de départ). */
-  function publicationSuivante(versionDeDepart: number) {
-    const script = [
-      'BEGIN;',
-      'CREATE TEMP TABLE verification_version (ok INTEGER CHECK (ok = 1));',
-      `INSERT INTO verification_version SELECT COALESCE((SELECT valeur FROM meta WHERE cle = 'version') = '${versionDeDepart}', 0);`,
-      `UPDATE meta SET valeur = '${v + 1}' WHERE cle = 'version';`,
-      'DROP TABLE verification_version;',
-      'COMMIT;',
-    ].join('\n');
-    const gz = gzipSync(new TextEncoder().encode(script));
-    const correctif = { fichier: `maj-${v}-${v + 1}.sql.gz`, taille: gz.length, sha256: bytesToHex(sha256(gz)), de: v, vers: v + 1 };
-    const suivant = { ...manifeste, version: v + 1, correctifs: [correctif], nouveautes: [] };
-    return fetchLocal(PUBLICATION, { '17/manifest.json': JSON.stringify(suivant), [`17/${correctif.fichier}`]: gz });
-  }
-
-  /** Bases locales comme sur un appareil où la 17e a déjà été installée. */
-  async function appareilEnVersion(): Promise<MemoireNodeSqlite> {
-    const { bus, locales } = creerCoreDeTest();
-    await bus.execute(Synchroniser({}));
-    return locales;
-  }
-
-  it('applique le correctif à la base locale', async () => {
-    const locales = await appareilEnVersion();
-    const { bus } = creerCoreDeTest({ locales, source: new HttpPublicationSource(URL_TEST, publicationSuivante(v)) });
-    expect(await bus.execute(Synchroniser({}))).toMatchObject({ origine: 'correctifs', version: v + 1, avertissement: null });
-    expect(locales.installations).toEqual(['17']); // pas de retéléchargement de la base complète
-  }, 120_000);
-
-  it('garde la base locale si le correctif ne part pas de sa version', async () => {
-    const locales = await appareilEnVersion();
-    const { bus } = creerCoreDeTest({ locales, source: new HttpPublicationSource(URL_TEST, publicationSuivante(v + 7)) });
-    const etat = await bus.execute(Synchroniser({}));
-    expect(etat.version).toBe(v);
-    expect(etat.avertissement).toMatch(/Mise à jour impossible/);
-    expect((await bus.execute(ConsulterAssemblee({}))).membres.length).toBeGreaterThan(550);
-  }, 120_000);
-
-  it('démarre hors connexion avec les bases déjà sur l’appareil', async () => {
-    const locales = await appareilEnVersion();
-    const horsLigne = (async () => {
-      throw new TypeError('Network request failed');
-    }) as unknown as typeof fetch;
-    const { bus } = creerCoreDeTest({ locales, source: new HttpPublicationSource(URL_TEST, horsLigne) });
-    expect(await bus.execute(Synchroniser({}))).toMatchObject({ legislature: '17', origine: 'locale' });
-    expect((await bus.execute(ListerLegislatures({}))).map((l) => l.numero)).toEqual(['17']);
-  }, 120_000);
-
-  it('refuse un fichier dont l’empreinte ne correspond pas', async () => {
-    const corrompu = { ...manifeste, base: { ...manifeste.base, sha256: '0'.repeat(64) } };
-    const source = new HttpPublicationSource(URL_TEST, fetchLocal(PUBLICATION, { '17/manifest.json': JSON.stringify(corrompu) }));
-    const { bus } = creerCoreDeTest({ source });
-    await expect(bus.execute(Synchroniser({}))).rejects.toThrow(/SHA-256/);
-  }, 60_000);
 });

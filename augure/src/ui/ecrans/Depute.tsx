@@ -63,7 +63,7 @@ function cartes(votes: VoteDepute[]): CarteTheme[] {
 
 function phrase(c: CarteTheme): string {
   if (c.verdict === 'PEU PRÉSENT') return `Absent sur ${c.absences} des ${pluriel(c.votes.length, 'scrutin')} de ce thème.`;
-  const dernier = c.ecarts.at(-1);
+  const dernier = c.ecarts[c.ecarts.length - 1];
   if (!dernier) return 'A toujours voté comme son groupe sur ce thème.';
   const quand = mois(dernier.scrutin.date).toLowerCase();
   return c.ecarts.length === 1

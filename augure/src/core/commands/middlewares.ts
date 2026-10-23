@@ -47,10 +47,15 @@ export function queryCache(capacite = 100): Middleware & { clear(): void } {
   return Object.assign(middleware, { clear: () => cache.clear() });
 }
 
+// AbortSignal.throwIfAborted n'existe pas avant iOS 15.4 : vérifié à la main.
+const verifier = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw signal.reason ?? new Error('Annulé');
+};
+
 /** Annulation : une query abandonnée (écran quitté) ne rend pas de résultat. */
 export const abortable: Middleware = async (_command, ctx, next) => {
-  ctx.signal?.throwIfAborted();
+  verifier(ctx.signal);
   const resultat = await next();
-  ctx.signal?.throwIfAborted();
+  verifier(ctx.signal);
   return resultat;
 };

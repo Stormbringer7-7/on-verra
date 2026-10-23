@@ -14,8 +14,8 @@
 #
 # Données persistées sur l'hôte : opendata/data (cache AN, base) et opendata/publication.
 # Postgres (volume « postgres ») se reconstruit seul depuis la publication s'il est perdu.
-# web, publication et api restent joignables depuis la machine seulement (127.0.0.1:8080, :8081
-# et :8082), pour le développement ; depuis l'extérieur, tout passe par Caddy.
+# web, publication, api et postgres restent joignables depuis la machine seulement (127.0.0.1:8080, :8081,
+# :8082 et :5433), pour le développement ; depuis l'extérieur, tout passe par Caddy.
 
 name: big-brother
 
@@ -50,6 +50,8 @@ services:
       POSTGRES_USER: big-brother
       POSTGRES_DB: big-brother
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-big-brother}
+    ports:
+      - "127.0.0.1:5433:5432"          # tests de l'API (api/tests) et consultation depuis la machine
     volumes:
       - postgres:/var/lib/postgresql/data
     healthcheck:

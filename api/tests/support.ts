@@ -1,45 +1,38 @@
-/// <reference types="node" />
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
+import { CatalogueEnClair } from '../src/infra/CatalogueEnClair';
+import { KeywordThemeClassifier } from '../src/infra/KeywordThemeClassifier';
+import { OnVerraRepository } from '../src/infra/OnVerraRepository';
+import { Connexions } from '../src/infra/PgDatabase';
 import { createCore } from '../src/core';
-import type { Logger, PublicationSource } from '../src/core/ports';
-import { OnVerraRepository } from '../src/infra/onverra/OnVerraRepository';
-import { HttpPublicationSource } from '../src/infra/publication/HttpPublicationSource';
-import { CatalogueEnClair } from '../src/infra/resumes/CatalogueEnClair';
-import { MemoireNodeSqlite } from '../src/infra/sql/NodeSqlite';
-import { KeywordThemeClassifier } from '../src/infra/themes/KeywordThemeClassifier';
+import type { Logger } from '../src/ports';
 
-/** Dossier produit par `python3 -m src publier` dans opendata/. */
-export const PUBLICATION = join(__dirname, '../../opendata/publication');
-export const publicationDisponible = existsSync(join(PUBLICATION, 'index.json'));
-export const URL_TEST = 'https://publication.test';
+/** Postgres du docker compose (exposé sur la machine en 5433), ou DATABASE_URL. */
+export const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://big-brother:big-brother@127.0.0.1:5433/big-brother';
 
 export const silencieux: Logger = { debug: () => {}, warn: () => {} };
 
-/**
- * fetch servi par un dossier local, comme l'hébergement public : l'adapter HTTP est testé tel quel.
- * `extra` remplace des fichiers par leur chemin relatif (« 17/manifest.json »).
- */
-export function fetchLocal(dossier: string, extra: Record<string, Uint8Array | string> = {}): typeof fetch {
-  return (async (url: string | URL | Request) => {
-    const chemin = String(url).slice(URL_TEST.length + 1);
-    const contenu = extra[chemin] ?? (existsSync(join(dossier, chemin)) ? readFileSync(join(dossier, chemin)) : null);
-    if (contenu === null) return new Response(null, { status: 404 });
-    return new Response(typeof contenu === 'string' ? contenu : new Uint8Array(contenu));
-  }) as typeof fetch;
+async function joignable(): Promise<boolean> {
+  const c = new Connexions(DATABASE_URL);
+  try {
+    return (await c.base().all('SELECT 1 FROM legislatures LIMIT 1')).length > 0;
+  } catch {
+    return false;
+  } finally {
+    await c.fermer();
+  }
 }
 
-export function creerCoreDeTest(options: { source?: PublicationSource; locales?: MemoireNodeSqlite } = {}) {
-  const locales = options.locales ?? new MemoireNodeSqlite();
-  const source = options.source ?? new HttpPublicationSource(URL_TEST, fetchLocal(PUBLICATION));
+/** Données chargées dans Postgres : sinon les tests de données sont sautés. */
+export const baseDisponible = await joignable();
+
+export function creerCoreDeTest() {
+  const connexions = new Connexions(DATABASE_URL);
   const bus = createCore({
-    source,
-    locales,
+    index: connexions.base(),
+    base: (legislature) => connexions.base(`l${legislature}`),
     repository: (db) => new OnVerraRepository(db),
     themes: new KeywordThemeClassifier(),
     enClair: new CatalogueEnClair({}),
     logger: silencieux,
   });
-  return { bus, locales };
+  return { bus, fermer: () => connexions.fermer() };
 }

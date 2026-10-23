@@ -130,7 +130,7 @@ function Synthese({ fiche }: { fiche: FicheGroupe }) {
           </View>
           <View style={styles.entre}>
             <Label>{mois(`${fiche.presenceMensuelle[0].mois}-01`)}</Label>
-            <Label>{mois(`${fiche.presenceMensuelle.at(-1)!.mois}-01`)}</Label>
+            <Label>{mois(`${fiche.presenceMensuelle[fiche.presenceMensuelle.length - 1].mois}-01`)}</Label>
           </View>
           <T variant="caption" ton="inkMuted">
             Hauteurs relatives au mois le plus suivi ({pourcent(presenceMax)} de votes exprimés).

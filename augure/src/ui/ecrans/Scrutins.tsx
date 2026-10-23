@@ -31,7 +31,7 @@ export function Scrutins() {
   const [choix, setChoix] = useState<string | undefined>();
   const [niveau, setNiveau] = useState<Niveau | undefined>();
   const [nature, setNature] = useState(NATURES[0]);
-  const legislature = choix ?? (legislatures.statut === 'pret' ? legislatures.donnees.at(-1)?.numero : undefined);
+  const legislature = choix ?? (legislatures.statut === 'pret' ? legislatures.donnees[legislatures.donnees.length - 1]?.numero : undefined);
   const scrutins = useCommand(
     legislature
       ? ListerScrutins({ legislature, niveau, limite: 300, ...(nature.natures ? { natures: nature.natures } : { natures: TOUTES }) })

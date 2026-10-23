@@ -57,7 +57,7 @@ export function Assemblee() {
             {legislatures.statut === 'pret' && legislatures.donnees.length > 1 && (
               <View style={styles.legislatures} accessibilityLabel="Législature">
                 {legislatures.donnees.map((l) => {
-                  const active = l.numero === (legislature ?? legislatures.donnees.at(-1)?.numero);
+                  const active = l.numero === (legislature ?? legislatures.donnees[legislatures.donnees.length - 1]?.numero);
                   return (
                     <Pressable
                       key={l.numero}

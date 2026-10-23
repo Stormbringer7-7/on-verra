@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { CommandBus, defineCommand, defineQuery } from '../src/core/commands/bus';
-import { queryCache } from '../src/core/commands/middlewares';
-import { ordonnerDeGaucheADroite } from '../src/core/domain/hemicycle';
-import type { MembreAssemblee } from '../src/core/domain/model';
-import { instructions, planifier, type Manifeste } from '../src/core/domain/publication';
-import { compterEntre, debutDouzeMois } from '../src/core/domain/texte';
-import { bilan, estEcart, majoritaire } from '../src/core/domain/votes';
-import { KeywordThemeClassifier } from '../src/infra/themes/KeywordThemeClassifier';
+import { CommandBus, defineCommand, defineQuery } from '@contrat/commands/bus';
+import { queryCache } from '@contrat/commands/middlewares';
+import { ordonnerDeGaucheADroite } from '@contrat/domain/hemicycle';
+import type { MembreAssemblee } from '@contrat/domain/model';
+import { compterEntre, debutDouzeMois } from '@contrat/domain/texte';
+import { bilan, estEcart, majoritaire } from '@contrat/domain/votes';
+import { KeywordThemeClassifier } from '../src/infra/KeywordThemeClassifier';
 
 describe('bus de commandes', () => {
   const Lire = defineQuery<{ n: number }, number>('test/lire');
@@ -43,33 +42,6 @@ describe('bus de commandes', () => {
       .register(Lire, async () => (trace.push('handler'), 0));
     await bus.execute(Lire({ n: 0 }));
     expect(trace).toEqual(['a>test/lire', 'b', 'handler']);
-  });
-});
-
-describe('plan de mise à jour (mêmes règles que opendata/src/publication.py)', () => {
-  const f = { fichier: 'x', taille: 1, sha256: '0' };
-  const manifeste = (version: number, de: number[]): Manifeste => ({
-    version,
-    date: '',
-    schema: 's',
-    base: f,
-    correctifs: de.map((d) => ({ ...f, de: d, vers: d + 1 })),
-    nouveautes: [],
-  });
-
-  it('enchaîne les correctifs depuis la version locale', () => {
-    const plan = planifier(1, 's', manifeste(3, [1, 2]));
-    expect(plan.type === 'correctifs' && plan.liste.map((c) => c.de)).toEqual([1, 2]);
-  });
-  it('retélécharge la base si un maillon manque ou si le schéma change', () => {
-    expect(planifier(1, 's', manifeste(3, [2])).type).toBe('complete');
-    expect(planifier(1, 'autre', manifeste(3, [1, 2])).type).toBe('complete');
-  });
-  it('ne fait rien si la base est à jour', () => {
-    expect(planifier(3, 's', manifeste(3, [])).type).toBe('a-jour');
-  });
-  it('ignore BEGIN/COMMIT et les lignes vides des correctifs', () => {
-    expect(instructions('BEGIN;\nINSERT 1;\n\n  INSERT 2;\nCOMMIT;\n')).toEqual(['INSERT 1;', 'INSERT 2;']);
   });
 });
 
