@@ -1,0 +1,13 @@
+{
+ "format": 1,
+ "version": 1,
+ "date": "2026-10-23T04:17:47Z",
+ "schema": "c063c612f7c14969",
+ "base": {
+  "fichier": "on_verra-1.db.gz",
+  "taille": 4584184,
+  "sha256": "2bf80340f4516e4a45042aa814a121c4c95783b677e84f1cd5a079e13e48a791"
+ },
+ "correctifs": [],
+ "nouveautes": []
+}
