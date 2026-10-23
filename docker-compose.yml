@@ -5,7 +5,8 @@
 #   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /donnees = publication)
 #
 #   cp .env.example .env                 # DOMAINE
-#   docker compose up -d --build         # premier import ~5 min
+#   docker compose up -d --build         # premier import ~5 min ; ensuite, rien n'est re-téléchargé au redémarrage
+#   Données persistées sur l'hôte : opendata/data (cache AN, base) et opendata/publication.
 #   docker compose logs -f extraction
 #
 # web et publication restent joignables depuis la machine seulement (127.0.0.1:8080 et :8081),
@@ -20,9 +21,11 @@ services:
       dockerfile: Dockerfile
     environment:
       INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
+      AGE_MAX: "20"                    # heures avant de redemander un fichier à l'AN (304 s'il n'a pas changé)
     volumes:
-      - cache:/app/data                # open data AN, base complète, partitions : privé
-      - publication:/srv/publication
+      # Dossiers de l'hôte : survivent à down, rebuild, « down -v » et « volume prune ».
+      - ./opendata/data:/app/data      # open data AN, base complète, partitions : privé
+      - ./opendata/publication:/srv/publication
     healthcheck:
       # Prêt dès que la première publication existe.
       test: ["CMD", "test", "-f", "/srv/publication/index.json"]
@@ -37,7 +40,7 @@ services:
     ports:
       - "127.0.0.1:8081:80"
     volumes:
-      - publication:/srv/publication:ro
+      - ./opendata/publication:/srv/publication:ro
     restart: unless-stopped
 
   web:
@@ -69,7 +72,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  cache:
-  publication:
   caddy_data:
   caddy_config:

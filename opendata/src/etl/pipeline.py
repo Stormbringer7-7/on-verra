@@ -68,9 +68,9 @@ def creer_schema(db: sqlite3.Connection, dossier: Path):
 
 
 def construire(base: Path, cache: Path, schema: Path, etapes: list[Etape],
-               forcer: bool = False, **parametres) -> Contexte:
+               forcer: bool = False, age_max: float | None = None, **parametres) -> Contexte:
     ordre = ordonner(etapes)
-    fichiers = {f.nom: f.recuperer(cache, forcer) for e in ordre for f in e.sources(parametres)}
+    fichiers = {f.nom: f.recuperer(cache, forcer, age_max) for e in ordre for f in e.sources(parametres)}
 
     base.parent.mkdir(parents=True, exist_ok=True)
     temporaire = base.with_name(base.name + ".construction")

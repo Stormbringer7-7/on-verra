@@ -11,6 +11,7 @@ COPY docker/mettre-a-jour.sh /usr/local/bin/mettre-a-jour
 # data/ : fichiers bruts de l'AN (cache), base complète et partitions — un volume, gardé entre les cycles.
 VOLUME ["/app/data", "/srv/publication"]
 ENV INTERVALLE_MAJ=86400 \
+    AGE_MAX=20 \
     PYTHONUNBUFFERED=1
 
 CMD ["mettre-a-jour"]

@@ -66,8 +66,15 @@ export class HttpPublicationSource implements PublicationSource {
   }
 
   private async lire(chemin: string, tailleMax: number, init?: RequestInit): Promise<Uint8Array> {
-    const reponse = await this.fetcher(`${this.racine}/${chemin}`, init);
-    if (!reponse.ok) throw new Error(`${chemin} : HTTP ${reponse.status}`);
+    const url = `${this.racine}/${chemin}`;
+    let reponse: Response;
+    try {
+      reponse = await this.fetcher(url, init);
+    } catch (e) {
+      // Erreur réseau (« Failed to fetch »…) : l'adresse visée dit souvent ce qui ne va pas.
+      throw new Error(`${url} injoignable : ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (!reponse.ok) throw new Error(`${url} : HTTP ${reponse.status}`);
     const annoncee = Number(reponse.headers.get('content-length') ?? 0);
     if (annoncee > tailleMax) throw new Error(`${chemin} : taille inattendue`);
     const octets = new Uint8Array(await reponse.arrayBuffer());

@@ -22,8 +22,9 @@ TRANSFORMATIONS = [replace(e, apres=(*e.apres, *(s.nom for s in SOURCES)))
 ETAPES = [*SOURCES, *TRANSFORMATIONS]
 
 
-def compiler(base: Path, cache: Path, legislatures: list[str] = LEGISLATURES, forcer: bool = False):
-    construire(base, cache, SCHEMA, ETAPES, forcer, legislatures=legislatures)
+def compiler(base: Path, cache: Path, legislatures: list[str] = LEGISLATURES, forcer: bool = False,
+             age_max: float | None = None):
+    construire(base, cache, SCHEMA, ETAPES, forcer, age_max, legislatures=legislatures)
     db = sqlite3.connect(base)
     nb_lois = db.execute("SELECT COUNT(*) FROM lois").fetchone()[0]
     nb_scrutins = db.execute("SELECT COUNT(*) FROM scrutins").fetchone()[0]

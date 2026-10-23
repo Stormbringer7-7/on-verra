@@ -291,9 +291,13 @@ def main():
     c.set_defaults(f=lambda a: publier_legislatures(BASE, a.dossier, PARTITIONS, compilation.SCHEMA,
                                                     a.legislatures.split(","), a.forcer))
 
-    c = sp.add_parser("mettre-a-jour", help="re-télécharge les données AN, reconstruit et publie si nouveau scrutin")
+    c = sp.add_parser("mettre-a-jour", help="re-télécharge les données AN modifiées, reconstruit et publie si nouveau scrutin")
     c.add_argument("--dossier", type=Path, default=PUBLICATION)
-    c.set_defaults(f=lambda a: (compiler(BASE, BRUT, LEGISLATURES, forcer=True),
+    # Ménage le site de l'Assemblée : un fichier en cache n'est redemandé qu'après ce délai,
+    # et seulement s'il a changé (If-Modified-Since) ; --forcer re-télécharge tout.
+    c.add_argument("--age-max", type=float, default=20, help="heures avant de revérifier un fichier (défaut : 20)")
+    c.add_argument("--forcer", action="store_true", help="re-télécharge tout, même inchangé")
+    c.set_defaults(f=lambda a: (compiler(BASE, BRUT, LEGISLATURES, a.forcer, a.age_max * 3600),
                                 publier_legislatures(BASE, a.dossier, PARTITIONS, compilation.SCHEMA, LEGISLATURES)))
 
     args = p.parse_args()

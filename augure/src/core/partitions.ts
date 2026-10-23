@@ -38,16 +38,21 @@ export class Partitions {
   /** Lit l'index publié ; hors connexion, les législatures déjà présentes sur l'appareil. */
   async chargerIndex(): Promise<void> {
     const { source, locales, logger } = this.deps;
+    let cause = 'aucune adresse de publication configurée';
     if (source.configured) {
       try {
         this.index = (await source.index()).legislatures;
         return;
       } catch (e) {
+        cause = e instanceof Error ? e.message : String(e);
         logger.warn('Index de publication indisponible, bases locales seulement', e);
       }
     }
     const installees = await locales.installees();
-    if (!installees.length) throw new Error('Aucune base disponible : publication injoignable et rien sur l’appareil.');
+    if (!installees.length) {
+      // La cause (HTTP 404, erreur réseau…) dit quoi corriger : publication pas encore faite, mauvaise adresse…
+      throw new Error(`Aucune base disponible : publication injoignable (${cause}) et rien sur l’appareil.`);
+    }
     this.index = installees.map((legislature) => ({
       legislature, debut: '', fin: '', scrutins: 0, version: 0, manifeste: `${legislature}/manifest.json`, taille: 0,
     }));
