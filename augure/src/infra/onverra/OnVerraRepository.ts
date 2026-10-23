@@ -1,6 +1,6 @@
-// Adapter du ParlementRepository sur une base on-verra (on_verra/schema/*.sql), découpée par
+// Adapter du ParlementRepository sur une base opendata (src/schema/*.sql), découpée par
 // législature : chaque instance lit une seule législature. C'est le seul fichier qui connaît ce
-// schéma : quand on-verra évoluera, on écrira un autre adapter.
+// schéma : quand opendata évoluera, on écrira un autre adapter.
 
 import type {
   Alliance,
@@ -256,7 +256,7 @@ export class OnVerraRepository implements ParlementRepository {
   async presence(acteurs: string[]): Promise<number | null> {
     if (!acteurs.length) return null;
     const l = liste('a', acteurs);
-    // Participation = votes exprimés / scrutins en fonction, hors non-votes statutaires (on-verra).
+    // Participation = votes exprimés / scrutins en fonction, hors non-votes statutaires (opendata).
     const r = await this.db.first<{ presence: number | null }>(
       `SELECT AVG(1.0 * exprimes / (scrutins - empeches)) AS presence
        FROM indicateurs_deputes
@@ -469,7 +469,7 @@ export class OnVerraRepository implements ParlementRepository {
   }
 
   activite(debut: string, fin: string): Promise<ActiviteBrute[]> {
-    // Agrégats calculés par on-verra (table activite_deputes, par député, mois et texte visé).
+    // Agrégats calculés par opendata (table activite_deputes, par député, mois et texte visé).
     return this.db.all(
       `SELECT a.acteur_ref AS acteur, a.cle, COALESCE(l.titre, s.titre) AS titre,
          SUM(a.votes) AS votes, SUM(a.exprimes) AS exprimes, SUM(a.pour) AS pour, SUM(a.ecarts) AS ecarts

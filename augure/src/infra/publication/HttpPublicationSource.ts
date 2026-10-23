@@ -1,4 +1,4 @@
-// Lit la publication on-verra hébergée publiquement (service docker « donnees », GitHub Pages,
+// Lit la publication opendata hébergée publiquement (service docker « donnees », GitHub Pages,
 // bucket S3/R2…). Pas d'API : des fichiers statiques, vérifiés par leur SHA-256.
 //
 //   <url>/index.json   <url>/17/manifest.json   <url>/17/on_verra-3.db.gz   <url>/17/maj-2-3.sql.gz

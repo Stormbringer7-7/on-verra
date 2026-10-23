@@ -1,0 +1,13 @@
+# Données générées, jamais versionnées : régénérées par `python3 -m src importer && python3 -m src publier`.
+#   data/brut/        open data de l'AN téléchargé (cache, ~150 Mo)
+#   data/on_verra.db  base complète compilée
+#   data/partitions/  une base par législature
+#   data/archives/    publications précédentes mises de côté (pas versionnées pour l'instant)
+data/
+#   publication/      ce que sert le service « publication » (bases .db.gz, correctifs, manifestes)
+publication/
+
+# Python
+__pycache__/
+*.pyc
+.DS_Store

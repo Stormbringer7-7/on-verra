@@ -11,7 +11,7 @@ name: big-brother
 services:
   extraction:
     build:
-      context: ./on-verra
+      context: ./opendata
       dockerfile: Dockerfile
     environment:
       INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
@@ -27,7 +27,7 @@ services:
 
   publication:
     build:
-      context: ./on-verra
+      context: ./opendata
       dockerfile: Dockerfile.nginx
     ports:
       - "8081:80"                      # pour les apps mobiles : EXPO_PUBLIC_PUBLICATION_URL=https://<hôte>

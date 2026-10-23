@@ -1,5 +1,5 @@
-// Format du dossier de publication produit par `python3 -m on_verra publier`
-// (on-verra/on_verra/publication.py) et règles de mise à jour des bases locales.
+// Format du dossier de publication produit par `python3 -m src publier`
+// (opendata/src/publication.py) et règles de mise à jour des bases locales.
 //
 //   index.json               législatures publiées (une base par législature)
 //   <leg>/manifest.json      version, base complète, correctifs

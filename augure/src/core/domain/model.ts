@@ -1,4 +1,4 @@
-// Modèle de lecture de l'app : ce que les écrans affichent, indépendant du schéma on-verra.
+// Modèle de lecture de l'app : ce que les écrans affichent, indépendant du schéma opendata.
 // Les groupes changent dans le temps (renommages, scissions, départs) : tout est daté,
 // et un vote est toujours rattaché au groupe du député *au moment du vote*.
 
@@ -62,7 +62,7 @@ export interface MembreAssemblee {
   position: Position | null;
 }
 
-/** Membre de l'hémicycle avec ses indicateurs sur la législature (calculés par on-verra). */
+/** Membre de l'hémicycle avec ses indicateurs sur la législature (calculés par opendata). */
 export interface MembreHemicycle extends MembreAssemblee {
   /** Votes exprimés / scrutins tenus pendant le mandat (0 à 1). */
   presence: number | null;

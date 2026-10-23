@@ -140,7 +140,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
         r.votesDuGroupe(ref, debut, fin),
       ]);
 
-      // Présence moyenne des membres et écarts internes, depuis les indicateurs on-verra.
+      // Présence moyenne des membres et écarts internes, depuis les indicateurs opendata.
       let presences = 0;
       let nbPresences = 0;
       let dissidences = 0;
@@ -341,7 +341,7 @@ export function lectures({ partitions, repository, themes, enClair }: LecturesDe
       const leg = legislature ?? partitions.derniere();
       const r = await repo(leg);
       const fin = (await r.dernierScrutin())?.date ?? aujourdhui();
-      // 12 mois calendaires : la granularité de l'activité pré-calculée par on-verra.
+      // 12 mois calendaires : la granularité de l'activité pré-calculée par opendata.
       const debut = debutDouzeMois(fin);
       const [membres, activite, scrutins, mandats] = await Promise.all([
         r.membres(fin),

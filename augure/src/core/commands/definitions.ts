@@ -18,7 +18,7 @@ import { defineCommand, defineQuery } from './bus';
 
 type Vide = Record<string, never>;
 
-/** Lit l'index publié, ouvre la législature en cours et la met à jour depuis la publication on-verra. */
+/** Lit l'index publié, ouvre la législature en cours et la met à jour depuis la publication opendata. */
 export const Synchroniser = defineCommand<Vide, EtatBase>('base/synchroniser');
 
 /** Législatures publiées ; une législature non installée est téléchargée à sa première consultation. */

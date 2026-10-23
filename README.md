@@ -4,14 +4,12 @@ Stack de services autour des votes de l'Assemblée nationale.
 
 | dossier | rôle |
 |---|---|
-| [`on-verra/`](on-verra) | sous-module : import de l'open data AN (tous les scrutins) → une base SQLite par législature, publication versionnée (index, manifestes, correctifs) |
+| [`opendata/`](opendata) | import de l'open data AN (tous les scrutins) → une base SQLite par législature, publication versionnée (index, manifestes, correctifs) |
 | [`augure/`](augure) | app « Nos administrés ont du talent » : Expo (iOS, Android, web) qui lit les bases publiées |
 
-Pas d'API : on-verra publie des fichiers statiques et les apps les téléchargent.
+Pas d'API : opendata publie des fichiers statiques et les apps les téléchargent.
 
-```bash
-git clone --recurse-submodules <repo>          # ou : git submodule update --init
-```
+Les bases se compilent depuis `opendata/` (voir son README) ; l'app les télécharge depuis le service `publication`.
 
 ## Déploiement (Docker)
 
@@ -23,8 +21,8 @@ docker compose down                   # arrêter (les volumes sont gardés)
 
 | service | image | rôle |
 |---|---|---|
-| `extraction` | `on-verra/Dockerfile` (Python, bibliothèque standard) | télécharge l'open data, compile et publie une base par législature dans le volume `publication`, puis recommence toutes les `INTERVALLE_MAJ` secondes (1 jour) ; seules les législatures qui ont changé reçoivent une nouvelle version |
-| `publication` | `on-verra/Dockerfile.nginx` (nginx) | sert le volume `publication` aux applications : `index.json`, `<leg>/manifest.json`, bases, correctifs ; CORS ouvert, `courante.db` jamais servie |
+| `extraction` | `opendata/Dockerfile` (Python, bibliothèque standard) | télécharge l'open data, compile et publie une base par législature dans le volume `publication`, puis recommence toutes les `INTERVALLE_MAJ` secondes (1 jour) ; seules les législatures qui ont changé reçoivent une nouvelle version |
+| `publication` | `opendata/Dockerfile.nginx` (nginx) | sert le volume `publication` aux applications : `index.json`, `<leg>/manifest.json`, bases, correctifs ; CORS ouvert, `courante.db` jamais servie |
 | `web` | `augure/Dockerfile` (export Expo → nginx) | sert l'app web ; `/donnees` relaie le service `publication` (même origine pour l'app) |
 
 Volumes : `cache` (fichiers bruts de l'AN et bases compilées, ~600 Mo, privé) et `publication`

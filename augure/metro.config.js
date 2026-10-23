@@ -5,8 +5,6 @@ const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
 
 config.resolver.assetExts.push('wasm');
-// Base on-verra embarquée (assets/donnees/on_verra.db.gz).
-config.resolver.assetExts.push('gz');
 
 config.server.enhanceMiddleware = (middleware) => (req, res, next) => {
   res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');

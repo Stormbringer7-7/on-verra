@@ -10,8 +10,8 @@ import { CatalogueEnClair } from '../src/infra/resumes/CatalogueEnClair';
 import { MemoireNodeSqlite } from '../src/infra/sql/NodeSqlite';
 import { KeywordThemeClassifier } from '../src/infra/themes/KeywordThemeClassifier';
 
-/** Dossier produit par `python3 -m on_verra publier` dans le sous-module. */
-export const PUBLICATION = join(__dirname, '../../on-verra/publication');
+/** Dossier produit par `python3 -m src publier` dans opendata/. */
+export const PUBLICATION = join(__dirname, '../../opendata/publication');
 export const publicationDisponible = existsSync(join(PUBLICATION, 'index.json'));
 export const URL_TEST = 'https://publication.test';
 

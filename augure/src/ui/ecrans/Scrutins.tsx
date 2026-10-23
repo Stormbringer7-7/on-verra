@@ -85,7 +85,7 @@ export function Scrutins() {
         </View>
       )}
 
-      <Source precision="niveau : celui du texte visé, classé par on-verra (lois de finances, votes solennels, 49.3… = majeur)" />
+      <Source precision="niveau : celui du texte visé, classé par opendata (lois de finances, votes solennels, 49.3… = majeur)" />
     </Ecran>
   );
 }

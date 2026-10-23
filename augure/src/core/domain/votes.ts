@@ -10,7 +10,7 @@ export function estExprimee(p: Position | null): p is PositionExprimee {
   return p === 'pour' || p === 'contre' || p === 'abstention';
 }
 
-/** Position la plus fréquente ; null en cas d'égalité ou sans vote (même règle que on-verra). */
+/** Position la plus fréquente ; null en cas d'égalité ou sans vote (même règle que opendata). */
 export function majoritaire(d: Decompte): PositionExprimee | null {
   const tri = (['pour', 'contre', 'abstention'] as const)
     .map((p) => [p, d[p]] as const)

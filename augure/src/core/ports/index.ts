@@ -30,7 +30,7 @@ export interface SqlDatabase {
 }
 
 /**
- * Bases locales, une par législature (la clé de partition de on-verra).
+ * Bases locales, une par législature (la clé de partition de opendata).
  * Sur mobile, des fichiers : un correctif appliqué est enregistré. Sur le web, la mémoire.
  */
 export interface LocalDatabases {
@@ -41,7 +41,7 @@ export interface LocalDatabases {
   installer(legislature: string, gzip: Uint8Array): Promise<SqlDatabase>;
 }
 
-// ---------- Publication on-verra (fichiers statiques, sans API) ----------
+// ---------- Publication opendata (fichiers statiques, sans API) ----------
 
 export interface PublicationSource {
   readonly configured: boolean;
@@ -69,8 +69,8 @@ export interface FiltreScrutins {
 }
 
 /**
- * Accès aux données parlementaires d'une législature (une partition on-verra).
- * L'adapter actuel lit le schéma on-verra ; quand il évoluera, seul l'adapter change.
+ * Accès aux données parlementaires d'une législature (une partition opendata).
+ * L'adapter actuel lit le schéma opendata ; quand il évoluera, seul l'adapter change.
  */
 export interface ParlementRepository {
   meta(): Promise<MetaBase>;
@@ -109,7 +109,7 @@ export interface ParlementRepository {
   presenceMensuelle(ref: string, mois: number): Promise<{ mois: string; presence: number }[]>;
   /** Motions de censure votées par au moins `seuil` membres du groupe. */
   motionsSoutenues(ref: string, seuil: number): Promise<{ soutenues: number; total: number }>;
-  /** Participation et écarts par député sur la législature (calculés par on-verra). */
+  /** Participation et écarts par député sur la législature (calculés par opendata). */
   indicateurs(acteurs: string[]): Promise<Map<string, IndicateursDepute>>;
   mouvements(ref: string): Promise<{ arrivees: number; departs: number }>;
   votesDuGroupe(ref: string, debut: string, fin: string): Promise<FicheGroupe['derniersVotes']>;

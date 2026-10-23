@@ -1,4 +1,4 @@
-// Une base par législature (clé de partition de on-verra), ouverte à la demande :
+// Une base par législature (clé de partition de opendata), ouverte à la demande :
 // copie locale d'abord, puis mise à jour depuis la publication quand c'est possible.
 
 import type { EtatBase, Legislature } from './domain/model';

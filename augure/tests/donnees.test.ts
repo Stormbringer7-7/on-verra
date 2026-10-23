@@ -1,5 +1,5 @@
-// Le cœur complet sur la vraie publication on-verra (sous-module), avec les adapters Node.
-// Préalable : `python3 -m on_verra importer && python3 -m on_verra publier` dans on-verra/.
+// Le cœur complet sur la vraie publication d'opendata, avec les adapters Node.
+// Préalable : `python3 -m src importer && python3 -m src publier` dans opendata/.
 
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
@@ -23,12 +23,11 @@ import {
   Synchroniser,
   type Assemblee,
 } from '../src/core';
-import { EmbeddedPublicationSource } from '../src/infra/publication/EmbeddedPublicationSource';
 import { HttpPublicationSource } from '../src/infra/publication/HttpPublicationSource';
 import { MemoireNodeSqlite } from '../src/infra/sql/NodeSqlite';
 import { creerCoreDeTest, fetchLocal, PUBLICATION, publicationDisponible, URL_TEST } from './support';
 
-describe.skipIf(!publicationDisponible)('données on-verra', () => {
+describe.skipIf(!publicationDisponible)('données opendata', () => {
   const { bus, locales } = creerCoreDeTest();
   let assemblee: Assemblee;
 
@@ -190,7 +189,7 @@ describe.skipIf(!publicationDisponible)('synchronisation par correctifs', () => 
   const manifeste = JSON.parse(readFileSync(join(PUBLICATION, '17/manifest.json'), 'utf8'));
   const v = manifeste.version;
 
-  /** Publication fictive v+1 de la 17e : un correctif au format on-verra (vérification de la version de départ). */
+  /** Publication fictive v+1 de la 17e : un correctif au format opendata (vérification de la version de départ). */
   function publicationSuivante(versionDeDepart: number) {
     const script = [
       'BEGIN;',
@@ -237,17 +236,6 @@ describe.skipIf(!publicationDisponible)('synchronisation par correctifs', () => 
     const { bus } = creerCoreDeTest({ locales, source: new HttpPublicationSource(URL_TEST, horsLigne) });
     expect(await bus.execute(Synchroniser({}))).toMatchObject({ legislature: '17', origine: 'locale' });
     expect((await bus.execute(ListerLegislatures({}))).map((l) => l.numero)).toEqual(['17']);
-  }, 120_000);
-
-  it('ouvre la base embarquée dans l’app (assets/donnees)', async () => {
-    const dossier = join(__dirname, '../assets/donnees');
-    const lire = (chemin: string) => JSON.parse(readFileSync(join(dossier, chemin), 'utf8'));
-    const source = new EmbeddedPublicationSource(lire('index.json'), {
-      '17': { manifeste: lire('17/manifest.json'), base: async () => new Uint8Array(readFileSync(join(dossier, '17/on_verra.db.gz'))) },
-    });
-    const { bus } = creerCoreDeTest({ source });
-    expect(await bus.execute(Synchroniser({}))).toMatchObject({ legislature: '17', origine: 'complete', avertissement: null });
-    expect((await bus.execute(ConsulterAssemblee({}))).membres.length).toBeGreaterThan(550);
   }, 120_000);
 
   it('refuse un fichier dont l’empreinte ne correspond pas', async () => {

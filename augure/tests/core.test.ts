@@ -46,7 +46,7 @@ describe('bus de commandes', () => {
   });
 });
 
-describe('plan de mise à jour (même règles que l’app Android on-verra)', () => {
+describe('plan de mise à jour (mêmes règles que opendata/src/publication.py)', () => {
   const f = { fichier: 'x', taille: 1, sha256: '0' };
   const manifeste = (version: number, de: number[]): Manifeste => ({
     version,

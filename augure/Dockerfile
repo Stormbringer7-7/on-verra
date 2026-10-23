@@ -1,4 +1,4 @@
-# Service « web » : export web de l'app Expo, servi par nginx avec la publication on-verra
+# Service « web » : export web de l'app Expo, servi par nginx avec la publication opendata
 # (volume du service « donnees ») sous /donnees, sur la même origine.
 
 FROM node:22-slim AS construction

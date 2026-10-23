@@ -156,7 +156,7 @@ export function Source({ precision }: { precision?: string }) {
   return (
     <View style={{ gap: space[1] }}>
       <T variant="caption" ton="inkMuted">
-        Source : open data de l’Assemblée nationale via on-verra
+        Source : open data de l’Assemblée nationale
         {base?.date ? ` · mis à jour le ${date(base.date)}` : ''}
         {precision ? ` · ${precision}` : ''}
       </T>

@@ -1,7 +1,7 @@
 # augure — « Nos administrés ont du talent »
 
 Qui vote quoi à l'Assemblée nationale, scrutin par scrutin. App Expo (iOS, Android, web) qui lit
-les bases publiées par [on-verra](../on-verra), **une par législature** : pas d'API, des fichiers
+les bases publiées par [opendata](../opendata), **une par législature** : pas d'API, des fichiers
 statiques (`index.json`, puis par législature `manifest.json`, base `.db.gz`, correctifs `.sql.gz`),
 vérifiés par SHA-256. Tous les scrutins publics y sont : votes finaux, articles, amendements, motions.
 
@@ -11,37 +11,27 @@ Design : design system [Panoptique](https://claude.ai/artifact/4Qygft6thDASUWogZ
 
 ## Lancer
 
-La 17e législature est **embarquée dans l'app** (`assets/donnees/`, 17 Mo) : rien à héberger pour la partager.
+L'app lit la publication opendata hébergée : chaque législature est téléchargée à sa première
+consultation, puis mise à jour par correctifs, sans republier l'app.
 
 ```bash
-npx expo start
+docker compose up -d publication extraction       # à la racine : publication sur http://localhost:8081
+npx expo start                                    # en développement, l'app lit http://localhost:8081
 ```
 
-Mettre à jour les bases embarquées :
+Sans Docker, après `python3 -m src importer && python3 -m src publier` dans `opendata/` :
 
 ```bash
-# dans on-verra/ (Python 3.10+, ~5 min)
-python3 -m on_verra importer && python3 -m on_verra publier
-# puis dans augure/
-npm run donnees                              # 17e : on-verra/publication → assets/donnees (vérifie le SHA-256)
-npm run donnees -- --legislatures 16,17      # plusieurs législatures
-```
-
-### Publication hébergée
-
-Avec `EXPO_PUBLIC_PUBLICATION_URL`, l'app lit la publication hébergée : toutes les législatures,
-chacune téléchargée à sa première consultation, puis mises à jour par correctifs sans republier l'app.
-
-```bash
-npm run publication                                          # sert on-verra/publication sur :8787
+npm run publication                                          # sert opendata/publication sur :8787
 EXPO_PUBLIC_PUBLICATION_URL=http://localhost:8787 npx expo start
 ```
 
-En production : le service Docker `web` (voir le README racine) sert l'app web et la publication
-sous `/donnees`. Les apps mobiles pointent vers `https://<hôte>/donnees`.
+En production, `EXPO_PUBLIC_PUBLICATION_URL` est obligatoire : le service Docker `web` la fixe à
+`/donnees` (même origine) ; une app mobile pointe vers `https://<hôte de publication>`.
+Sur l'émulateur Android, `localhost` désigne l'émulateur : utiliser `http://10.0.2.2:8081`.
 
 ```bash
-npm test            # cœur + adapter SQL sur la vraie publication on-verra (node:sqlite)
+npm test            # cœur + adapter SQL sur la vraie publication opendata (node:sqlite)
 npm run typecheck
 npm run lint
 ```
@@ -62,8 +52,8 @@ src/
   infra/                 adapters
     sql/                 ExpoSqliteDatabase (app) · NodeSqlite (tests)
     locales/             FichiersSqlite (mobile, sur disque) · MemoireSqlite (web)
-    publication/         EmbeddedPublicationSource (assets) · HttpPublicationSource (hébergée)
-    onverra/             OnVerraRepository : seul fichier qui connaît le schéma on-verra
+    publication/         HttpPublicationSource : index, manifestes, SHA-256, gzip
+    onverra/             OnVerraRepository : seul fichier qui connaît le schéma opendata
     themes/              KeywordThemeClassifier (heuristique sur les titres)
     resumes/             CatalogueEnClair (en-clair.json, résumés relus à la main)
   di/                    racine de composition (choix des adapters par plateforme)
@@ -103,7 +93,7 @@ départs, et groupes propres à chaque législature.
 
 ### Limites assumées
 
-- **Présence** : on-verra ne publie pas la présence. « Absent » veut dire en fonction mais sans vote enregistré.
+- **Présence** : opendata ne publie pas la présence. « Absent » veut dire en fonction mais sans vote enregistré.
 - **En clair** : aucun résumé n'est encore rédigé. Sans résumé, l'écran le dit et donne la
   signification littérale (POUR = adopter ce texte / cet amendement / cet article).
 - **Amendements** : seul l'intitulé du scrutin est publié (« l'amendement n° 15 de M. X à
@@ -114,4 +104,4 @@ départs, et groupes propres à chaque législature.
 - **Hémicycle** : la disposition des sièges reprend la maquette, ce n'est pas le plan réel de la salle.
 - **Web** : chaque législature consultée est rechargée à chaque visite (17 Mo pour la 17e, ~10 s),
   faute d'adapter IndexedDB.
-- **Base embarquée** : elle date du dernier `npm run donnees`. Pour la rafraîchir, il faut republier l'app.
+- **Hors connexion** : seules les législatures déjà consultées sur l'appareil sont disponibles.
