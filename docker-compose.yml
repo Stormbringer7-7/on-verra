@@ -4,7 +4,7 @@
 #   web         : (nginx) app web « Nos administrés ont du talent » ; /donnees relaie « publication »
 #   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /donnees = publication)
 #
-#   cp .env.example .env                 # DOMAINE, ACME_EMAIL
+#   cp .env.example .env                 # DOMAINE
 #   docker compose up -d --build         # premier import ~5 min
 #   docker compose logs -f extraction
 #
@@ -55,7 +55,6 @@ services:
     image: caddy:2.8.4-alpine
     environment:
       DOMAINE: ${DOMAINE:-localhost}
-      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     ports:
       - "80:80"
       - "443:443"

@@ -2,13 +2,9 @@
 #   https://{$DOMAINE}/            app web « Nos administrés ont du talent » (service web)
 #   https://{$DOMAINE}/donnees/…   publication opendata (service publication) : index.json, bases, correctifs
 #
-# Variables (fichier .env à la racine, voir .env.example) :
-#   DOMAINE      nom de domaine public ; « localhost » pour tester en local (certificat interne de Caddy)
-#   ACME_EMAIL   contact Let's Encrypt (expiration de certificat, incidents)
-
-{
-	email {$ACME_EMAIL}
-}
+# Variable (fichier .env à la racine, voir .env.example) :
+#   DOMAINE   nom de domaine public ; « localhost » pour tester en local (certificat interne de Caddy)
+# Let's Encrypt ne demande pas d'e-mail : Caddy obtient et renouvelle les certificats seul.
 
 {$DOMAINE} {
 	# Compression des réponses textuelles (HTML, JS, JSON, wasm). Les bases .db.gz, déjà
