@@ -91,6 +91,13 @@ python3 -m on_verra publier --forcer    # publie même sans nouveau vote
 | `maj-<v-1>-<v>.sql.gz` | correctif SQL incrémental, exécuté dans une transaction |
 | `courante.db` | dernière base publiée, référence du prochain correctif (à ne pas héberger) |
 
+En ligne, l'Action GitHub `Publication` (`.github/workflows/publication.yml`) fait ce travail chaque
+jour à 05:17 UTC : elle récupère la publication de la branche `gh-pages`, reconstitue `courante.db`
+à partir de la base complète, réimporte les données de l'AN et, si une version est produite, remplace
+`gh-pages` (un seul commit, sans `courante.db`). GitHub Pages la sert à
+https://stormbringer7-7.github.io/on-verra/. Lancement manuel, avec option « forcer » : onglet
+Actions, ou `gh workflow run publication.yml -f forcer=true`.
+
 Côté application : lire le manifeste ; si la version est plus récente, appliquer dans l'ordre les
 correctifs depuis sa version (chaque correctif vérifie la version de départ et échoue sinon,
 sans rien modifier) ; si un correctif manque ou si le schéma a changé, télécharger la base complète.
@@ -114,8 +121,8 @@ l'APK dans son dossier Download (`gio copy app-debug.apk "mtp://<téléphone>/�
 puis l'ouvrir depuis le gestionnaire de fichiers. Testé sur un OPPO CPH2211 (ColorOS).
 
 Le JDK est téléchargé automatiquement par Gradle (toolchain 17). Mises à jour en ligne :
-renseigner `onverra.publication.url` (HTTPS) dans `android/gradle.properties` ; vide, l'application
-utilise sa base embarquée.
+`onverra.publication.url` (HTTPS) dans `android/gradle.properties`, qui pointe vers la publication
+GitHub Pages ; vide, l'application utilise sa base embarquée.
 
 ## Périmètre
 

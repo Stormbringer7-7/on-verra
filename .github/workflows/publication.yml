@@ -1,0 +1,71 @@
+# Mise à jour quotidienne de la base pour l'application mobile.
+# La branche gh-pages contient le dossier publication/ (sans courante.db), servi par GitHub Pages.
+# Une nouvelle version n'est poussée que si `publier` en produit une (nouveau vote, motion ou 49.3).
+name: Publication
+
+on:
+  schedule:
+    - cron: "17 5 * * *"          # chaque jour, 05:17 UTC (l'AN met ses fichiers à jour chaque nuit)
+  workflow_dispatch:
+    inputs:
+      forcer:
+        description: "Publier même sans nouveau vote"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Récupérer la dernière publication
+        run: |
+          mkdir -p publication
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            git fetch --depth 1 origin gh-pages
+            git archive FETCH_HEAD | tar -x -C publication
+            # courante.db (référence du prochain correctif) = base complète décompressée, vérifiée.
+            fichier=$(jq -r .base.fichier publication/manifest.json)
+            echo "$(jq -r .base.sha256 publication/manifest.json)  publication/$fichier" | sha256sum -c
+            gunzip -c "publication/$fichier" > publication/courante.db
+          fi
+          echo "AVANT=$(jq -r .version publication/manifest.json 2>/dev/null || echo 0)" >> "$GITHUB_ENV"
+
+      - name: Importer les données de l'Assemblée nationale
+        run: python3 -m on_verra importer --forcer
+
+      - name: Publier si nouveau vote
+        run: python3 -m on_verra publier ${{ inputs.forcer && '--forcer' || '' }}
+
+      - name: Pousser sur gh-pages
+        run: |
+          apres=$(jq -r .version publication/manifest.json)
+          if [ "$apres" = "$AVANT" ]; then
+            echo "Pas de nouvelle version."
+            exit 0
+          fi
+          # Un seul commit, remplacé à chaque version : les anciennes bases ne s'accumulent pas.
+          rm publication/courante.db
+          touch publication/.nojekyll
+          cd publication
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Version $apres"
+          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
+          echo "Version $apres publiée." >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.nouveautes[] | "- \(.date) \(.evenement) \(.detail // "") : \(.titre // .loi)"' manifest.json >> "$GITHUB_STEP_SUMMARY"
