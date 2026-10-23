@@ -1,0 +1,51 @@
+# Déploiement de big-brother :
+#   extraction  : (Python) télécharge l'open data, compile et publie une base par législature, chaque jour
+#   publication : (nginx) sert le volume « publication » aux applications — http://localhost:8081
+#   web         : (nginx) app web « Nos administrés ont du talent », /donnees relaie « publication » — http://localhost:8080
+#
+#   docker compose up -d --build        # premier import ~5 min
+#   docker compose logs -f extraction
+
+name: big-brother
+
+services:
+  extraction:
+    build:
+      context: ./on-verra
+      dockerfile: Dockerfile
+    environment:
+      INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
+    volumes:
+      - cache:/app/data                # open data AN, base complète, partitions : privé
+      - publication:/srv/publication
+    healthcheck:
+      # Prêt dès que la première publication existe.
+      test: ["CMD", "test", "-f", "/srv/publication/index.json"]
+      interval: 30s
+      start_period: 15m
+    restart: unless-stopped
+
+  publication:
+    build:
+      context: ./on-verra
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "8081:80"                      # pour les apps mobiles : EXPO_PUBLIC_PUBLICATION_URL=https://<hôte>
+    volumes:
+      - publication:/srv/publication:ro
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./augure
+      args:
+        PUBLICATION_URL: /donnees      # relayé vers « publication » par le nginx de l'app
+    ports:
+      - "8080:80"
+    depends_on:
+      - publication
+    restart: unless-stopped
+
+volumes:
+  cache:
+  publication:
