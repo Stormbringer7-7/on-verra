@@ -30,3 +30,22 @@ export function disposerSieges(nombre: number, largeur: number, rangs = 11): { s
   sieges.sort((a, b) => b.t - a.t);
   return { sieges, rayonPoint: 3 * echelle };
 }
+
+/**
+ * Les sièges regroupés en un tracé SVG par couleur (deux arcs par point), dans l'ordre de première
+ * apparition : 5 à 12 éléments au lieu d'un `<Circle>` par siège (577 composants à l'AN), même
+ * dessin. C'est ce qui rend l'hémicycle léger sur un téléphone lent.
+ */
+export function tracesParCouleur(sieges: PointSiege[], couleurs: string[], rayon: number): { couleur: string; d: string }[] {
+  const r = arrondi(rayon);
+  const parCouleur = new Map<string, string[]>();
+  sieges.forEach((s, i) => {
+    const couleur = couleurs[i];
+    if (couleur === undefined) return;
+    const morceaux = parCouleur.get(couleur) ?? parCouleur.set(couleur, []).get(couleur)!;
+    morceaux.push(`M${arrondi(s.x - rayon)} ${arrondi(s.y)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`);
+  });
+  return [...parCouleur].map(([couleur, morceaux]) => ({ couleur, d: morceaux.join('') }));
+}
+
+const arrondi = (v: number) => Math.round(v * 100) / 100;

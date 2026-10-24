@@ -1,7 +1,8 @@
 # Entrée publique de big-brother : HTTPS automatique (Let's Encrypt), un seul domaine.
-#   https://{$DOMAINE}/            app web « Nos administrés ont du talent » (service web)
+#   https://{$DOMAINE}/            app web « Nos politiques ont du talent » (service web)
 #   https://{$DOMAINE}/api/…       API (service api) : commandes de l'app
-#   https://{$DOMAINE}/donnees/…   publication opendata (service publication) : index.json, bases, correctifs
+#   https://{$DOMAINE}/donnees/…   publication SQLite historique (service publication, profil « historique » :
+#                                  arrêté par défaut, la route répond alors 502)
 #
 # Variable (fichier .env à la racine, voir .env.example) :
 #   DOMAINE   nom de domaine public ; « localhost » pour tester en local (certificat interne de Caddy)

@@ -1,57 +1,37 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+// Ligne d'un scrutin public (Accueil, votes d'un dossier) : chambre, ce qui est voté, date et
+// résultat publiés (« 15/10 · ADOPTÉ 330 – 190 »). Ouvre la fiche du scrutin.
 
-import type { Decompte, ScrutinResume } from '@/core';
-import { verdict } from '@/core/domain/votes';
-import { useAller } from '@/navigation';
-import { dateCourte } from '../format';
-import { libelleScrutin } from '../natures';
-import { usePalette } from '../theme/ThemeProvider';
-import { space } from '../theme/tokens';
-import { Label, Repartition, T } from './base';
+import { StyleSheet, View } from 'react-native';
 
-/**
- * Ligne de scrutin : intitulé en `body`, résultat en `label`, barre de répartition.
- * `resultat` remplace le résultat global (ex. la position d'un groupe) ; `decompte` aussi.
- */
-export function LigneScrutin({
-  scrutin,
-  resultat,
-  couleurResultat,
-  decompte,
-  total,
-  depute,
-}: {
-  scrutin: ScrutinResume;
-  resultat?: string;
-  couleurResultat?: string;
-  decompte?: Decompte;
-  total?: number;
-  depute?: string;
-}) {
-  const p = usePalette();
+import type { ScrutinResume } from '@/core';
+import { useAller } from '../../navigation';
+import { dateCourte, libelleChambre, resultatScrutin, titreScrutin } from '../format';
+import { NATURES } from '../natures';
+import { Ligne, PastilleChambre, T } from './base';
+
+export function LigneScrutin({ scrutin, onPress }: { scrutin: ScrutinResume; onPress?: () => void }) {
   const aller = useAller();
-  const v = verdict(scrutin.sort, scrutin.decompte);
+  const titre = titreScrutin(scrutin);
+  const meta = `${dateCourte(scrutin.date)} · ${NATURES[scrutin.nature].libelle} · ${resultatScrutin(scrutin)}`;
   return (
-    <Pressable
-      accessibilityRole="link"
-      onPress={() => aller.scrutin(scrutin.uid, depute)}
-      style={({ pressed }) => [styles.ligne, { borderBottomColor: p.line, backgroundColor: pressed ? p.surfaceRaised : 'transparent' }]}
+    <Ligne
+      onPress={onPress ?? (() => aller.scrutin(scrutin.id))}
+      accessibilityLabel={`${libelleChambre(scrutin.chambre)}, scrutin n° ${scrutin.numero} : ${titre}. ${meta}`}
     >
-      <View style={styles.entete}>
-        <T style={styles.titre} numberOfLines={3}>
-          {libelleScrutin(scrutin)} <T ton="inkMuted">· {dateCourte(scrutin.date)}</T>
+      <PastilleChambre libelle={libelleChambre(scrutin.chambre)} />
+      <View style={styles.texte}>
+        <T variant="text" style={styles.titre}>
+          {titre}
         </T>
-        <Label couleur={couleurResultat ?? p.ink}>
-          {resultat ?? `${v.toUpperCase()} ${scrutin.decompte.pour} – ${scrutin.decompte.contre}`}
-        </Label>
+        <T variant="meta" ton="inkMuted">
+          {meta}
+        </T>
       </View>
-      <Repartition decompte={decompte ?? scrutin.decompte} total={total} />
-    </Pressable>
+    </Ligne>
   );
 }
 
 const styles = StyleSheet.create({
-  ligne: { gap: space[2], paddingVertical: space[3], borderBottomWidth: StyleSheet.hairlineWidth },
-  entete: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space[3] },
-  titre: { flex: 1 },
+  texte: { flex: 1, minWidth: 0, gap: 2 },
+  titre: { lineHeight: 20 },
 });

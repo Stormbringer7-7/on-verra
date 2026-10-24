@@ -1,39 +1,22 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+// Accès de l'UI au bus de commandes : `CoreProvider` le fournit, `useCommand` (alias `useRequete`)
+// exécute une query et suit son état, `useEnvoi` exécute une command (signalement).
 
-import { Synchroniser, type Command, type CommandBus, type EtatBase } from '@/core';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-type Demarrage =
-  | { statut: 'chargement' }
-  | { statut: 'pret'; base: EtatBase }
-  | { statut: 'erreur'; message: string };
+import type { Command, CommandBus } from '@/core';
+import type { SourceDonnees } from '../../di/container';
 
 interface CoreContextValue {
   bus: CommandBus;
-  demarrage: Demarrage;
-  synchroniser(): void;
+  /** D'où viennent les données : l'API, ou les fixtures fictives du canevas (bandeau affiché). */
+  source: SourceDonnees;
 }
 
 const CoreContext = createContext<CoreContextValue | null>(null);
 
-/** Fournit le bus à l'UI et ouvre/met à jour la base au démarrage. */
-export function CoreProvider({ bus, children }: { bus: CommandBus; children: ReactNode }) {
-  const [demarrage, setDemarrage] = useState<Demarrage>({ statut: 'chargement' });
-
-  const lancer = useCallback(() => {
-    bus
-      .execute(Synchroniser({}))
-      .then((base) => setDemarrage({ statut: 'pret', base }))
-      .catch((e: unknown) => setDemarrage({ statut: 'erreur', message: e instanceof Error ? e.message : String(e) }));
-  }, [bus]);
-
-  useEffect(lancer, [lancer]);
-
-  const synchroniser = useCallback(() => {
-    setDemarrage({ statut: 'chargement' });
-    lancer();
-  }, [lancer]);
-
-  const value = useMemo(() => ({ bus, demarrage, synchroniser }), [bus, demarrage, synchroniser]);
+/** Fournit le bus (et la source des données) à l'UI. */
+export function CoreProvider({ bus, source, children }: { bus: CommandBus; source: SourceDonnees; children: ReactNode }) {
+  const value = useMemo(() => ({ bus, source }), [bus, source]);
   return <CoreContext.Provider value={value}>{children}</CoreContext.Provider>;
 }
 
@@ -43,17 +26,12 @@ export function useCore(): CoreContextValue {
   return c;
 }
 
-/** Base prête (écrans affichés après le démarrage uniquement). */
-export function useBase(): EtatBase {
-  const { demarrage } = useCore();
-  if (demarrage.statut !== 'pret') throw new Error('Base pas encore ouverte');
-  return demarrage.base;
-}
-
 export type Resultat<T> =
   | { statut: 'chargement'; donnees?: T }
   | { statut: 'pret'; donnees: T }
   | { statut: 'erreur'; message: string };
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
  * Exécute une query du bus et suit son état. La query est relancée quand son contenu change
@@ -82,7 +60,7 @@ export function useCommand<O>(command: Command<string, unknown, O> | null): Resu
       .then((donnees) => controleur.signal.aborted || setResultat({ statut: 'pret', donnees }))
       .catch((e: unknown) => {
         if (controleur.signal.aborted) return;
-        setResultat({ statut: 'erreur', message: e instanceof Error ? e.message : String(e) });
+        setResultat({ statut: 'erreur', message: message(e) });
       });
     return () => controleur.abort();
     // `cle` décrit entièrement la commande.
@@ -91,4 +69,38 @@ export function useCommand<O>(command: Command<string, unknown, O> | null): Resu
 
   const recharger = useCallback(() => setEssai((n) => n + 1), []);
   return { ...resultat, recharger };
+}
+
+/** Même hook, nom du plan (« useRequete ») : une query par écran. */
+export const useRequete = useCommand;
+
+export type Envoi<O> =
+  | { statut: 'repos' }
+  | { statut: 'envoi' }
+  | { statut: 'envoye'; reponse: O }
+  | { statut: 'erreur'; message: string };
+
+/** Exécute une command à la demande (pas au rendu) : `envoyer(SignalerErreur({...}))`. */
+export function useEnvoi<O>(): { etat: Envoi<O>; envoyer(command: Command<string, unknown, O>): void; reinitialiser(): void } {
+  const { bus } = useCore();
+  const [etat, setEtat] = useState<Envoi<O>>({ statut: 'repos' });
+  const monte = useRef(true);
+  useEffect(() => {
+    monte.current = true;
+    return () => {
+      monte.current = false;
+    };
+  }, []);
+  const envoyer = useCallback(
+    (command: Command<string, unknown, O>) => {
+      setEtat({ statut: 'envoi' });
+      bus
+        .execute(command)
+        .then((reponse) => monte.current && setEtat({ statut: 'envoye', reponse }))
+        .catch((e: unknown) => monte.current && setEtat({ statut: 'erreur', message: message(e) }));
+    },
+    [bus],
+  );
+  const reinitialiser = useCallback(() => setEtat({ statut: 'repos' }), []);
+  return { etat, envoyer, reinitialiser };
 }

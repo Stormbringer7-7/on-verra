@@ -1,35 +1,55 @@
-# Déploiement de big-brother :
-#   extraction  : (Python) télécharge l'open data, compile et publie une base SQLite par législature
-#                 chaque jour, puis charge chaque nouvelle version dans Postgres
-#   postgres    : la base lue par l'API (un schéma par législature)
+# Déploiement de big-brother (« Nos politiques ont du talent ») :
+#   donnees     : (Python) charge chaque jour la base CivicTrace (base « civictrace ») depuis l'open
+#                 data : AN, Sénat, Conseil constitutionnel, HATVP, RNE, INSEE ; projections, contrôles
+#   postgres    : la base lue par l'API
 #   api         : (Node) exécute les commandes de l'app sur Postgres ; l'app ne contient aucun SQL
-#   publication : (nginx) sert les bases SQLite publiées (instantanés, sauvegardes, open data)
-#   web         : (nginx) app web « Nos administrés ont du talent » ; /api relaie « api »
-#   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE
-#                 (/ = app, /api = api, /donnees = publication)
+#   web         : (nginx) app web ; /api relaie « api »
+#   pgadmin     : (profil « admin ») administration de Postgres, http://127.0.0.1:8083
+#   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /api = api)
+#   extraction, publication : (profil « historique ») ancienne chaîne SQLite des scrutins AN et sa
+#                 publication sous /donnees ; plus lues par l'app, arrêtées par défaut
 #
 #   cp .env.example .env                 # DOMAINE, POSTGRES_PASSWORD
-#   docker compose up -d --build         # premier import ~10 min ; ensuite, rien n'est re-téléchargé au redémarrage
-#   docker compose logs -f extraction
+#   docker compose up -d --build         # base vide : premier chargement ≈ 40 min (docs/deploiement.md
+#                                        # pour partir d'un dump et du cache brut, sans attendre)
+#   docker compose logs -f donnees
 #
-# Données persistées sur l'hôte : opendata/data (cache AN, base) et opendata/publication.
-# Postgres (volume « postgres ») se reconstruit seul depuis la publication s'il est perdu.
+# Données persistées sur l'hôte : opendata/data (cache des fichiers bruts, rapports de contrôle).
+# La base (volume « postgres ») se reconstruit depuis l'open data si elle est perdue.
 # web, publication, api et postgres restent joignables depuis la machine seulement (127.0.0.1:8080, :8081,
 # :8082 et :5433), pour le développement ; depuis l'extérieur, tout passe par Caddy.
 
 name: big-brother
 
-x-postgres-url: &postgres-url postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/big-brother
+x-postgres-url: &postgres-url postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/civictrace
+x-postgres-url-historique: &postgres-url-historique postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/big-brother
 
 services:
+  donnees:
+    build:
+      context: ./opendata
+      dockerfile: Dockerfile
+    command: ["canon-en-boucle"]
+    environment:
+      INTERVALLE_MAJ: "86400"          # secondes entre deux chargements (1 jour)
+      AGE_MAX: "20"                    # heures avant de redemander un fichier à la source (304 s'il n'a pas changé)
+      DATABASE_URL: *postgres-url
+    volumes:
+      - ./opendata/data:/app/data      # cache des fichiers bruts (data/brut) et rapports : privé
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   extraction:
+    profiles: [historique]
     build:
       context: ./opendata
       dockerfile: Dockerfile
     environment:
       INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
       AGE_MAX: "20"                    # heures avant de redemander un fichier à l'AN (304 s'il n'a pas changé)
-      DATABASE_URL: *postgres-url
+      DATABASE_URL: *postgres-url-historique
     volumes:
       # Dossiers de l'hôte : survivent à down, rebuild, « down -v » et « volume prune ».
       - ./opendata/data:/app/data      # open data AN, base complète, partitions : privé
@@ -46,6 +66,7 @@ services:
 
   postgres:
     image: postgres:17.6-alpine
+    shm_size: 256mb                    # /dev/shm à 64 Mo par défaut : trop peu pour les projections
     environment:
       POSTGRES_USER: big-brother
       POSTGRES_DB: big-brother
@@ -54,6 +75,7 @@ services:
       - "127.0.0.1:5433:5432"          # tests de l'API (api/tests) et consultation depuis la machine
     volumes:
       - postgres:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro   # volume vide seulement : crée la base civictrace
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "big-brother", "-d", "big-brother"]
       interval: 10s
@@ -73,7 +95,30 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Administration de Postgres (pgAdmin), à la demande et depuis la machine seulement :
+  #   docker compose --profile admin up -d pgadmin   → http://127.0.0.1:8083
+  # Mode bureau (sans compte pgAdmin) : n'est jamais exposé par Caddy. Le serveur « big-brother »
+  # est préenregistré ; mot de passe demandé à la première connexion (POSTGRES_PASSWORD).
+  pgadmin:
+    image: dpage/pgadmin4:9.8
+    profiles: [admin]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com   # exigé au démarrage, inutilisé (pgAdmin refuse .local)
+      PGADMIN_DEFAULT_PASSWORD: inutilise-en-mode-bureau
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "127.0.0.1:8083:80"
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - pgadmin:/var/lib/pgadmin       # connexions et préférences
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   publication:
+    profiles: [historique]
     build:
       context: ./opendata
       dockerfile: Dockerfile.nginx
@@ -109,10 +154,10 @@ services:
     depends_on:
       - web
       - api
-      - publication
     restart: unless-stopped
 
 volumes:
   postgres:
   caddy_data:
   caddy_config:
+  pgadmin:

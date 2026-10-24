@@ -1,7 +1,12 @@
 // Le bus de l'app : chaque commande du contrat est exécutée par l'API (service « api »).
 // L'app ne contient aucune base ni aucun SQL : elle envoie la commande, l'API renvoie le résultat.
 //
-//   POST <url>/assemblee/consulter   {"legislature": "17"}
+//   POST <url>/dossier/consulter      {"id": "…"}                    query : mise en cache
+//   POST <url>/signalement/envoyer    {"cible": {…}, "message": "…"} command : jamais en cache,
+//                                                                     vide le cache des queries
+//
+// Le genre (query ou command) vient de la définition (`defineQuery` / `defineCommand`) :
+// `SignalerErreur` est la seule command du contrat.
 
 import { CommandBus, type CommandDefinition } from '../core/commands/bus';
 import * as definitions from '../core/commands/definitions';

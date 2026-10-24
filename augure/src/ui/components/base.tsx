@@ -1,8 +1,12 @@
+// Composants de base du design system Panoptique : typographie (`T`, `Label`, titres), cartes,
+// puces, onglets de fiche, barres de répartition, icônes. Aucune donnée métier ici.
+
 import type { ReactNode } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { Decompte } from '@/core';
+import { useLarge } from '../hooks/miseEnPage';
 import { usePalette } from '../theme/ThemeProvider';
 import { radius, space, type, type TypeVariant } from '../theme/tokens';
 
@@ -17,6 +21,97 @@ export function T({
 }: TextProps & { variant?: TypeVariant; ton?: Ton; couleur?: string; style?: StyleProp<TextStyle> }) {
   const p = usePalette();
   return <Text {...props} style={[type[variant], { color: couleur ?? p[ton] }, style]} />;
+}
+
+/** Titre d'écran (h1) : 30 px en portrait, 44 px en large ; `surtitre` en étiquette au-dessus. */
+export function TitreEcran({ children, surtitre }: { children: ReactNode; surtitre?: ReactNode }) {
+  const large = useLarge();
+  return (
+    <View style={{ gap: space[1] }}>
+      {surtitre !== undefined && <Label>{surtitre}</Label>}
+      <T variant={large ? 'screenLarge' : 'screen'} accessibilityRole="header">
+        {children}
+      </T>
+    </View>
+  );
+}
+
+/** Titre de section (h2), avec une action à droite (« TOUS LES DOSSIERS → »). */
+export function TitreSection({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  const large = useLarge();
+  const titre = (
+    <T variant={large ? 'sectionLarge' : 'section'} accessibilityRole="header" style={{ flexShrink: 1 }}>
+      {children}
+    </T>
+  );
+  if (!action) return titre;
+  return (
+    <View style={styles.titreAction}>
+      {titre}
+      {action}
+    </View>
+  );
+}
+
+/** Carte du canevas : fond `surface-raised`, rayon 4, 16 px (20 en large) ; cliquable si `onPress`. */
+export function Carte({
+  children,
+  onPress,
+  contour = false,
+  accessibilityLabel,
+  style,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+  /** Bordée `line` sur le fond plutôt qu'en aplat (encadrés « Explorer »). */
+  contour?: boolean;
+  accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const p = usePalette();
+  const large = useLarge();
+  const fond: ViewStyle = contour
+    ? { borderWidth: 1, borderColor: p.line, backgroundColor: 'transparent' }
+    : { backgroundColor: p.surfaceRaised };
+  const forme = [styles.carte, { padding: large ? space[5] : space[4] }, fond, style];
+  if (!onPress) return <View style={forme}>{children}</View>;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => [forme, pressed && { opacity: 0.8 }]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/** Ligne de liste (52 px au moins, filet `line` en bas), cliquable si `onPress`. */
+export function Ligne({ children, onPress, accessibilityLabel }: { children: ReactNode; onPress?: () => void; accessibilityLabel?: string }) {
+  const p = usePalette();
+  const forme = [styles.ligne, { borderBottomColor: p.line }];
+  if (!onPress) return <View style={forme}>{children}</View>;
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [forme, pressed && { opacity: 0.8 }]}>
+      {children}
+    </Pressable>
+  );
+}
+
+/** Pastille de chambre « AN » / « SÉNAT » (cadre `line-strong`). */
+export function PastilleChambre({ libelle }: { libelle: string }) {
+  const p = usePalette();
+  return (
+    <View style={[styles.chambre, { borderColor: p.lineStrong }]}>
+      <Label ton="ink">{libelle}</Label>
+    </View>
+  );
+}
+
+/** Carré creux : marque d'un objet qui n'est pas une personne (dossier, amendement, scrutin). */
+export function Carre({ couleur, taille = 10 }: { couleur: string; taille?: number }) {
+  return <View style={{ width: taille, height: taille, borderWidth: 1.5, borderColor: couleur }} />;
 }
 
 /** Étiquette mono en majuscules : `577 SIÈGES`, `SCRUTIN N° 2214`. */
@@ -225,6 +320,10 @@ export function Separateur() {
 }
 
 const styles = StyleSheet.create({
+  titreAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
+  carte: { borderRadius: radius.md, gap: 10, minWidth: 0 },
+  ligne: { flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 52, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  chambre: { minWidth: 52, minHeight: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space[1] },
   barre: { flexDirection: 'row', gap: 2, overflow: 'hidden' },
   segmente: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.sm, padding: 2, gap: 2 },
   segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },

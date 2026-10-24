@@ -1,4 +1,4 @@
-import type { Bilan, Decompte, Position, PositionExprimee, VoteDepute } from './model';
+import type { Decompte, Position, PositionExprimee } from './model';
 
 export const SEUIL_VOTE_UNI = 0.9;
 
@@ -28,18 +28,6 @@ export function partMajoritaire(d: Decompte): number {
 /** Écart : vote exprimé différent de la ligne de son groupe au moment du vote. */
 export function estEcart(position: Position, ligneGroupe: PositionExprimee | null): boolean {
   return estExprimee(position) && ligneGroupe !== null && position !== ligneGroupe;
-}
-
-export function bilan(votes: VoteDepute[]): Bilan {
-  let ecarts = 0;
-  let absences = 0;
-  for (const v of votes) {
-    if (v.ecart) ecarts++;
-    if (v.position === 'absent') absences++;
-  }
-  // Les non-votes statutaires (présidence de séance, gouvernement) ne sont ni l'un ni l'autre.
-  const statutaires = votes.filter((v) => v.position === 'non_votant').length;
-  return { total: votes.length, commeGroupe: votes.length - ecarts - absences - statutaires, ecarts, absences };
 }
 
 export function verdict(sort: string | null, d: Decompte): 'Adopté' | 'Rejeté' {

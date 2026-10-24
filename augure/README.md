@@ -1,37 +1,39 @@
-# augure — « Nos administrés ont du talent »
+# augure — Nos politiques ont du talent
 
-Qui vote quoi à l'Assemblée nationale, scrutin par scrutin. App Expo (iOS, Android, web) qui lit
-les bases publiées par [opendata](../opendata), **une par législature** : pas d'API, des fichiers
-statiques (`index.json`, puis par législature `manifest.json`, base `.db.gz`, correctifs `.sql.gz`),
-vérifiés par SHA-256. Tous les scrutins publics y sont : votes finaux, articles, amendements, motions.
+Suivre une loi du dépôt au Journal officiel : le **dossier législatif** est l'objet central ;
+amendements, votes, débats et intérêts déclarés y sont rangés, et les personnes et institutions y
+mènent toujours. App Expo (iOS, Android, web), sans base ni SQL : elle envoie chaque commande à
+l'[API](../api), qui lit Postgres (schémas `canon` et `lecture`).
 
-Design : design system [Panoptique](https://claude.ai/artifact/4Qygft6thDASUWogZkYcHD) et
-[maquettes](https://claude.ai/artifact/742v5Bx7zM9SvDnZAYGLcv). Tous les tokens sont dans
-`src/ui/theme/tokens.ts`.
+Design : canevas [Panoptique v2 — Parcours législatifs](https://claude.ai/artifact/R33Yw8dE34vLyY9rbaRhDC)
+et design system [Panoptique](https://claude.ai/artifact/4Qygft6thDASUWogZkYcHD). Tous les tokens
+sont dans `src/ui/theme/tokens.ts`.
 
-## Lancer
+## Sources de données
 
-L'app lit la publication opendata hébergée : chaque législature est téléchargée à sa première
-consultation, puis mise à jour par correctifs, sans republier l'app.
+`EXPO_PUBLIC_SOURCE` choisit le bus de commandes (`src/di/container.ts`) :
+
+| Valeur | Bus | Données |
+|---|---|---|
+| `api` (défaut) | `ApiBus` | l'API, à l'adresse `EXPO_PUBLIC_API_URL` (en développement : `http://localhost:8082`) |
+| `fixtures` | `FixturesBus` | les fixtures du contrat (`src/infra/fixtures`) : les deux dossiers **fictifs** du canevas, sans réseau ; un bandeau « Données fictives de maquette » est affiché sur chaque écran |
+
+Avec `fixtures`, une commande répond par l'exemple dont l'entrée est égale (JSON, clés triées).
+Entrée inconnue : en développement, la première fixture de la commande (signalée dans la console) ;
+dans une version publiée, une erreur « Pas de donnée de maquette pour … ».
 
 ```bash
-docker compose up -d publication extraction       # à la racine : publication sur http://localhost:8081
-npx expo start                                    # en développement, l'app lit http://localhost:8081
+EXPO_PUBLIC_SOURCE=fixtures npx expo start --web   # maquette, sans API
+docker compose up -d api && npx expo start         # données réelles (API locale sur :8082)
 ```
 
-Sans Docker, après `python3 -m src importer && python3 -m src publier` dans `opendata/` :
+En production, `EXPO_PUBLIC_API_URL` est obligatoire : l'image Docker `web` la fixe à `/api`
+(même origine, derrière Caddy) ; une app mobile pointe vers `https://<hôte de l'API>`. Sur
+l'émulateur Android, `localhost` désigne l'émulateur : utiliser `http://10.0.2.2:8082`. Les
+variables `EXPO_PUBLIC_*` sont lues à la compilation (fichier `.env` ou environnement).
 
 ```bash
-npm run publication                                          # sert opendata/publication sur :8787
-EXPO_PUBLIC_PUBLICATION_URL=http://localhost:8787 npx expo start
-```
-
-En production, `EXPO_PUBLIC_PUBLICATION_URL` est obligatoire : le service Docker `web` la fixe à
-`/donnees` (même origine) ; une app mobile pointe vers `https://<hôte de publication>`.
-Sur l'émulateur Android, `localhost` désigne l'émulateur : utiliser `http://10.0.2.2:8081`.
-
-```bash
-npm test            # cœur + adapter SQL sur la vraie publication opendata (node:sqlite)
+npm test            # contrat, fixtures, bus (API, fixtures), rendu des composants partagés
 npm run typecheck
 npm run lint
 ```
@@ -41,67 +43,70 @@ npm run lint
 ```
 index.ts                 point d'entrée
 src/
-  App.tsx                polices, thème, démarrage, navigateurs
-  navigation.ts          pages, liens web, useAller() (navigation déclarée en code)
-  core/                  aucun import React Native : testable sous Node
-    domain/              modèle de lecture, règles (ligne de groupe, écart, bilan, plan de MAJ)
-    ports/               interfaces : SqlDatabase, LocalDatabases, PublicationSource,
-                         ParlementRepository, ThemeClassifier, EnClairProvider, Logger
-    partitions.ts        une base par législature, ouverte et mise à jour à la demande
-    commands/            bus de commandes typé, middlewares, handlers
-  infra/                 adapters
-    sql/                 ExpoSqliteDatabase (app) · NodeSqlite (tests)
-    locales/             FichiersSqlite (mobile, sur disque) · MemoireSqlite (web)
-    publication/         HttpPublicationSource : index, manifestes, SHA-256, gzip
-    onverra/             OnVerraRepository : seul fichier qui connaît le schéma opendata
-    themes/              KeywordThemeClassifier (heuristique sur les titres)
-    resumes/             CatalogueEnClair (en-clair.json, résumés relus à la main)
-  di/                    racine de composition (choix des adapters par plateforme)
+  App.tsx                polices, thème, bus, navigateurs (pile + 5 onglets)
+  navigation.ts          pages, liens web et profonds, useAller() (navigation déclarée en code)
+  core/                  contrat partagé avec l'API (alias @contrat) : aucun import React Native
+    domain/              DTO par contexte (dossiers, parcours, scrutins, personnes…)
+    commands/            bus typé, middlewares, definitions.ts (une query par écran + SignalerErreur)
+  infra/
+    ApiBus.ts            chaque commande en POST <API>/<type>
+    FixturesBus.ts       chaque commande répond par ses fixtures
+    fixtures/            exemples { entrée, sortie } par commande (données fictives du canevas)
+  di/container.ts        racine de composition (EXPO_PUBLIC_SOURCE)
   ui/
-    ecrans/              Assemblee, Scrutins, Recherche, Groupe, Depute, Scrutin
-    components/          composants du design system
-    hooks/               useCommand, CoreProvider
+    ecrans/              un écran par page ou onglet (Accueil, Dossiers, Dossier, Etape…)
+    components/          Ecran (gabarit, navigation, fil d'Ariane, colonnes), base (typographie,
+                         cartes, puces), LigneScrutin
+      commun/            Source, LienStatut, IndicateurVue, SyntheseVue, BarreParcours, Signaler
+      dossiers/          composants des écrans du dossier
+      personnes/         composants des écrans personnes et institutions
+    hooks/               useCommand (useRequete), useEnvoi, CoreProvider, titres du fil d'Ariane
     theme/               tokens, palette
+    format.ts            dates, nombres, sources, indicateurs (fonctions pures)
 ```
+
+### Navigation
+
+Cinq onglets toujours visibles — Accueil, Dossiers, Personnes, Institutions, Recherche — en bas en
+portrait, en en-tête en paysage et sur grand écran (`useLarge`). Chaque fiche (Dossier, Étape,
+Article, Amendement, Scrutin, Pourquoi ce vote, Personne, Institution, Représentant, Discussions)
+s'empile au-dessus des onglets : la navigation reste affichée, avec l'onglet d'origine actif, et un
+fil d'Ariane (« Dossiers › Programmation énergétique › Commission AN › Amendement CE123 »)
+construit depuis la pile. Chaque écran donne son maillon : `<Ecran titre="Amendement CE123">`.
 
 ### Commandes
 
 L'UI ne parle au cœur que par le bus :
 
 ```ts
-const fiche = useCommand(ConsulterScrutin({ uid }));          // dans un écran
-await bus.execute(Synchroniser({}));                          // ailleurs
+const fiche = useCommand(ConsulterDossier({ id }));            // une query par écran
+const { envoyer } = useEnvoi<AccuseSignalement>();             // la seule command
+envoyer(SignalerErreur({ cible, message, ecran }));
 ```
 
-Les définitions sont dans `src/core/commands/definitions.ts`. Une *query* lit, une *command*
-modifie l'état. Le middleware `queryCache` garde les queries en cache, et chaque command (la
-synchronisation) vide ce cache. Pour ajouter un cas d'usage : une définition, un handler,
-une ligne `register` dans `src/core/index.ts`.
+Une *query* lit et passe par le cache (`queryCache`) ; une *command* (`SignalerErreur`) n'est
+jamais mise en cache et vide le cache des queries.
 
-### Groupes dans le temps
+### Règles d'affichage
 
-Rien n'est codé en dur, parce que les groupes changent : renommages (AD → UDR → UDDPLR),
-départs, et groupes propres à chaque législature.
-
-- La composition est toujours calculée **à une date** à partir des appartenances. Pour l'hémicycle,
-  c'est la date du dernier scrutin de la législature choisie.
-- L'ordre gauche → droite vient du siège moyen des membres ce jour-là : les numéros de siège
-  croissent de la droite vers la gauche.
-- Un vote est rattaché au groupe du député **au moment du vote**, et un écart est mesuré par
-  rapport à la ligne de ce groupe-là.
-- Un groupe dissous est montré à son dernier jour d'existence.
+- **Chaque fait porte sa source** : `<Source provenance={…} />` (« Source : AN · DLR5L17N54085 »,
+  lien vers la page officielle si elle existe ; jamais d'URL inventée).
+- **Chaque rapprochement porte son statut** : `<LienStatut lien={…} rendu={…} />`. Un lien à
+  vérifier n'a pas de cible dans le type ; son candidat n'est montré que dans un encadré « À
+  vérifier », avec ce que le rapprochement n'établit pas.
+- **Jamais un chiffre sans « par rapport à quoi »** : `<IndicateurVue indicateur={…} />` (valeur,
+  dénominateur, référence, période, calcul, « ce que la donnée ne dit pas »).
+- **Pas de LLM** : `<SyntheseVue synthese={…} />` affiche « Pas de synthèse disponible » quand le
+  port `Synthetiseur` rend null (toujours, pour l'instant) ; une synthèse est marquée comme telle.
+- **Barre de parcours** : `<BarreParcours parcours={…} />` (cases sans objet masquées ; faite,
+  en cours, à venir, inconnu) ; `BarreCompacte` dans les listes, `BarreDossierVue` en tête des
+  sous-écrans d'un dossier.
 
 ### Limites assumées
 
-- **Présence** : opendata ne publie pas la présence. « Absent » veut dire en fonction mais sans vote enregistré.
-- **En clair** : aucun résumé n'est encore rédigé. Sans résumé, l'écran le dit et donne la
-  signification littérale (POUR = adopter ce texte / cet amendement / cet article).
-- **Amendements** : seul l'intitulé du scrutin est publié (« l'amendement n° 15 de M. X à
-  l'article premier… »), pas son contenu.
-- **Indicateurs** (présence, écarts, bilan d'un député) : calculés sur tous les scrutins publics,
-  amendements compris ; beaucoup se votent en séance peu remplie, d'où des absences nombreuses.
-- **Thèmes** : ils sont attribués d'après le titre, par mots-clés. C'est un adapter remplaçable.
-- **Hémicycle** : la disposition des sièges reprend la maquette, ce n'est pas le plan réel de la salle.
-- **Web** : chaque législature consultée est rechargée à chaque visite (17 Mo pour la 17e, ~10 s),
-  faute d'adapter IndexedDB.
-- **Hors connexion** : seules les législatures déjà consultées sur l'appareil sont disponibles.
+- **17e législature** seulement pour l'instant.
+- **Thèmes** : aucun thème n'est attribué aux dossiers ; les filtres par thème sont masqués.
+- **Recherche** : plein texte côté API (Postgres, configuration `french`) ; au moins 2 lettres.
+  Les « organisations » ouvrent la fiche de représentant d'intérêts.
+- **Hémicycle** : `components/disposition.ts` garde la géométrie de la maquette (ce n'est pas le
+  plan réel de la salle).

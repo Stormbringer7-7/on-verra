@@ -1,195 +1,129 @@
 # opendata
 
-Qui a voté quoi sur chaque loi à l'Assemblée nationale, à partir de l'open data officiel
-(data.assemblee-nationale.fr). Python 3.10+, bibliothèque standard uniquement.
+ETL de CivicTrace (app « Nos politiques ont du talent ») : télécharge l'open data officiel du
+Parlement et des autorités publiques, et construit une base Postgres où **chaque fait porte sa
+source** et **chaque rapprochement son statut**. Seul ce qui est 100 % fiable (identifiant officiel,
+référence explicite, décision humaine tracée) entre dans `canon` comme un fait ; tout le reste
+devient un cas de revue humaine, jamais tranché par le code.
+
+Python 3.10+, bibliothèque standard et `psycopg` 3. 17e législature d'abord.
+
+Index de toute la documentation : [docs/README.md](../docs/README.md).
+
+## Démarrage
 
 ```bash
-python3 -m src importer            # 14e à 17e législatures -> data/on_verra.db (~1 min)
-python3 -m src importer --legislatures 17   # une seule législature
-python3 -m src importer --forcer   # re-télécharge (les fichiers AN sont mis à jour chaque jour)
-python3 -m src lois "narcotrafic"  # lois, niveau d'importance et votes finaux
-python3 -m src lois --niveau majeure --legislature 17 --tri saillance -n 10
-python3 -m src 49-3 --legislature 16          # textes passés par 49.3 et motions de censure
-python3 -m src censure 519                    # qui a voté une motion de censure
-python3 -m src scrutin 1330        # pour / contre / abstention / non-votants par groupe
-python3 -m src scrutin 104 --legislature 15
-python3 -m src scrutin 1330 --tous # + liste des députés sans vote enregistré
-python3 -m src depute "Martinez"    # indicateurs + votes finaux d'un député (≠ groupe = dissidence)
-python3 -m src indicateurs                       # participation la plus haute, 17e législature
-python3 -m src indicateurs --croissant           # la plus basse
-python3 -m src indicateurs --tri dissidence --dissidence-min 20
-python3 -m src indicateurs --legislature 15 --groupe LAREM --tri dissidence
+python3 -m venv .venv && .venv/bin/pip install "psycopg[binary]"
+docker compose up -d postgres                      # depuis la racine du dépôt (port 5433)
+export DATABASE_URL=postgres://big-brother:big-brother@127.0.0.1:5433/civictrace
+
+.venv/bin/python -m src migrer       # schéma (src/schema_pg/NNNN_*.sql), idempotent
+.venv/bin/python -m src canon        # télécharge et charge ce qui a changé (complet ≈ 40 min, incrémental ≈ 6 min)
+.venv/bin/python -m src projeter     # reconstruit le schéma lecture (barre de parcours, indicateurs)
+.venv/bin/python -m src controles    # vérifie les invariants « 100 % fiable » ; échoue sinon
+.venv/bin/python -m src revue rapport  # écrit docs/revue/rapport.md et un CSV par type de cas
 ```
 
-## Architecture : compilation de la base (ETL)
+Options de `canon` :
+
+| Option | Effet |
+|---|---|
+| `--etapes senat.travaux,an.textes` | seulement ces étapes (et celles dont elles dépendent) |
+| `--relire` | réanalyse les documents inchangés sans re-télécharger (avec `--etapes` : ces étapes seulement) |
+| `--forcer` | re-télécharge et réanalyse tout |
+| `--age-max 20` | heures avant de revérifier un fichier distant |
+
+## Sources
+
+| Source | Contenu | Fiche |
+|---|---|---|
+| Assemblée nationale | acteurs et organes (AMO), dossiers et étapes, textes, amendements, scrutins et votes, comptes rendus de séance et de commission, agenda, questions | [an.md](docs/sources/an.md) |
+| Sénat | sénateurs, dossiers (DOSLEG), amendements et avis (AMELI), scrutins, textes Akoma Ntoso, comptes rendus, agenda | [senat.md](docs/sources/senat.md) |
+| DILA | décisions du Conseil constitutionnel (CONSTIT) ; JORF et LEGI à venir | [legifrance.md](docs/sources/legifrance.md) |
+| HATVP | déclarations d'intérêts et de patrimoine, répertoire des représentants d'intérêts | [hatvp.md](docs/sources/hatvp.md) |
+| RNE | élus locaux, une fiche par mandat publié | [rne.md](docs/sources/rne.md) |
+| INSEE | code officiel géographique | [insee.md](docs/sources/insee.md) |
+
+Chaque fiche montre des exemples réels de la donnée brute, ce qu'elle devient dans la base, et les
+lignes de code qui la lisent ; `tests/test_docs.py` vérifie ces liens. Volumes chargés : section
+« Ce qui est chargé » de [modele.md](docs/modele.md).
+
+## Architecture
+
+Ports et adaptateurs : les adaptateurs de source lisent, n'écrivent jamais de SQL ; seul
+l'`Entrepot` persiste ; la composition se fait à un seul endroit.
 
 ```
 src/
-  etl/               socle générique, sans connaissance des sources
-    sources.py         Fichier : téléchargement et cache des fichiers bruts (data/brut)
-    chargeur.py        Ligne(table, {colonne: valeur}) et Chargeur : INSERT par noms de colonnes, vérifiés
-    pipeline.py        Etape, Contexte, ordonner(), construire()
-  schema/            schéma SQL découpé par domaine, exécuté dans l'ordre des noms (10_…, 90_vues.sql)
-  adaptateurs/an/    Assemblée nationale : un module par flux (acteurs, dossiers, scrutins, lois)
-  transformations/   calculs communs à toutes les sources (classement des lois, indicateurs)
-  compilation.py     assemble le pipeline : SOURCES + TRANSFORMATIONS
-  partition.py       découpe la base complète en une base par législature
-  publication.py     une publication par législature : versions, correctifs, manifeste, index.json
+  domaine/                 objets sans I/O : IdentiteNative, Provenance, Correspondance, Affirmation…
+  ports.py                 Entrepot, Synthetiseur, ArchiveBrute
+  identites.py             règles d'identité (officiel = VERIFIED, nom + dates = revue, fusions)
+  chargement.py            document brut → empreinte → analyse → écriture ; inchangé = sauté
+  adaptateurs/sources/     an/, senat/, constit/, hatvp/, rne/, insee/ : lecture des fichiers bruts
+  adaptateurs/stockage/    memoire.py (tests) et postgres/ : même contrat
+  adaptateurs/synthese.py  SansSynthese : aucun LLM branché, « Pas de synthèse disponible »
+  textes.py, diffs.py      découpage par article, suivi d'article, diff mot à mot
+  schema_pg/               migrations versionnées (brut, canon, analytique, lecture)
+  projections/             requêtes du schéma lecture, rejouées par `projeter`
+  revue.py, controles.py   cas de revue humaine, invariants
+  compilation.py           racine de composition (ENTREPOT=postgres|memoire)
 ```
 
-```bash
-python3 -m src etapes               # étapes du pipeline dans l'ordre d'exécution
-python3 -m unittest discover tests       # socle ETL et empreinte du schéma publié
-```
-
-Déroulement de `importer` : toutes les sources sont téléchargées d'abord, puis les étapes
-s'exécutent dans l'ordre de leurs dépendances (`apres`), dans une seule transaction, sur une base
-temporaire qui ne remplace `data/on_verra.db` qu'une fois complète. Les étapes échangent leurs
-résultats intermédiaires par `ctx.artefacts` (ex. `an.dossiers` -> index des dossiers par législature).
-
-**Ajouter une source** (ex. Sénat, HATVP) : créer `adaptateurs/<source>/`, un module par flux,
-chacun avec une fonction `lignes(chemin) -> Iterator[Ligne]` (pure, testable sans base) et son
-`ETAPE = Etape("<source>.<flux>", executer, sources=..., apres=...)` ; exposer `ETAPES` dans le
-`__init__.py` et l'ajouter à `SOURCES` dans `compilation.py`. Les identifiants partagés (députés :
-`acteur_ref` de l'AN) sont la clé de jointure entre sources.
-
-**Ajouter une donnée** : nouvelle table dans un fichier de `schema/` (ou nouveau fichier `NN_domaine.sql`),
-puis une étape qui écrit des `Ligne` vers cette table. Une donnée calculée à partir des tables
-chargées va dans `transformations/` et dans `TRANSFORMATIONS`.
-
-**Modifier le schéma** : toute modification change son empreinte ; la publication suivante
-n'aura pas de correctif et les applications retéléchargeront la base complète. Le test
-`test_empreinte_inchangee` échoue tant que `EMPREINTE_PUBLIEE` n'a pas été mise à jour : c'est voulu.
-Préférer l'ajout de tables à la modification de tables existantes, que les applications lisent.
-
-## Classement des lois
-
-Chaque loi reçoit un niveau (`lois.niveau`) et les critères qui l'ont fixé (`lois.raisons`) :
-
-- **majeure** : loi de finances, de financement de la sécurité sociale ou constitutionnelle,
-  vote solennel, saisine du Conseil constitutionnel par des élus ou l'exécutif (la saisine
-  automatique des lois organiques ne compte pas), ou recours au 49.3 ;
-- **technique** : ratification de traité, ou aucun vote contre avec moins de 100 votants ;
-- **standard** : le reste.
-
-La **saillance** (0 à 100, `transformations/classement.py`) trie à l'intérieur d'un niveau : participation au
-vote final le plus suivi (40 %), nombre de scrutins sur le texte en échelle log (40 %), clivage
-pour/contre (20 %). Une loi sans vote final n'a que la composante débat.
-
-## 49.3 et motions de censure
-
-Un texte adopté par 49.3 n'a pas de vote final : il est repéré dans son dossier (acte
-`*-DGVT`), avec l'étape (1re lecture, CMP, nouvelle lecture, lecture définitive) et l'issue
-(table `engagements_49_3`). Les motions de censure (`motions_censure`, `votes_censure`) ne
-publient que les votes **pour**. En 17e, les dossiers relient chaque motion à son engagement ;
-en 14e, 15e et 16e, le rattachement se fait par la date (engagements des 7 jours précédents) et
-reste vide quand deux textes sont possibles.
-
-## Indicateurs
-
-Calculés à la compilation par député et par législature (table `indicateurs_deputes`), sur
-**tous les scrutins publics** où le député était en fonction (votes finaux, articles,
-amendements, motions de procédure ; hors motions de censure, où seuls les « pour » sont publiés) :
-
-- **participation** = votes exprimés (pour, contre, abstention) / scrutins en fonction, hors
-  non-votes statutaires (président de l'AN, président de séance, membre du gouvernement) ;
-- **délégation** = part des votes exprimés faits par procuration ;
-- **dissidence** = votes exprimés différents de la ligne du groupe / votes exprimés en groupe.
-  La ligne est la position la plus fréquente du groupe sur ce scrutin, calculée à partir des
-  décomptes (le champ officiel `positionMajoritaire` est faux sur 58 scrutins de la 17e).
-  Non-inscrits et égalités exclus. Le groupe pris en compte est celui du député au moment du vote.
-
-## Publication pour les applications
-
-La publication est **découpée par législature** (`partition.py`) : même schéma dans chaque base,
-avec seulement les lignes de sa législature. Les applications ne téléchargent que les législatures
-consultées, et une mise à jour ne republie que celle qui a changé (en pratique, la législature en
-cours). `mettre-a-jour` retélécharge les données de l'AN, reconstruit la base complète et publie
-une nouvelle version d'une législature **seulement si un scrutin, une motion de censure ou un 49.3
-y est apparu** :
-
-```bash
-python3 -m src mettre-a-jour                  # à lancer chaque jour (cron, CI)
-python3 -m src publier --forcer               # publie même sans nouveau scrutin
-python3 -m src publier --legislatures 17      # une seule législature
-```
-
-| fichier | rôle |
+| Document | Contenu |
 |---|---|
-| `index.json` | législatures publiées : période, nombre de scrutins, version, manifeste, taille |
-| `<leg>/manifest.json` | version, empreinte du schéma, base complète et correctifs (taille, SHA-256), nouveautés |
-| `<leg>/on_verra-<v>.db.gz` | base de la législature avec sa table `meta` (version, date, schéma) |
-| `<leg>/maj-<v-1>-<v>.sql.gz` | correctif SQL incrémental, exécuté dans une transaction |
-| `<leg>/courante.db` | dernière base publiée, référence du prochain correctif (à ne pas héberger) |
+| [modele.md](docs/modele.md) | modèle canonique, étapes chargées, règles de rattachement |
+| [uml.md](docs/uml.md) | diagrammes : du fichier source à la colonne (`python -m src uml` les régénère) |
+| [rapprochements.md](docs/rapprochements.md) | ce qui est relié automatiquement, ce qui ne l'est jamais, revue |
+| [modifications.md](docs/modifications.md) | changements article par article et amendement à l'origine |
+| [indicateurs.md](docs/indicateurs.md) | projections `lecture` : barre de parcours, indicateurs et leurs limites |
+| [TODO.md](TODO.md) | reste à faire côté données |
 
-Côté application : lire `index.json`, puis pour chaque législature voulue son manifeste ; si la
-version est plus récente, appliquer dans l'ordre les
-correctifs depuis sa version (chaque correctif vérifie la version de départ et échoue sinon,
-sans rien modifier) ; si un correctif manque ou si le schéma a changé, télécharger la base complète.
-Toujours vérifier le SHA-256 avant d'utiliser un fichier.
+**Ajouter une source** : un module sous `src/adaptateurs/sources/<source>/` qui produit des
+`Objet`, `Dependants` et `Rapprochement` (domaine) avec leur provenance, sans écrire en base ; une
+étape déclarée dans `compilation.py` ; une fiche `docs/sources/<source>.md` avec des exemples
+réels ; des tests sur ces exemples. Un lien qui n'est pas une référence explicite devient un cas de
+revue, pas une jointure.
 
-### En service (Docker)
+**Modifier le schéma** : nouvelle migration `src/schema_pg/NNNN_*.sql`, jamais de réécriture
+d'une migration appliquée ; puis `python -m src uml` pour mettre `docs/uml.md` à jour.
 
-Deux images : **`Dockerfile`** (Python, bibliothèque standard) extrait — `mettre-a-jour` en boucle,
-toutes les `INTERVALLE_MAJ` secondes (1 jour par défaut), vers le volume `/srv/publication`, avec
-`/app/data` pour le cache de l'open data et les bases compilées (privé) ; un échec laisse la
-publication précédente en place. **`Dockerfile.nginx`** publie — sert `/srv/publication` en
-statique (CORS ouvert, manifestes revalidés, `courante.db` jamais servie).
+## Revue humaine
 
 ```bash
-docker build -t opendata-extraction . && docker build -t opendata-publication -f Dockerfile.nginx .
-docker run -d -v opendata-cache:/app/data -v opendata-publication:/srv/publication opendata-extraction
-docker run -d -p 8081:80 -v opendata-publication:/srv/publication:ro opendata-publication
+.venv/bin/python -m src revue rapport                          # docs/revue/rapport.md + CSV
+.venv/bin/python -m src revue lister <type>                    # cas d'un type et leurs candidats
+.venv/bin/python -m src revue decider <cle> --choix <n|aucun> --par <nom> [--motif …]
+.venv/bin/python -m src revue fusionner <absorbee> <absorbante> --type <type> --par <nom> --motif …  # même objet
 ```
 
-Dans big-brother, le `docker-compose.yml` racine assemble ces deux services et l'app web.
+Une décision est tracée (qui, quand, motif) et rejouée à chaque chargement. Un cas dont la source
+s'est corrigée devient `CADUC`. Le RNE n'est jamais relié à une personne sans décision humaine, et
+la date de naissance n'est pas utilisée pour rapprocher.
 
-## Périmètre
+## Tests
 
-**Tous les scrutins publics** sont importés, avec leur nature (`scrutins.nature`) :
+```bash
+.venv/bin/python -m unittest discover tests      # tout ; les tests Postgres sont ignorés sans base
+.venv/bin/python -m tests.test_docs --corriger   # recale les numéros de ligne cités par les docs
+```
 
-- `ensemble` / `article_unique` : vote final sur un texte de loi, un par lecture (première lecture,
-  CMP, lecture définitive…) ; vue `scrutins_finaux`, seule utilisée par le classement des lois ;
-- `article`, `amendement` (et sous-amendement), `motion` (rejet préalable, renvoi en commission…) ;
-- `autre` : première partie d'un budget, résolution, déclaration du gouvernement…
+Les tests Postgres utilisent une base jetable : `DATABASE_URL_ESSAIS` (par défaut
+`civictrace_essais` sur le Postgres du compose). Son nom doit finir par `_essais`.
 
-Un scrutin est rattaché à son texte (`loi_id`) quand son dossier législatif est retrouvé, sinon
-`loi_id` est vide. Législatures : 14e (2012-2017), 15e (2017-2022), 16e (2022-2024) et 17e (depuis 2024).
-Le contenu des amendements (dispositif, exposé sommaire) n'est pas importé : seul l'intitulé du scrutin
-l'est (« l'amendement n° 15 de M. X à l'article premier… »).
+## Chaîne historique (SQLite, scrutins AN)
 
-**La 14e est partielle** : l'AN a figé son archive au 24 novembre 2016 (scrutin n°1354) ; les votes
-de décembre 2016 à juin 2017 n'existent pas en open data. Son archive est un export unique au lieu
-d'un fichier par objet, avec quelques clés au singulier (`pour`, `contre`, `abstention`) : l'adaptateur
-AN lit les deux formats (`adaptateurs/an/commun.py`, `objets()`). Elle ne publie ni la délégation
-(`par_delegation` vaut toujours 0) ni le siège au moment du vote, et ses groupes n'ont pas de couleur
-officielle : celle du groupe de la même famille dans une législature suivante est reprise
-(`COULEURS_EMPRUNTEES`). Les législatures antérieures (13e et avant) ne sont pas en open data.
+En service tant que la bascule n'est pas faite : l'ancienne app et l'ancienne API lisent des bases
+SQLite par législature (14e à 17e, scrutins de l'AN seulement), publiées par le service
+`extraction` du `docker-compose.yml` et chargées dans les schémas Postgres `lNN`.
 
-## Tables
+```bash
+python3 -m src importer [--legislatures 17] [--forcer]   # → data/on_verra.db
+python3 -m src mettre-a-jour                             # re-télécharge, publie si nouveau scrutin
+python3 -m src publier [--forcer] [--legislatures 17]    # index.json + <leg>/manifest.json, bases, correctifs
+python3 -m src charger                                   # publication → Postgres (schémas lNN)
+python3 -m src lois | scrutin | depute | indicateurs | 49-3 | censure   # consultation en ligne de commande
+```
 
-| table | contenu |
-|---|---|
-| `lois` | un dossier législatif (ou, à défaut, un titre de texte), parcours, niveau, saillance |
-| `scrutins` | tous les scrutins publics : nature, date, lecture, résultat, décomptes, texte visé |
-| vue `scrutins_finaux` | votes finaux sur un texte de loi (`nature` = ensemble ou article unique) |
-| `votes` | position de chaque député, son groupe au moment du vote, vote par délégation |
-| `deputes`, `mandats`, `groupes`, `appartenances` | référentiel des députés, sièges, couleurs et groupes par période |
-| `positions_groupes` | ligne de chaque groupe sur chaque scrutin, décomptes du groupe |
-| `indicateurs_deputes` | participation, délégations, dissidences par député et législature (calculés à la compilation) |
-| `engagements_49_3` | recours au 49.3 : texte, étape, date, issue |
-| `motions_censure`, `votes_censure` | motions (49.2 et 49.3), texte visé, votes pour |
-| `mises_au_point` | rectifications déclarées après coup (n'altèrent pas le résultat) |
-| vue `sans_vote` | députés en fonction ce jour-là mais absents de la liste des votants |
-| vue `votes_detail` | votes avec noms, groupes et titre de la loi |
-
-## Limites des données
-
-- **La présence n'est pas publiée.** « Sans vote » = absent *ou* présent sans voter.
-- `par_delegation = 1` : vote par procuration, le député n'était pas en séance. Non publié en 14e :
-  le taux de délégation de cette législature n'a pas de sens.
-- Les votes à main levée ne sont pas nominatifs et n'apparaissent pas.
-- Le rattachement scrutin → loi passe par les références des dossiers, puis par le titre ;
-  42 lois sur 596 restent rattachées à leur seul titre (id `titre:<législature>:…`).
-- 4 scrutins ont des listes nominatives incomplètes à la source (48 votes manquants au total,
-  dont 46 sur le scrutin VTANR5L15V2816).
+Code : `src/etl/`, `src/schema/`, `src/adaptateurs/an/`, `src/transformations/`,
+`src/partition.py`, `src/publication.py`. Elle disparaîtra avec les législatures 14 à 16 dans le
+modèle canonique (cf. [TODO.md](TODO.md)).
