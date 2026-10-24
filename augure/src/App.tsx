@@ -1,3 +1,7 @@
+// Racine de l'app : polices, thème, bus de commandes (EXPO_PUBLIC_SOURCE), navigateurs.
+// Une pile (`Pages` de navigation.ts) dont la première page porte les 5 onglets ; chaque fiche
+// s'empile au-dessus. Onglets en bas en portrait, en en-tête en paysage et sur grand écran.
+
 import { IBMPlexMono_400Regular, IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono';
 import {
   IBMPlexSansCondensed_400Regular,
@@ -5,40 +9,60 @@ import {
   IBMPlexSansCondensed_700Bold,
 } from '@expo-google-fonts/ibm-plex-sans-condensed';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DarkTheme, NavigationContainer, type Theme } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer, type LinkingOptions, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useState, type ComponentType } from 'react';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { createContainer } from './di/container';
 import { liens, type Onglets, type Pages } from './navigation';
-import { Label, T } from './ui/components/base';
-import { Chargement, Erreur, Navigation, NOM_APP, type Section } from './ui/components/Ecran';
+import { LIBELLES_PAGES, ONGLETS, type Page } from './ui/ariane';
+import { Navigation, NOM_APP } from './ui/components/Ecran';
 import { FiletErreurs } from './ui/components/FiletErreurs';
-import { Assemblee } from './ui/ecrans/Assemblee';
-import { Depute } from './ui/ecrans/Depute';
-import { Champions } from './ui/ecrans/Champions';
-import { Groupe } from './ui/ecrans/Groupe';
+import { Accueil } from './ui/ecrans/Accueil';
+import { Amendement } from './ui/ecrans/Amendement';
+import { Article } from './ui/ecrans/Article';
+import { Discussions } from './ui/ecrans/Discussions';
+import { Dossier } from './ui/ecrans/Dossier';
+import { Dossiers } from './ui/ecrans/Dossiers';
+import { Etape } from './ui/ecrans/Etape';
+import { Institution } from './ui/ecrans/Institution';
+import { Institutions } from './ui/ecrans/Institutions';
+import { Personne } from './ui/ecrans/Personne';
+import { Personnes } from './ui/ecrans/Personnes';
+import { PourquoiVote } from './ui/ecrans/PourquoiVote';
 import { Recherche } from './ui/ecrans/Recherche';
+import { Representant } from './ui/ecrans/Representant';
 import { Scrutin } from './ui/ecrans/Scrutin';
-import { Scrutins } from './ui/ecrans/Scrutins';
-import { CoreProvider, useCore } from './ui/hooks/core';
+import { ArianeProvider, useTitres } from './ui/hooks/ariane';
+import { CoreProvider } from './ui/hooks/core';
 import { useLarge } from './ui/hooks/miseEnPage';
 import { ThemeProvider, usePalette } from './ui/theme/ThemeProvider';
-import { space } from './ui/theme/tokens';
-
 
 const Pile = createNativeStackNavigator<Pages>();
 const Tabs = createBottomTabNavigator<Onglets>();
 
-const SECTIONS: Record<keyof Onglets, Section> = {
-  Assemblee: 'assemblee',
-  Scrutins: 'scrutins',
-  Champions: 'champions',
-  Recherche: 'recherche',
+/** Fiches empilées au-dessus des onglets, dans l'ordre de navigation.ts. */
+const FICHES: Record<Page, ComponentType> = {
+  Dossier,
+  Etape,
+  Discussions,
+  Article,
+  Amendement,
+  Scrutin,
+  PourquoiVote,
+  Personne,
+  Institution,
+  Representant,
+};
+
+/** Un lien profond vers une fiche garde les onglets en dessous : le retour y mène. */
+const liensAvecOnglets: LinkingOptions<Pages> = {
+  ...liens,
+  config: { ...liens.config!, initialRouteName: 'Onglets', screens: liens.config!.screens },
 };
 
 export default function App() {
@@ -50,7 +74,8 @@ export default function App() {
 }
 
 function Application() {
-  const [bus] = useState(createContainer);
+  // Configuration invalide (EXPO_PUBLIC_SOURCE, adresse de l'API) : levée ici, montrée par le filet.
+  const [{ bus, source }] = useState(() => createContainer());
   // Polices introuvables (réseau, vieux navigateur) : l'app s'affiche avec celles du système.
   const [polices, erreurPolices] = useFonts({
     IBMPlexSansCondensed_400Regular,
@@ -64,7 +89,9 @@ function Application() {
     <SafeAreaProvider>
       <ThemeProvider>
         <StatusBar style="light" />
-        <CoreProvider bus={bus}>{polices || erreurPolices ? <Demarrage /> : <Fond />}</CoreProvider>
+        <CoreProvider bus={bus} source={source}>
+          <ArianeProvider>{polices || erreurPolices ? <Navigateurs /> : <Fond />}</ArianeProvider>
+        </CoreProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -74,33 +101,28 @@ function Fond() {
   return <View style={{ flex: 1, backgroundColor: usePalette().surface }} />;
 }
 
-/** Tant que la base n'est pas ouverte : écran d'attente ou d'erreur. Ensuite : l'app. */
-function Demarrage() {
+function Navigateurs() {
   const p = usePalette();
-  const { demarrage, synchroniser } = useCore();
-
-  if (demarrage.statut !== 'pret') {
-    return (
-      <View style={[styles.demarrage, { backgroundColor: p.surface }]}>
-        <T variant="title">{NOM_APP}</T>
-        <Label>Qui vote quoi, scrutin par scrutin</Label>
-        {demarrage.statut === 'chargement' ? (
-          <Chargement libelle="OUVERTURE DES DONNÉES DE L'ASSEMBLÉE" />
-        ) : (
-          <Erreur message={demarrage.message} onReessayer={synchroniser} />
-        )}
-      </View>
-    );
-  }
-
+  const titres = useTitres();
   const theme: Theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: p.surface, card: p.surfaceRaised } };
   return (
-    <NavigationContainer theme={theme} linking={liens} documentTitle={{ formatter: () => NOM_APP }}>
-      <Pile.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer
+      theme={theme}
+      linking={liensAvecOnglets}
+      documentTitle={{
+        // Titre de la fenêtre web : celui que l'écran a donné, sinon le nom de la page ou de l'onglet.
+        formatter: (_options, route) => {
+          if (!route) return NOM_APP;
+          const libelle = titres[route.key] ?? LIBELLES_PAGES[route.name as Page] ?? ONGLETS.find((o) => o.cle === route.name)?.libelle;
+          return libelle ? `${libelle} · ${NOM_APP}` : NOM_APP;
+        },
+      }}
+    >
+      <Pile.Navigator initialRouteName="Onglets" screenOptions={{ headerShown: false }}>
         <Pile.Screen name="Onglets" component={OngletsPrincipaux} />
-        <Pile.Screen name="Groupe" component={Groupe} />
-        <Pile.Screen name="Depute" component={Depute} />
-        <Pile.Screen name="Scrutin" component={Scrutin} />
+        {(Object.keys(FICHES) as Page[]).map((nom) => (
+          <Pile.Screen key={nom} name={nom} component={FICHES[nom]} />
+        ))}
       </Pile.Navigator>
     </NavigationContainer>
   );
@@ -113,23 +135,14 @@ function OngletsPrincipaux() {
       // Mise en page large : la navigation devient un en-tête.
       screenOptions={{ headerShown: false, tabBarPosition: large ? 'top' : 'bottom' }}
       tabBar={({ state, navigation }) => (
-        <Navigation
-          active={SECTIONS[state.routes[state.index].name as keyof Onglets]}
-          onNavigate={(s) => {
-            const onglet = (Object.keys(SECTIONS) as (keyof Onglets)[]).find((o) => SECTIONS[o] === s)!;
-            navigation.navigate(onglet);
-          }}
-        />
+        <Navigation active={state.routes[state.index].name as keyof Onglets} onNavigate={(onglet) => navigation.navigate(onglet)} />
       )}
     >
-      <Tabs.Screen name="Assemblee" component={Assemblee} />
-      <Tabs.Screen name="Scrutins" component={Scrutins} />
-      <Tabs.Screen name="Champions" component={Champions} />
+      <Tabs.Screen name="Accueil" component={Accueil} />
+      <Tabs.Screen name="Dossiers" component={Dossiers} />
+      <Tabs.Screen name="Personnes" component={Personnes} />
+      <Tabs.Screen name="Institutions" component={Institutions} />
       <Tabs.Screen name="Recherche" component={Recherche} />
     </Tabs.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  demarrage: { flex: 1, justifyContent: 'center', padding: space[4], gap: space[2] },
-});

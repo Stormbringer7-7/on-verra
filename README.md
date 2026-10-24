@@ -5,7 +5,7 @@ Stack de services autour des votes de l'Assemblée nationale.
 | dossier | rôle |
 |---|---|
 | [`opendata/`](opendata) | import de l'open data AN (tous les scrutins) → une base SQLite par législature, publication versionnée (index, manifestes, correctifs) |
-| [`augure/`](augure) | app « Nos administrés ont du talent » : Expo (iOS, Android, web) qui lit les bases publiées |
+| [`augure/`](augure) | app « Nos politiques ont du talent » : Expo (iOS, Android, web) qui lit les bases publiées |
 
 Pas d'API : opendata publie des fichiers statiques et les apps les téléchargent.
 

@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/serveur.ts",
+    "dev:memoire": "SOURCE_DONNEES=memoire tsx watch src/serveur.ts",
     "build": "esbuild src/serveur.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/serveur.mjs --external:pg-native --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "start": "node dist/serveur.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:pg": "DATABASE_URL_LECTURE=${DATABASE_URL_LECTURE:-postgres://big-brother:big-brother@127.0.0.1:5433/civictrace} vitest run tests/contrat/postgres.test.ts tests/pg"
   },
   "dependencies": {
     "pg": "^8.23.1"

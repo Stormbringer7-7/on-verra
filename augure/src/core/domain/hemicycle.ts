@@ -1,14 +1,19 @@
-import type { MembreAssemblee } from './model';
+/** Ce qu'il faut savoir d'un siège pour l'ordonner : son groupe, son numéro (s'il est connu), un nom. */
+export interface Siege {
+  groupe: string | null;
+  place: number | null;
+  nom: string;
+}
 
 /**
- * Ordonne les membres de la gauche vers la droite de l'hémicycle.
+ * Ordonne les sièges de la gauche vers la droite de l'hémicycle.
  *
  * Les groupes ne sont pas codés en dur (ils changent d'une législature et d'une date à l'autre) :
  * leur rang vient du siège moyen de leurs membres ce jour-là. À l'Assemblée, les numéros
  * de siège croissent de la droite vers la gauche. Un groupe sans aucun siège connu va au centre.
  * Dans un groupe, même règle siège par siège.
  */
-export function ordonnerDeGaucheADroite(membres: MembreAssemblee[]): MembreAssemblee[] {
+export function ordonnerDeGaucheADroite<T extends Siege>(membres: T[]): T[] {
   const sommes = new Map<string, { total: number; connus: number }>();
   for (const m of membres) {
     const cle = m.groupe ?? '';

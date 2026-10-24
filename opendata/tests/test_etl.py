@@ -85,5 +85,34 @@ class Schema(unittest.TestCase):
             self.assertEqual(base.read_bytes(), b"ancienne")
 
 
+class Relecture(unittest.TestCase):
+    def test_relire_seulement_les_etapes_nommees(self):
+        import tempfile
+        from pathlib import Path
+        from src.adaptateurs.stockage import EntrepotMemoire
+        from src.chargement import construire
+        from src.etl import Etape
+        vu = {}
+        a = Etape("x.socle", lambda ctx: vu.__setitem__("x.socle", ctx.forcer), sources=lambda p: [])
+        b = Etape("x.textes", lambda ctx: vu.__setitem__("x.textes", ctx.forcer), apres=("x.socle",), sources=lambda p: [])
+        with tempfile.TemporaryDirectory() as d:
+            construire(EntrepotMemoire(), Path(d), [a, b], relire={"x.textes"})
+            self.assertEqual(vu, {"x.socle": False, "x.textes": True})
+            construire(EntrepotMemoire(), Path(d), [a, b], relire=True)
+            self.assertEqual(vu, {"x.socle": True, "x.textes": True})
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class LigneDeCommande(unittest.TestCase):
+    def test_aide_de_chaque_commande(self):
+        """Toutes les commandes se construisent (une aide mal formée casse toute la CLI)."""
+        import subprocess
+        import sys
+        racine = Path(__file__).resolve().parent.parent
+        for commande in ([], ["canon"], ["controles"], ["revue"], ["inventaire"]):
+            r = subprocess.run([sys.executable, "-m", "src", *commande, "--help"], cwd=racine,
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr[-500:])

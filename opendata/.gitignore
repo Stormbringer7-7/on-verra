@@ -11,3 +11,9 @@ publication/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Environnement local (psycopg pour les tests Postgres)
+.venv/
+
+# Rapport de revue des rapprochements : généré depuis la base (python -m src revue rapport)
+docs/revue/

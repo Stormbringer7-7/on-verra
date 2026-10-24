@@ -24,7 +24,8 @@ export interface CommandDefinition<TType extends string, TInput, TOutput> {
 }
 
 export type InputOf<D> = D extends CommandDefinition<string, infer I, unknown> ? I : never;
-export type OutputOf<D> = D extends CommandDefinition<string, unknown, infer O> ? O : never;
+// L'entrée est en position contravariante : `any` pour que toute définition corresponde.
+export type OutputOf<D> = D extends CommandDefinition<string, any, infer O> ? O : never;
 
 function define(kind: CommandKind) {
   return <TInput, TOutput>() =>

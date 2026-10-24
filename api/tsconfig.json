@@ -9,7 +9,11 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "types": ["node"],
-    "paths": { "@contrat/*": ["./../augure/src/core/*"] }
+    "paths": {
+      "@contrat/*": ["./../augure/src/core/*"],
+      "@fixtures": ["./../augure/src/infra/fixtures/index.ts"],
+      "@fixtures/*": ["./../augure/src/infra/fixtures/*"]
+    }
   },
   "include": ["src", "tests"]
 }
