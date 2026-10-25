@@ -56,5 +56,13 @@ describe("bus de l'app : commandes exécutées par l'API", () => {
 
   it('refuse une adresse en HTTP hors de la machine', () => {
     expect(() => creerApiBus('http://exemple.fr/api', silencieux)).toThrow('HTTPS');
+    expect(() => creerApiBus('http://192.168.1.10.exemple.fr/api', silencieux)).toThrow('HTTPS');
+    expect(() => creerApiBus('http://172.32.0.1:8082', silencieux)).toThrow('HTTPS');
+  });
+
+  it('accepte une adresse en HTTP sur le réseau local (serveur de test)', () => {
+    for (const url of ['http://192.168.1.139:8082', 'http://10.0.2.2:8082', 'http://172.16.0.5:8082', 'http://localhost:8082']) {
+      expect(() => creerApiBus(url, silencieux)).not.toThrow();
+    }
   });
 });

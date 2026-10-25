@@ -20,8 +20,9 @@ export function creerApiBus(
   fetcher: typeof fetch = (input, init) => fetch(input, init),
 ): CommandBus {
   const racine = url.trim().replace(/\/+$/, '');
-  // Une adresse relative (« /api ») vise le même hôte que la version web.
-  const locale = racine.startsWith('/') || /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?(\/|$)/.test(racine);
+  // Une adresse relative (« /api ») vise le même hôte que la version web. En http : la machine,
+  // l'émulateur, ou un poste du réseau local (adresses privées RFC 1918, serveur de test).
+  const locale = racine.startsWith('/') || /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?(\/|$)/.test(racine);
   if (!racine.startsWith('https://') && !locale) throw new Error("L'adresse de l'API doit être en HTTPS");
 
   const appeler = async (type: string, input: unknown, signal?: AbortSignal): Promise<unknown> => {
