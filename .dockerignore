@@ -1,0 +1,8 @@
+# Contexte des images construites depuis la racine (api) : seulement l'API, le contrat de l'app et ses
+# fixtures (adaptateur mémoire, SOURCE_DONNEES=memoire).
+*
+!api
+!augure/src/core
+!augure/src/infra/fixtures
+api/node_modules
+api/dist

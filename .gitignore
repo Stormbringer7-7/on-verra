@@ -1,4 +1,25 @@
-data/
+# Système et éditeurs
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+
+# Python
 __pycache__/
 *.pyc
-publication/
+
+# Node
+node_modules/
+
+# Claude Code : verrous de session et réglages personnels (ne concernent que ce poste)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Extension VS Code « Java to Azure Migration » (GitHub Copilot app modernization) : hooks locaux
+.github/modernize/
+
+# Journaux
+*.log
+
+# Configuration locale du déploiement (domaine) : voir .env.example
+.env

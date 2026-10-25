@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Thème de la fenêtre seulement : l'interface est entièrement en Compose (Material 3). -->
-    <style name="Theme.OnVerra" parent="android:Theme.Material.Light.NoActionBar" />
-</resources>

@@ -1,0 +1,36 @@
+# Entrée publique de big-brother : HTTPS automatique (Let's Encrypt), un seul domaine.
+#   https://{$DOMAINE}/            app web « Nos politiques ont du talent » (service web)
+#   https://{$DOMAINE}/api/…       API (service api) : commandes de l'app
+#
+# Variable (fichier .env à la racine, voir .env.example) :
+#   DOMAINE   nom de domaine public ; « localhost » pour tester en local (certificat interne de Caddy)
+# Let's Encrypt ne demande pas d'e-mail : Caddy obtient et renouvelle les certificats seul.
+
+{$DOMAINE} {
+	# Compression des réponses textuelles (HTML, JS, JSON).
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		-Server
+	}
+
+	# API : les commandes de l'app (POST /api/dossiers/lister…). /api est retiré avant de transmettre.
+	handle_path /api/* {
+		reverse_proxy api:3000
+	}
+
+	# Tout le reste : l'app web (application monopage, servie par son nginx).
+	handle {
+		reverse_proxy web:80
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

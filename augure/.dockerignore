@@ -1,0 +1,24 @@
+# Contexte de l'image « web » : seulement ce qu'il faut pour `npx expo export --platform web`.
+node_modules/
+.expo/
+dist/
+web-build/
+ios/
+android/
+tests/
+scripts/
+coverage/
+vitest.config.mts
+eslint.config.js
+README.md
+AGENTS.md
+.claude/
+.vscode/
+.idea/
+.git
+.gitignore
+.dockerignore
+*.log
+.DS_Store
+.env*
+!.env.example

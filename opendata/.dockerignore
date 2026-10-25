@@ -1,0 +1,10 @@
+# Les images n'embarquent que src/ et docker/ : les données viennent des volumes.
+data/
+tests/
+**/__pycache__/
+*.pyc
+.git
+.gitignore
+.dockerignore
+README.md
+.DS_Store

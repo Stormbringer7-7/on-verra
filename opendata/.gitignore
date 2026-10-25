@@ -1,0 +1,19 @@
+# Données générées, jamais versionnées (python -m src canon) :
+#   data/brut/      open data téléchargé (cache, ≈ 2,3 Go)
+#   data/rapports/  rapports de contrôle
+#   data/dumps/     dumps de la base pour le déploiement
+data/
+
+# Python
+__pycache__/
+*.pyc
+.DS_Store
+
+# Environnement local (psycopg pour les tests Postgres)
+.venv/
+
+# Rapport de revue des rapprochements : généré depuis la base (python -m src revue rapport)
+docs/revue/
+
+# Ancienne publication SQLite (retirée le 25/10/2026) : dossier local à supprimer, jamais versionné.
+publication/
