@@ -11,7 +11,7 @@ import { fixtures } from '@fixtures';
 
 import { composer, sourceDonnees, type Composition } from '../../src/infra/composition';
 import { memoire } from '../../src/infra/memoire';
-import { TAILLE_MAX_CORPS, coreRechargeable, creerServeur } from '../../src/serveur';
+import { TAILLE_MAX_CORPS, coreRechargeable, creerServeur, erreurBase } from '../../src/serveur';
 import { coreDeTest, silencieux } from '../support';
 
 describe('serveur HTTP (mémoire)', () => {
@@ -55,7 +55,7 @@ describe('serveur HTTP (mémoire)', () => {
   it('identifiant inconnu : 404 et { erreur }', async () => {
     const reponse = await poster('dossier/consulter', { id: 'nulle-part' });
     expect(reponse.status).toBe(404);
-    expect(await reponse.json()).toEqual({ erreur: 'Dossier introuvable' });
+    expect(await reponse.json()).toEqual({ code: 'requete', erreur: 'Dossier introuvable' });
   });
 
   it('route inconnue : 404 ; entrée mal formée : 400', async () => {
@@ -99,7 +99,18 @@ describe('serveur HTTP (mémoire)', () => {
     const reponse = await fetch(`${racine}/sante`);
     sante = true;
     expect(reponse.status).toBe(500);
-    expect(await reponse.json()).toEqual({ erreur: 'Erreur interne' });
+    expect(await reponse.json()).toMatchObject({ code: 'erreur_interne' });
+  });
+
+  it('base pas prête ou lente : 503 avec la raison, à réessayer', () => {
+    const table = erreurBase({ code: '42P01', message: 'relation "lecture.couleur_groupe" does not exist' })!;
+    expect(table.statut).toBe(503);
+    expect(table.corps).toMatchObject({ code: 'donnees_en_preparation', detail: 'Table pas encore construite : lecture.couleur_groupe' });
+    expect(erreurBase({ code: '57014', message: 'canceling statement due to statement timeout' })).toMatchObject({ statut: 503, corps: { code: 'base_lente' } });
+    expect(erreurBase({ code: 'ECONNREFUSED', message: 'connect ECONNREFUSED' })).toMatchObject({ statut: 503, corps: { code: 'base_injoignable' } });
+    // Une table manquante hors du schéma de lecture est un défaut de l'API, pas une mise à jour.
+    expect(erreurBase({ code: '42P01', message: 'relation "canon.dossier" does not exist' })).toBeNull();
+    expect(erreurBase(new Error('autre'))).toBeNull();
   });
 
   it('OPTIONS : 204 (CORS)', async () => {

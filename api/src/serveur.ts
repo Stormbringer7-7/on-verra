@@ -69,6 +69,51 @@ const statutDe = (e: unknown): number => {
   return typeof statut === 'number' && statut >= 400 && statut < 600 ? statut : 500;
 };
 
+/** Pourquoi une réponse manque : `code` stable pour l'app, `erreur` à afficher, `detail` technique. */
+export interface CorpsErreur {
+  erreur: string;
+  code: 'donnees_en_preparation' | 'base_lente' | 'base_injoignable' | 'erreur_interne' | 'requete';
+  detail?: string;
+}
+
+/**
+ * Erreur de la base traduite pour l'utilisateur (codes SQLSTATE de Postgres). Les cas connus sont
+ * passagers (503, à réessayer) : une projection pas encore construite après une mise à jour
+ * (42P01 sur `lecture.*`), une requête trop longue pendant un chargement (57014), une base arrêtée
+ * ou injoignable (08xxx, 57P0x, ECONNREFUSED). Le reste est un défaut de l'API (500).
+ */
+export function erreurBase(e: unknown): { statut: number; corps: CorpsErreur } | null {
+  const { code, message } = (e ?? {}) as { code?: unknown; message?: unknown };
+  const texte = typeof message === 'string' ? message : '';
+  if (code === '42P01') {
+    const table = /relation "([^"]+)"/.exec(texte)?.[1] ?? null;
+    if (table?.startsWith('lecture.'))
+      return {
+        statut: 503,
+        corps: {
+          code: 'donnees_en_preparation',
+          erreur: 'Les données de cet écran sont en cours de préparation : la base vient d’être mise à jour et ses tableaux de lecture se reconstruisent. Réessayez dans quelques minutes.',
+          detail: `Table pas encore construite : ${table}`,
+        },
+      };
+  }
+  if (code === '57014')
+    return {
+      statut: 503,
+      corps: {
+        code: 'base_lente',
+        erreur: 'La base de données a mis trop de temps à répondre, souvent parce qu’une mise à jour des données est en cours. Réessayez dans quelques minutes.',
+        detail: texte,
+      },
+    };
+  if ((typeof code === 'string' && (code.startsWith('08') || code.startsWith('57P'))) || code === 'ECONNREFUSED' || code === 'ENOTFOUND')
+    return {
+      statut: 503,
+      corps: { code: 'base_injoignable', erreur: 'La base de données est injoignable pour le moment. Réessayez dans quelques minutes.', detail: texte },
+    };
+  return null;
+}
+
 function lireCorps(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (Number(req.headers['content-length'] ?? 0) > TAILLE_MAX_CORPS) return reject(new ErreurHttp(413, 'Requête trop volumineuse'));
@@ -133,10 +178,16 @@ export function creerServeur(source: SourceDuCore, logger: Logger): Server {
       // La nature vient du contrat, jamais du client : SignalerErreur est une command.
       repondre(res, 200, await bus.execute({ type: definition.type, kind: definition.kind, input }));
     } catch (e) {
-      const statut = e instanceof ErreurHttp ? e.statut : statutDe(e);
+      const base = e instanceof ErreurHttp ? null : erreurBase(e);
+      const statut = base?.statut ?? (e instanceof ErreurHttp ? e.statut : statutDe(e));
       if (statut >= 500) logger.warn(`${route} a échoué`, e);
-      const message = statut >= 500 ? 'Erreur interne' : e instanceof Error ? e.message : String(e);
-      if (!res.headersSent) repondre(res, statut, { erreur: message }, statut === 405 ? { Allow: route === 'sante' ? 'GET' : 'POST' } : {});
+      const corps: CorpsErreur =
+        base?.corps ??
+        (statut >= 500
+          ? { code: 'erreur_interne', erreur: 'Erreur interne de l’API : un défaut de notre côté, noté dans le journal du serveur.' }
+          : { code: 'requete', erreur: e instanceof Error ? e.message : String(e) });
+      const entetes: Record<string, string> = statut === 405 ? { Allow: route === 'sante' ? 'GET' : 'POST' } : statut === 503 ? { 'Retry-After': '120' } : {};
+      if (!res.headersSent) repondre(res, statut, corps, entetes);
       if (statut === 413) req.resume();
     }
   });

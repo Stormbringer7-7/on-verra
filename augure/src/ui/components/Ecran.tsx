@@ -306,10 +306,15 @@ export function Chargement({ libelle = 'Chargement' }: { libelle?: string }) {
   );
 }
 
-export function Erreur({ message, onReessayer }: { message: string; onReessayer?: () => void }) {
+export function Erreur({ message, detail, onReessayer }: { message: string; detail?: string | null; onReessayer?: () => void }) {
   return (
     <View style={[styles.etat, { alignItems: 'stretch' }]} accessibilityRole="alert">
       <T ton="signal">{message}</T>
+      {detail ? (
+        <T variant="small" ton="inkMuted">
+          {detail}
+        </T>
+      ) : null}
       {onReessayer && <BoutonSecondaire onPress={onReessayer}>Réessayer</BoutonSecondaire>}
     </View>
   );

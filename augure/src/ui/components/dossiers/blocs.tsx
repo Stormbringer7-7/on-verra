@@ -24,7 +24,7 @@ export function Requete<O>({
   resultat: Resultat<O> & { recharger(): void };
   children: (donnees: O) => ReactNode;
 }) {
-  if (resultat.statut === 'erreur') return <Erreur message={resultat.message} onReessayer={resultat.recharger} />;
+  if (resultat.statut === 'erreur') return <Erreur message={resultat.message} detail={resultat.detail} onReessayer={resultat.recharger} />;
   if (resultat.donnees === undefined) return <Chargement />;
   return <>{children(resultat.donnees)}</>;
 }
