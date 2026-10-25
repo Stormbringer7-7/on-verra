@@ -58,6 +58,11 @@ La version est dans [version.json](version.json) (x.X.D) : iOS reçoit `x.X.D`, 
 d'abord par `apply version`. L'`.aab` est signé avec la clé de debug tant qu'aucune clé de
 publication n'est configurée ; l'`.xcarchive` est signée par l'équipe `APPLE_TEAM_ID`.
 
+`--env=maquette` ([.env.maquette](.env.maquette)) construit l'app sur les fixtures, sans réseau, sous
+un identifiant distinct (`fr.nospolitiques.augure.maquette`). Pour une API de test en `http://`
+(poste sur le réseau local, `.env.<env>` non versionné), `app.config.js` autorise le trafic non
+chiffré dans l'APK ; jamais quand l'API est en `https://`.
+
 Icônes et splash : `assets/logo.svg` (logo au repos), puis `scripts/icones.sh`. Le splash natif
 montre le logo au repos ; `ui/components/Ouverture.tsx` prend le relais et ouvre l'œil (sur le
 web, `public/index.html` montre le même logo pendant le chargement).

@@ -23,3 +23,7 @@ node_modules/
 
 # Configuration locale du déploiement (domaine) : voir .env.example
 .env
+
+# Réglages d'un poste de test (ports, IP locale) : propres à la machine
+docker-compose.override.yml
+augure/.env.pc
