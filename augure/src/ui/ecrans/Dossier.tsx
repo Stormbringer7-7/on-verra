@@ -10,9 +10,10 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ConsulterDossier, type ActeurDossier, type FicheDossier, type SortAmendement } from '@/core';
 import { useAller, type Pages } from '../../navigation';
-import { Label, Pastille, Puce, T } from '../components/base';
+import { Action, Label, Pastille, Puce, T } from '../components/base';
 import { BarreParcours } from '../components/commun/BarreParcours';
 import { Signaler } from '../components/commun/Signaler';
+import { SuivreDossier } from '../components/commun/Suivre';
 import { Source } from '../components/commun/Source';
 import { aSynthese, aucuneSynthese, PAS_DE_SYNTHESE } from '../components/commun/statuts';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
@@ -125,6 +126,7 @@ function Entete({ fiche: { entete: e } }: { fiche: FicheDossier }) {
         )}
       </View>
       <TitreEcran>{titre}</TitreEcran>
+      <SuivreDossier id={e.id} titre={e.titre} />
       <T ton="inkMuted">
         {debut ? `${debut} · par ` : 'Par '}
         <T
@@ -141,6 +143,7 @@ function Entete({ fiche: { entete: e } }: { fiche: FicheDossier }) {
         <Pastille couleur={e.etat === 'en_cours' ? p.signal : p.inkMuted} taille={8} />
         <Label couleur={e.etat === 'en_cours' ? p.signal : p.inkMuted}>{etatDossier(e.etat)}</Label>
       </View>
+      <Action onPress={() => aller.faits('dossier', e.id)}>Tous les faits de ce dossier →</Action>
     </View>
   );
 }

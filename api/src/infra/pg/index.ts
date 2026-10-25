@@ -5,16 +5,20 @@
 import type { Depots, SqlDatabase } from '../../ports';
 import { PgDiscussions } from './discussions';
 import { PgDossiers } from './dossiers';
+import { PgFaits } from './faits';
 import { PgInstitutions } from './institutions';
 import { PgPersonnes } from './personnes';
 import { PgRecherche } from './recherche';
 import { PgScrutins } from './scrutins';
 import { PgSignalements } from './signalements';
+import { PgTerritoires } from './territoires';
 import { PgTransparence } from './transparence';
 
 export function depotsPostgres(db: SqlDatabase): Depots {
   return {
     dossiers: new PgDossiers(db),
+    territoires: new PgTerritoires(db),
+    faits: new PgFaits(db),
     discussions: new PgDiscussions(db),
     personnes: new PgPersonnes(db),
     scrutins: new PgScrutins(db),

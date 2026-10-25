@@ -7,14 +7,21 @@ import type {
   AccuseSignalement,
   Annuaire,
   AvancementDesTextes,
+  Carte,
   DemandeAvancement,
+  DemandeFamilles,
+  DemandeCarte,
+  DemandeDepartement,
+  FicheDepartement,
   CibleInterventions,
   Classement,
   CleCase,
   DemandeClassement,
+  DemandeFaits,
   DemandePage,
   DemandeRecherche,
   ExplicationVote,
+  ExplorationFaits,
   FicheAmendement,
   FicheArticle,
   FicheDossier,
@@ -28,9 +35,12 @@ import type {
   ListeDossiers,
   ListeInterventions,
   OngletPersonne,
+  ResultatFamilles,
   ResultatRecherche,
   Signalement,
   SortAmendement,
+  Suivis,
+  DemandeSuivis,
   TypeInstitution,
 } from '../domain/model';
 import { defineCommand, defineQuery } from './bus';
@@ -99,6 +109,33 @@ export const ConsulterInstitution = defineQuery<{ institution: TypeInstitution }
 export const ConsulterRepresentant = defineQuery<{ id: string } & DemandePage, FicheRepresentant>(
   'representant/consulter',
 );
+
+/**
+ * Faits filtrés (Explorer) : filtres → compteurs par type de fait, faits de l'onglet regroupés et
+ * paginés, filtres suivants avec leur nombre, élargissements, comparaison de deux groupes.
+ */
+export const ExplorerFaits = defineQuery<DemandeFaits, ExplorationFaits>('faits/explorer');
+
+/**
+ * Mes suivis : ce qui a bougé depuis une date sur les lois et les élus suivis (gardés sur
+ * l'appareil, jamais côté serveur).
+ */
+export const ConsulterSuivis = defineQuery<DemandeSuivis, Suivis>('suivis/consulter');
+
+/**
+ * Recherche par familles (design v4) : comptes par famille et déclinaison, aperçu ou liste paginée
+ * de chaque déclinaison, numéro officiel exact ou ambigu ; sans requête, on parcourt.
+ */
+export const ChercherParFamilles = defineQuery<DemandeFamilles, ResultatFamilles>('recherche/familles');
+
+/**
+ * Carte des départements : un scrutin (votes des élus de chaque département) ou la présence d'une
+ * chambre (participation des élus actuels sur l'année en cours, comparée à leurs groupes).
+ */
+export const ConsulterCarte = defineQuery<DemandeCarte, Carte>('carte/consulter');
+
+/** Un département : ses élus en fonction, leur participation comparée, et leurs votes sur un scrutin. */
+export const ConsulterDepartement = defineQuery<DemandeDepartement, FicheDepartement>('departement/consulter');
 
 /** Dossiers, personnes, amendements, scrutins et organisations. */
 export const Rechercher = defineQuery<DemandeRecherche, ResultatRecherche>('recherche');

@@ -1,40 +1,64 @@
 // Hémicycle d'un scrutin : un point par parlementaire en mandat, coloré par sa position (pour,
-// contre, abstention, non-votant, absent), groupes de la gauche vers la droite (`rang`).
-// Géométrie de `disposition.ts` (11 rangs, la même que l'ancien `HemicycleZoom`). Le contrat ne
-// donne que les décomptes par groupe : la place d'un point n'est pas le siège réel d'une personne.
+// contre, abstention, non-votant, absent), de la gauche vers la droite (groupe `rang`, puis siège
+// publié), zoomable et cliquable (HemicycleZoom). Un siège touché montre la personne et mène à sa
+// fiche. Sans votes nominatifs (décomptes seuls), un siège met son groupe en avant. La place d'un
+// point suit l'ordre des sièges publiés, pas le plan exact de la salle.
 
-import { memo, useMemo, useState } from 'react';
-import { View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { memo, useMemo } from 'react';
 
-import type { Position, PositionDeGroupe } from '@/core';
+import type { Position, PositionDeGroupe, VoteNominatif } from '@/core';
 import { couleurVote, usePalette } from '../../theme/ThemeProvider';
-import { disposerSieges, RAPPORT, tracesParCouleur } from '../disposition';
-import { siegesScrutin } from './presentation';
+import { HemicycleZoom, type SiegeHemicycle } from '../hemicycle/HemicycleZoom';
+import { partLigne, POSITION, siegesScrutin } from './presentation';
 
-export const Hemicycle = memo(function Hemicycle({ groupes, largeurMax = 560 }: { groupes: PositionDeGroupe[]; largeurMax?: number }) {
+/** Ce que dit le siège d'un vote : position, délégation, mise au point publiée. */
+export function detailVote(v: VoteNominatif): string {
+  return [POSITION[v.position], v.parDelegation ? 'par délégation' : null, v.miseAuPoint].filter(Boolean).join(' · ');
+}
+
+export const Hemicycle = memo(function Hemicycle({
+  groupes,
+  votes = [],
+  onPersonne,
+  largeurMax = 560,
+}: {
+  groupes: PositionDeGroupe[];
+  votes?: VoteNominatif[];
+  onPersonne?: (id: string) => void;
+  largeurMax?: number;
+}) {
   const p = usePalette();
-  const [largeur, setLargeur] = useState(0);
-  const sieges = useMemo(() => siegesScrutin(groupes), [groupes]);
-  const base = Math.min(largeur, largeurMax);
-  const { sieges: points, rayonPoint } = useMemo(() => disposerSieges(sieges.length, Math.max(1, base)), [sieges.length, base]);
-
-  const total = (pos: Position) => sieges.filter((s) => s.position === pos).length;
-  const libelle = `Hémicycle : ${total('pour')} pour, ${total('contre')} contre, ${total('abstention')} abstentions, ${total('non_votant')} non-votants, ${total('absent')} absents`;
-  const traces = useMemo(() => {
+  const { sieges, positions } = useMemo(() => {
     const couleur = (pos: Position) => (pos === 'absent' ? p.line : pos === 'non_votant' ? p.lineStrong : couleurVote(p, pos));
-    return tracesParCouleur(points, sieges.map((s) => couleur(s.position)), rayonPoint);
-  }, [p, points, sieges, rayonPoint]);
+    if (votes.length)
+      return {
+        positions: votes.map((v) => v.position),
+        sieges: votes.map(
+          (v): SiegeHemicycle => ({
+            couleur: couleur(v.position),
+            groupe: v.personne.groupe,
+            personne: { id: v.personne.id, nom: v.personne.nom },
+            detail: detailVote(v),
+          }),
+        ),
+      };
+    const parGroupe = siegesScrutin(groupes);
+    return {
+      positions: parGroupe.map((s) => s.position),
+      sieges: parGroupe.map((s): SiegeHemicycle => ({ couleur: couleur(s.position), groupe: s.groupe, detail: POSITION[s.position] })),
+    };
+  }, [groupes, votes, p]);
 
-  return (
-    <View onLayout={(e) => setLargeur(e.nativeEvent.layout.width)} style={{ width: '100%', alignItems: 'center' }}>
-      {base > 0 && (
-        <Svg width={base} height={base * RAPPORT} role="img" aria-label={libelle} accessibilityLabel={libelle}>
-          {traces.map((t) => (
-            <Path key={t.couleur} d={t.d} fill={t.couleur} />
-          ))}
-        </Svg>
-      )}
-    </View>
-  );
+  const total = (pos: Position) => positions.filter((x) => x === pos).length;
+  const libelle = `Hémicycle : ${total('pour')} pour, ${total('contre')} contre, ${total('abstention')} abstentions, ${total('non_votant')} non-votants, ${total('absent')} absents`;
+  const parId = useMemo(() => new Map(groupes.map((g) => [g.groupe.id, g])), [groupes]);
+  const infoGroupe = (id: string) => {
+    const g = parId.get(id);
+    if (!g) return '';
+    const part = partLigne(g);
+    const ligne = g.ligne ? `${POSITION[g.ligne]} à ${part} %` : 'pas de ligne majoritaire';
+    return `${ligne} · + ${g.decompte.pour} · − ${g.decompte.contre} · Ø ${g.decompte.abstention}${g.nonVotants ? ` · ${g.nonVotants} non-votants` : ''} · ${g.absents} absents sur ${g.membres} membres`;
+  };
+
+  return <HemicycleZoom sieges={sieges} largeurMax={largeurMax} libelle={libelle} infoGroupe={(g) => infoGroupe(g.id)} onPersonne={onPersonne} />;
 });

@@ -278,3 +278,31 @@ class Resultats(unittest.TestCase):
         self.assertIsNone(elements[0].valeurs["sort"])
         (cas,) = [e for e in elements if isinstance(e, CasRevue)]
         self.assertEqual((cas.type, cas.nature), ("resultat_scrutin_illisible", "constat"))
+
+
+class Sieges(unittest.TestCase):
+    """Export « Les Sénateurs », table `sen` : le siège d'un sénateur en fonction, lien `siege`."""
+
+    def sieges(self, ligne):
+        from src.adaptateurs.sources.senat import senateurs
+        (d,) = senateurs.siege(document_ligne(senateurs.EXPORT, "sen", ligne["senmat"], ligne))
+        return d
+
+    def test_senateur_en_fonction(self):
+        d = self.sieges({"senmat": "14038Y", "etasencod": "ACTIF", "sennumsie": "151"})
+        self.assertEqual((d.table, d.parent["nature"], d.parent["de_id"].id_source), ("lien", "siege", "14038Y"))
+        self.assertEqual([l["attributs"] for l in d.lignes], [{"numero": 151}])
+
+    def test_departement_du_mandat(self):
+        from src.adaptateurs.sources.senat import senateurs
+        territoire = lambda code: next(senateurs.territoire(document_ligne(
+            senateurs.EXPORT, "elusen", "53226", {"eluid": "53226", "senmat": "19709B", "dptcod": code})))
+        d = territoire("2A")
+        self.assertEqual((d.table, d.parent["nature"], d.parent["de_id"].id_source), ("lien", "territoire", "53226"))
+        self.assertEqual([(l["vers_id"].type_source, l["vers_id"].id_source) for l in d.lignes], [("departement", "2A")])
+        self.assertEqual([l["vers_id"].type_source for l in territoire("987").lignes], ["collectivite_outre_mer"])
+        self.assertEqual(territoire("998").lignes, [])    # Français établis hors de France
+
+    def test_ancien_ou_sans_numero_retire_le_lien(self):
+        self.assertEqual(self.sieges({"senmat": "14038Y", "etasencod": "ANCIEN", "sennumsie": "151"}).lignes, [])
+        self.assertEqual(self.sieges({"senmat": "14038Y", "etasencod": "ACTIF", "sennumsie": None}).lignes, [])

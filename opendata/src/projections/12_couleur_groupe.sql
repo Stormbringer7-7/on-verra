@@ -3,8 +3,9 @@
 --   famille    : couleur connue et sûre : le même parti a un groupe à l'Assemblée (table ci-dessous :
 --                seulement les cas certains, LR, PS, communistes, écologistes, macronistes, RN,
 --                non-inscrits) ; sa couleur officielle la plus récente est reprise ;
---   [à venir]  gauche-droite : couleur tirée de la position du groupe dans l'hémicycle, quand cette
---                donnée sera chargée (sièges publiés : `numPlace` des scrutins AN, à charger) ;
+--   gauche_droite : sinon, couleur tirée de la position du groupe dans l'hémicycle
+--                (`lecture.position_groupe`, d'après les sièges publiés) sur un dégradé fixe, du rouge
+--                (gauche, #E05A5A) au bleu (droite, #4A7FE0), lisible sur fond sombre ;
 --   arbitraire : sinon, couleur aléatoire seedée : une palette fixe, choisie par l'empreinte md5 de
 --                « chambre:abrégé:nom », donc toujours la même pour le même groupe, groupes à venir
 --                compris. Un groupe actif dans ce cas est signalé par les contrôles
@@ -47,13 +48,23 @@ WITH groupe AS (
     LEFT JOIN lecture.appartenance_groupe ag ON ag.groupe_id = o.entite_id
     WHERE o.type = 'groupe_politique' AND o.chambre = 'AN' AND o.couleur IS NOT NULL
     ORDER BY o.abrege, max(ag.fin) OVER (PARTITION BY o.entite_id) DESC NULLS LAST, o.entite_id
+), degrade AS (
+    -- position 0 (gauche) → #E05A5A, 1 (droite) → #4A7FE0, composante par composante
+    SELECT pg.groupe_id, '#' || upper(string_agg(lpad(to_hex(round(c.gauche + (c.droite - c.gauche) * pg.position)::int), 2, '0'),
+                                                 '' ORDER BY c.rang)) AS couleur
+    FROM lecture.position_groupe pg
+    CROSS JOIN (VALUES (1, 224, 74), (2, 90, 127), (3, 90, 224)) AS c (rang, gauche, droite)
+    WHERE pg.position IS NOT NULL
+    GROUP BY pg.groupe_id
 )
 SELECT g.groupe_id,
-       COALESCE(g.couleur, a.couleur, p.couleur) AS couleur,
-       CASE WHEN g.couleur IS NOT NULL THEN 'officielle' WHEN a.couleur IS NOT NULL THEN 'famille' ELSE 'arbitraire' END AS source
+       COALESCE(g.couleur, a.couleur, d.couleur, p.couleur) AS couleur,
+       CASE WHEN g.couleur IS NOT NULL THEN 'officielle' WHEN a.couleur IS NOT NULL THEN 'famille'
+            WHEN d.couleur IS NOT NULL THEN 'gauche_droite' ELSE 'arbitraire' END AS source
 FROM groupe g
 LEFT JOIN lecture.couleur_groupe_famille f ON f.chambre = g.chambre AND f.abrege = g.abrege
 LEFT JOIN officielle_an a ON a.abrege = f.abrege_an
+LEFT JOIN degrade d ON d.groupe_id = g.groupe_id
 JOIN lecture.couleur_groupe_palette p
   ON p.rang = mod(('x' || substr(md5(concat_ws(':', g.chambre, g.abrege, g.nom)), 1, 8))::bit(32)::bigint, 24);
 CREATE UNIQUE INDEX ON lecture.couleur_groupe (groupe_id);

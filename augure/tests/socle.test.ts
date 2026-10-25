@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { ConsulterAccueil, Rechercher } from '../src/core';
 import { fixtures } from '../src/infra/fixtures';
 import { creerFixturesBus } from '../src/infra/FixturesBus';
-import { cheminAriane, ongletActif, type EtatPile } from '../src/ui/ariane';
+import { cheminAriane, ongletActif, ONGLETS, type EtatPile } from '../src/ui/ariane';
 import { dateLongue, nombre, resultatScrutin, texteSource, titreOfficielDistinct, titreScrutin, valeurIndicateur } from '../src/ui/format';
 import { natureDossier, statutDossier, suiteDossier } from '../src/ui/libelles';
 import { demandeRecherche } from '../src/ui/recherche';
@@ -17,7 +17,7 @@ describe("fil d'Ariane", () => {
   const pile: EtatPile = {
     index: 3,
     routes: [
-      { key: 'o', name: 'Onglets', state: { index: 1, routes: [{ name: 'Accueil' }, { name: 'Dossiers' }] } },
+      { key: 'o', name: 'Onglets', state: { index: 1, routes: [{ name: 'Accueil' }, { name: 'Chiffres' }] } },
       { key: 'd', name: 'Dossier' },
       { key: 'e', name: 'Etape' },
       { key: 'a', name: 'Amendement' },
@@ -26,9 +26,9 @@ describe("fil d'Ariane", () => {
 
   it('part de l’onglet, ajoute chaque fiche avec son titre, et sait y revenir', () => {
     const chemin = cheminAriane(pile, { d: 'Programmation énergétique', e: 'Commission AN', a: 'Amendement CE123' });
-    expect(chemin.map((m) => m.libelle)).toEqual(['Dossiers', 'Programmation énergétique', 'Commission AN', 'Amendement CE123']);
+    expect(chemin.map((m) => m.libelle)).toEqual(['Chiffres', 'Programmation énergétique', 'Commission AN', 'Amendement CE123']);
     expect(chemin.map((m) => m.aller)).toEqual([
-      { type: 'onglet', onglet: 'Dossiers' },
+      { type: 'onglet', onglet: 'Chiffres' },
       { type: 'retirer', n: 2 },
       { type: 'retirer', n: 1 },
       { type: 'ici' },
@@ -36,15 +36,21 @@ describe("fil d'Ariane", () => {
   });
 
   it('donne le nom générique d’une fiche sans titre', () => {
-    expect(cheminAriane({ ...pile, index: 2 }, {}).map((m) => m.libelle)).toEqual(['Dossiers', 'Dossier', 'Étape']);
+    expect(cheminAriane({ ...pile, index: 2 }, {}).map((m) => m.libelle)).toEqual(['Chiffres', 'Dossier', 'Étape']);
   });
 
   it('onglet actif : celui de la pile, sinon celui de la page ouverte par lien profond', () => {
-    expect(ongletActif(pile)).toBe('Dossiers');
+    expect(ongletActif(pile)).toBe('Chiffres');
     expect(ongletActif({ index: 0, routes: [{ key: 'o', name: 'Onglets' }] })).toBe('Accueil');
-    expect(ongletActif({ index: 0, routes: [{ key: 'p', name: 'Personne' }] })).toBe('Personnes');
+    expect(ongletActif({ index: 0, routes: [{ key: 'p', name: 'Personne' }] })).toBe('Recherche');
+    expect(ongletActif({ index: 0, routes: [{ key: 't', name: 'Textes' }] })).toBe('Chiffres');
     // Lien profond : « Onglets » sous la fiche, jamais affiché.
-    expect(ongletActif({ index: 1, routes: [{ key: 'o', name: 'Onglets' }, { key: 'i', name: 'Institution' }] })).toBe('Institutions');
+    expect(ongletActif({ index: 1, routes: [{ key: 'o', name: 'Onglets' }, { key: 'i', name: 'Institution' }] })).toBe('Recherche');
+  });
+
+  it('les cinq onglets du design v4, l’Actualité sur la route Accueil', () => {
+    expect(ONGLETS.map((o) => o.libelle)).toEqual(['Actualité', 'Chiffres', 'Carte', 'Recherche', 'Guide']);
+    expect(ONGLETS[0].cle).toBe('Accueil');
   });
 });
 

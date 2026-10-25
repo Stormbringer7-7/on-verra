@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 PLAGES="U+0000-024F,U+02B0-036F,U+2000-206F,U+20AC,U+2100-22FF,U+2460-27BF"
 for police in \
   ibm-plex-sans-condensed/400Regular/IBMPlexSansCondensed_400Regular \
+  ibm-plex-sans-condensed/500Medium/IBMPlexSansCondensed_500Medium \
   ibm-plex-sans-condensed/600SemiBold/IBMPlexSansCondensed_600SemiBold \
   ibm-plex-sans-condensed/700Bold/IBMPlexSansCondensed_700Bold \
   ibm-plex-mono/400Regular/IBMPlexMono_400Regular \

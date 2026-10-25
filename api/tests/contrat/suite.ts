@@ -63,12 +63,33 @@ function suivantes(nom: NomCommande, s: any): Command[] {
     case 'ConsulterAccueil':
       return [...ids(s.dossiers).map((id) => commande('ConsulterDossier', { id })), ...ids(s.votes).map((id) => commande('ConsulterScrutin', { id }))];
     case 'ListerDossiers':
-      return ids(s.dossiers.elements, 3).map((id) => commande('ConsulterDossier', { id }));
+      return [
+        ...ids(s.dossiers.elements, 3).map((id) => commande('ConsulterDossier', { id })),
+        commande('ConsulterSuivis', { dossiers: ids(s.dossiers.elements, 3), personnes: [], depuis: '2026-09-01' }),
+      ];
+    case 'ExplorerFaits': {
+      // Ce que l'Explorer permet d'ouvrir : un filtre suggéré, la tête du premier groupe, son dépliage.
+      const premiere = (s.suggestions as { filtres: { cle: string; id: string }[] }[])[0]?.filtres[0];
+      const groupe = (s.groupes.elements as { cle: string; filtre: { cle: string; id: string } | null }[])[0];
+      const filtres = s.demande.filtres ?? {};
+      const avec = (cle: string, id: string) => ({ ...filtres, [cle]: id });
+      return [
+        ...(premiere && (premiere.cle !== 'etape' || filtres.dossier) ? [commande('ExplorerFaits', { filtres: avec(premiere.cle, premiere.id) })] : []),
+        ...(groupe?.filtre ? [commande('ExplorerFaits', { filtres: avec(groupe.filtre.cle, groupe.filtre.id), taille: 5 })] : []),
+        ...(groupe ? [commande('ExplorerFaits', { ...s.demande, onglet: s.onglet, deplier: groupe.cle, taille: 5 })] : []),
+      ];
+    }
     case 'ConsulterAvancement':
       return [
         ...(s.textes.elements as { dossier: { id: string } }[]).slice(0, 2).map((t) => commande('ConsulterDossier', { id: t.dossier.id })),
         ...(s.files as { etape: string }[]).slice(0, 1).map((f) => commande('ConsulterAvancement', { etape: f.etape, taille: 3 })),
       ];
+    case 'ConsulterCarte':
+      return (s.departements as { departement: { code: string } }[]).slice(0, 1).map((d) =>
+        commande('ConsulterDepartement', s.scrutin ? { code: d.departement.code, scrutin: s.scrutin.id } : { code: d.departement.code }),
+      );
+    case 'ConsulterDepartement':
+      return (s.elus as { personne: { id: string } }[]).slice(0, 1).map((e) => commande('ConsulterPersonne', { id: e.personne.id }));
     case 'ConsulterDossier': {
       const id = s.entete.id as string;
       const cles = (s.etapes as { cle: string }[]).slice(0, 2).map((e) => e.cle);
@@ -85,13 +106,19 @@ function suivantes(nom: NomCommande, s: any): Command[] {
     case 'ConsulterAmendement':
       return [commande('ListerInterventions', { cible: { type: 'amendement', id: s.amendement.id } })];
     case 'ConsulterScrutin':
-      return (s.votesDifferents.personnes as { personne: { id: string } }[])
-        .slice(0, 1)
-        .map((v) => commande('ExpliquerVote', { scrutin: s.scrutin.id, personne: v.personne.id }));
+      return [
+        ...(s.votesDifferents.personnes as { personne: { id: string } }[])
+          .slice(0, 1)
+          .map((v) => commande('ExpliquerVote', { scrutin: s.scrutin.id, personne: v.personne.id })),
+        commande('ConsulterCarte', { mesure: 'scrutin', scrutin: s.scrutin.id }),
+      ];
     case 'ListerPersonnes':
-      return ids(s.personnes.elements).flatMap((id) =>
-        (['parcours', 'choix', 'dossiers', 'declarations'] as const).map((onglet) => commande('ConsulterPersonne', { id, onglet })),
-      );
+      return [
+        ...ids(s.personnes.elements).flatMap((id) =>
+          (['parcours', 'choix', 'dossiers', 'declarations'] as const).map((onglet) => commande('ConsulterPersonne', { id, onglet })),
+        ),
+        commande('ConsulterSuivis', { dossiers: [], personnes: ids(s.personnes.elements), depuis: '2026-09-01' }),
+      ];
     case 'Rechercher':
       return (s.sections as { type: string; resultats: { elements: { id: string }[] } }[]).flatMap((section): Command[] => {
         const id = section.resultats.elements[0]?.id;
@@ -102,6 +129,24 @@ function suivantes(nom: NomCommande, s: any): Command[] {
         if (section.type === 'scrutins') return [commande('ConsulterScrutin', { id })];
         return [commande('ConsulterRepresentant', { id })];
       });
+    case 'ChercherParFamilles': {
+      // La fiche du premier résultat de chaque section, et des candidats d'un numéro.
+      const premiers = [
+        ...((s.numero?.candidats ?? []) as { fiche: unknown }[]).slice(0, 2),
+        ...(s.sections as { resultats: { elements: { fiche: unknown }[] } }[]).flatMap((x) => x.resultats.elements.slice(0, 1)),
+      ];
+      return premiers.flatMap(({ fiche }): Command[] => {
+        const f = fiche as { type: string; id?: string } | null;
+        if (!f?.id) return [];
+        if (f.type === 'dossier') return [commande('ConsulterDossier', { id: f.id })];
+        if (f.type === 'personne') return [commande('ConsulterPersonne', { id: f.id })];
+        if (f.type === 'amendement') return [commande('ConsulterAmendement', { id: f.id })];
+        if (f.type === 'scrutin') return [commande('ConsulterScrutin', { id: f.id })];
+        if (f.type === 'article') return [commande('ConsulterArticle', { article: f.id })];
+        if (f.type === 'representant') return [commande('ConsulterRepresentant', { id: f.id })];
+        return [];
+      });
+    }
     default:
       return [];
   }
@@ -112,7 +157,10 @@ const DEPART: Command[] = [
   commande('ListerDossiers', {}),
   commande('ListerDossiers', { origine: 'parlementaire', taille: 3 }),
   commande('ConsulterAvancement', {}),
+  commande('ExplorerFaits', {}),
   commande('ConsulterAvancement', { horsParlement: true }),
+  commande('ConsulterCarte', { mesure: 'presence', chambre: 'AN' }),
+  commande('ConsulterCarte', { mesure: 'presence', chambre: 'SENAT' }),
   commande('ListerPersonnes', {}),
   commande('ListerPersonnes', { role: 'elu_local' }),
   commande('ClasserPersonnes', { chambre: 'AN', critere: 'ecarts', ordre: 'desc' }),
@@ -121,6 +169,9 @@ const DEPART: Command[] = [
   commande('ConsulterInstitution', { institution: 'gouvernement' }),
   commande('ConsulterInstitution', { institution: 'cc' }),
   commande('Rechercher', { q: 'énergie' }),
+  commande('ChercherParFamilles', {}),
+  commande('ChercherParFamilles', { q: 'énergie' }),
+  commande('ChercherParFamilles', { q: '655' }),
 ];
 
 const cle = (c: Command) => `${c.type}:${JSON.stringify(c.input)}`;
@@ -236,7 +287,7 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
           groupes++;
           const ici = `${r.commande.type} ${chemin}`;
           expect(String(o.couleur ?? ''), `${ici} couleur`).toMatch(/^#[0-9a-f]{6}$/i);
-          expect(['officielle', 'famille', 'arbitraire'], `${ici} sourceCouleur`).toContain(o.sourceCouleur);
+          expect(['officielle', 'famille', 'gauche_droite', 'arbitraire'], `${ici} sourceCouleur`).toContain(o.sourceCouleur);
         });
       }
       expect(groupes).toBeGreaterThan(0);
@@ -351,6 +402,8 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
         commande('ConsulterInstitution', { institution: 'elysee' as never }),
         commande('ListerInterventions', { cible: { type: 'rumeur' } as never }),
         commande('SignalerErreur', { cible: { type: 'dossier', id: null }, message: '   ' }),
+        commande('ChercherParFamilles', { famille: 'partis' as never }),
+        commande('ChercherParFamilles', { famille: 'lois', declinaisons: ['deputes'] }),
       ];
       for (const c of mauvaises) {
         await expect(bus.execute(c), c.type).rejects.toMatchObject({ statut: 400 });

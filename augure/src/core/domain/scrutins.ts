@@ -82,6 +82,23 @@ export interface VoteDifferent {
   ligneDuGroupe: PositionExprimee;
 }
 
+/**
+ * Vote d'un parlementaire en mandat le jour du scrutin : position publiée, ou `absent` (en mandat,
+ * sans vote publié). `personne.groupe` : son groupe au moment du vote.
+ */
+export interface VoteNominatif {
+  personne: PersonneRef;
+  position: Position;
+  parDelegation: boolean;
+  /** Mise au point publiée (« voulait voter pour ») : affichée à côté, le vote n'est pas modifié. */
+  miseAuPoint: string | null;
+  /**
+   * Siège occupé ce jour-là, tel que publié avec le vote (AN : `numPlace`, numéroté de la droite
+   * vers la gauche) ; null si la source ne le publie pas (Sénat : seulement le siège actuel, absent).
+   */
+  siege: number | null;
+}
+
 export interface FicheScrutin {
   /** Barre du dossier voté, null pour un scrutin sans dossier (motion de censure…). */
   barre: BarreDossier | null;
@@ -96,6 +113,12 @@ export interface FicheScrutin {
   groupes: PositionDeGroupe[];
   /** Votes exprimés différents de la ligne de leur groupe (groupe à majorité nette seulement). */
   votesDifferents: { total: number; personnes: VoteDifferent[] };
+  /**
+   * Tous les parlementaires en mandat ce jour-là (au plus 577 ou 348 : pas de pagination, l'hémicycle
+   * les dessine tous), de la gauche vers la droite : groupe (`rang`), puis siège décroissant (AN), à défaut nom
+   * (ordre alphabétique, nombres compris). Sans groupe connu : à la fin.
+   */
+  votes: VoteNominatif[];
   compteRendu: Ancre | null;
   provenance: Provenance;
 }

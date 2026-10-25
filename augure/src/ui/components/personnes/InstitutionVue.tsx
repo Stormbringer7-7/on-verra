@@ -4,8 +4,7 @@
 // dossier). Partagée par l'onglet Institutions et la page empilée Institution.
 
 import { useMemo } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { StyleSheet, View } from 'react-native';
 
 import type { Institution } from '@/core';
 import { useAller } from '@/navigation';
@@ -13,9 +12,9 @@ import { usePalette } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import { Action, Label, Pastille, T } from '../base';
 import { Source } from '../commun/Source';
-import { disposerSieges, RAPPORT, tracesParCouleur } from '../disposition';
+import { HemicycleZoom, type SiegeHemicycle } from '../hemicycle/HemicycleZoom';
 import { Avertissement, Carte, Colonnes, Ligne, TitreSection } from './elements';
-import { couleursSieges, jour, moisCourt, nombre } from './regles';
+import { jour, moisCourt, nombre } from './regles';
 
 type Chambre = Extract<Institution, { type: 'an' | 'senat' }>;
 type Gouvernement = Extract<Institution, { type: 'gouvernement' }>;
@@ -35,26 +34,44 @@ export function InstitutionVue({ institution }: { institution: Institution }) {
 
 // ---------- Assemblée, Sénat ----------
 
-function Hemicycle({ chambre }: { chambre: Chambre }) {
+function Hemicycle({ chambre, onPersonne }: { chambre: Chambre; onPersonne: (id: string) => void }) {
   const p = usePalette();
-  const { width } = useWindowDimensions();
-  const largeur = Math.min(Math.max(width - 2 * space[4] - 2, 240), 520);
-  const traces = useMemo(() => {
-    const couleurs = couleursSieges(chambre, p.lineStrong);
-    const { sieges, rayonPoint } = disposerSieges(couleurs.length, largeur, chambre.type === 'an' ? 11 : 9);
-    return tracesParCouleur(sieges, couleurs, rayonPoint * (chambre.type === 'an' ? 1 : 1.25));
-  }, [chambre, p.lineStrong, largeur]);
-  const libelle = `Hémicycle de ${chambre.sieges} sièges par groupe : ${[...chambre.groupes]
-    .sort((a, b) => a.rang - b.rang)
+  const an = chambre.type === 'an';
+  const groupes = useMemo(() => [...chambre.groupes].sort((a, b) => a.rang - b.rang), [chambre.groupes]);
+  // Chaque parlementaire quand le contrat le donne (de la gauche vers la droite), sinon un siège par groupe.
+  const sieges = useMemo<SiegeHemicycle[]>(
+    () =>
+      chambre.membres.length
+        ? chambre.membres.map((m) => ({
+            couleur: m.personne.groupe?.couleur ?? p.lineStrong,
+            groupe: m.personne.groupe,
+            personne: { id: m.personne.id, nom: m.personne.nom },
+            detail: m.personne.groupe ? undefined : 'Sans groupe',
+          }))
+        : [
+            ...groupes.flatMap((g) => Array.from({ length: g.sieges }, () => ({ couleur: g.groupe.couleur, groupe: g.groupe }))),
+            ...Array.from({ length: chambre.sansGroupe }, () => ({ couleur: p.lineStrong, groupe: null, detail: 'Sans groupe' })),
+          ],
+    [chambre.membres, groupes, chambre.sansGroupe, p.lineStrong],
+  );
+  const libelle = `Hémicycle de ${chambre.sieges} sièges par groupe : ${groupes
     .map((g) => `${g.groupe.libelle} ${g.sieges}`)
     .join(', ')}${chambre.sansGroupe ? `, sans groupe ${chambre.sansGroupe}` : ''}`;
+  const parId = new Map(groupes.map((g) => [g.groupe.id, g]));
   return (
     <View style={[styles.hemicycle, { borderColor: p.line, backgroundColor: p.surfaceSunken }]}>
-      <Svg width={largeur} height={largeur * RAPPORT} role="img" aria-label={libelle} accessibilityLabel={libelle}>
-        {traces.map((t) => (
-          <Path key={t.couleur} d={t.d} fill={t.couleur} />
-        ))}
-      </Svg>
+      <HemicycleZoom
+        sieges={sieges}
+        rangs={an ? 11 : 9}
+        taillePoint={an ? 1 : 1.25}
+        largeurMax={520}
+        libelle={libelle}
+        onPersonne={onPersonne}
+        infoGroupe={(g) => {
+          const n = parId.get(g.id)?.sieges ?? 0;
+          return `${nombre(n)} ${an ? 'députés' : 'sénateurs'} sur ${nombre(chambre.sieges)}`;
+        }}
+      />
     </View>
   );
 }
@@ -69,9 +86,9 @@ function VueChambre({ chambre }: { chambre: Chambre }) {
       principal={
         <View style={{ gap: space[3] }}>
           <Label>{sousTitre}</Label>
-          <Hemicycle chambre={chambre} />
+          <Hemicycle chambre={chambre} onPersonne={(id) => aller.personne(id)} />
           <T variant="caption" ton="inkMuted">
-            Chaque point est un siège, coloré selon le groupe. Les couleurs de groupe sont des données publiées, pas un jugement.
+            Chaque point est un parlementaire, coloré selon son groupe, dans l’ordre des sièges publiés (pas le plan exact de la salle). Une couleur est officielle quand la chambre la publie ; sinon elle est attribuée.
           </T>
         </View>
       }
@@ -97,8 +114,8 @@ function VueChambre({ chambre }: { chambre: Chambre }) {
               </T>
             </Ligne>
           )}
-          <Action onPress={() => aller.onglet('Personnes', { vue: 'annuaire', role: an ? 'depute' : 'senateur' })}>{`Les ${nombre(chambre.sieges)} ${an ? 'députés' : 'sénateurs'} →`}</Action>
-          <Action onPress={() => aller.onglet('Dossiers')}>Dossiers en cours →</Action>
+          <Action onPress={() => aller.personnes({ vue: 'annuaire', role: an ? 'depute' : 'senateur' })}>{`Les ${nombre(chambre.sieges)} ${an ? 'députés' : 'sénateurs'} →`}</Action>
+          <Action onPress={() => aller.dossiers()}>Dossiers en cours →</Action>
         </View>
       }
     />
@@ -224,7 +241,7 @@ function VueConseil({ conseil: c }: { conseil: Conseil }) {
 }
 
 const styles = StyleSheet.create({
-  hemicycle: { alignItems: 'center', paddingVertical: space[3], borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  hemicycle: { alignItems: 'center', padding: space[3], borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
   gouv: { flexDirection: 'row', gap: space[2], paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth },
   entete: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   decision: { gap: 4, paddingVertical: space[3], borderBottomWidth: StyleSheet.hairlineWidth },

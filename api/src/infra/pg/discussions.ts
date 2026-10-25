@@ -38,11 +38,11 @@ const LONGUEUR_EXTRAIT = 160;
 const SIGNIFICATIVE = 80;
 
 /** La présidence de séance (« La parole est à… ») n'est pas une prise de position (cf. projection dit_et_vote). */
-const HORS_PRESIDENCE = `COALESCE(i.qualite, '') !~* '^présidente? de séance$'
+export const HORS_PRESIDENCE = `COALESCE(i.qualite, '') !~* '^présidente? de séance$'
   AND i.orateur_libelle !~* '^(M\\. le président|Mme la présidente)\\.?$'`;
 
 /** Voix collective (« PA0 ») et didascalies (« (L'amendement est adopté.) ») : publiées sans orateur. */
-const UN_ORATEUR = `(i.orateur_id IS NOT NULL OR btrim(i.orateur_libelle) <> '')`;
+export const UN_ORATEUR = `(i.orateur_id IS NOT NULL OR btrim(i.orateur_libelle) <> '')`;
 
 /** Intervention reliée au dossier : par la colonne ou par un lien intervention → dossier (discussion commune). */
 const SUR_LE_DOSSIER = `(i.dossier_id = $dossier::uuid OR EXISTS (
@@ -226,6 +226,13 @@ export class PgDiscussions implements DiscussionsRepository {
       params,
     );
     return r?.n ?? 0;
+  }
+
+  /** Interventions par identifiants (Explorer), dans l'ordre des réunions ; inconnues ou retirées omises. */
+  async parIds(ids: string[]): Promise<Intervention[]> {
+    const uniques = [...new Set(ids.filter(estUuid))];
+    if (!uniques.length) return [];
+    return (await this.lignes({ source: 'SELECT unnest($ids::uuid[]) AS entite_id' }, { $ids: uniques })).map(intervention);
   }
 
   async intervenants(dossier: string, cle: CleCase, limite: number): Promise<{ intervenants: Intervenant[]; total: number }> {

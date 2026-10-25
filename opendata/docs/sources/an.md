@@ -217,7 +217,8 @@ Canon :
 - `canon.scrutin` : `{"numero": "7259", "date": "2026-06-02", "nature": "ensemble", "type_vote": "scrutin public solennel",
   "votants": 562, "pour": 369, "contre": 178, "abstentions": 15, "non_votants": 1, "sort": "adopté"}`,
   `dossier_id` et `etape_id` par l'acte qui cite `VTANR5L17V7259` (pas par le titre) ;
-- `canon.vote` : Franck Allisio (`PA793432`), `pour`, `par_delegation = true`, groupe `PO845401` ;
+- `canon.vote` : Franck Allisio (`PA793432`), `pour`, `par_delegation = true`, groupe `PO845401`, `siege = 63`
+  (`numPlace` ; l'AN numérote de la droite vers la gauche : base de `lecture.position_groupe`) ;
 - `canon.position_groupe` : RN (`PO845401`), 122 membres, 120 pour, position majoritaire **recalculée**
   depuis le décompte (la valeur publiée par l'AN est parfois fausse ; aucune en cas d'égalité).
 

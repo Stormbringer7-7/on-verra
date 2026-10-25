@@ -177,11 +177,13 @@ export interface GroupeRef {
 }
 
 /**
- * officielle : publiée par la chambre ; famille : celle du groupe de l'Assemblée de la même famille
- * politique (table relue, le Sénat n'en publie aucune) ; arbitraire : couleur de secours, stable
- * pour un même groupe. Seule l'officielle est une donnée de la source.
+ * officielle : publiée par la chambre ; famille : celle du groupe de l'Assemblée du même parti
+ * (table relue, cas sûrs seulement : le Sénat n'en publie aucune) ; gauche_droite : tirée de la
+ * position du groupe dans l'hémicycle (sièges publiés), du rouge (gauche) au bleu (droite) ;
+ * arbitraire : couleur de secours, stable pour un même groupe. Seule l'officielle est une donnée
+ * de la source.
  */
-export type SourceCouleur = 'officielle' | 'famille' | 'arbitraire';
+export type SourceCouleur = 'officielle' | 'famille' | 'gauche_droite' | 'arbitraire';
 
 export interface PersonneRef {
   id: string;

@@ -1,6 +1,7 @@
-// Gabarit d'écran du canevas « Panoptique v2 » : navigation à 5 onglets (en bas en portrait, en
-// en-tête en paysage et sur grand écran), fil d'Ariane sur chaque fiche empilée, contenu défilant
-// centré (1 280 px au plus), colonnes principale / latérale, états de chargement et d'erreur.
+// Gabarit d'écran du design v4 : 5 onglets (en bas en portrait, indicateur rouge au-dessus du libellé ;
+// en en-tête en paysage, soulignés), fil d'Ariane « / » en paysage et barre de retour qui nomme la
+// page précédente en portrait, contenu défilant centré (1 200 px au plus), pied de page sur chaque
+// écran, colonnes principale / latérale, états de chargement et d'erreur.
 
 import { StackActions, useNavigation, useNavigationState, useRoute } from '@react-navigation/native';
 import type { ReactNode } from 'react';
@@ -12,10 +13,10 @@ import { useAller, type Onglets } from '../../navigation';
 import { cheminAriane, estOnglet, ongletActif, ONGLETS, type EtatPile, type Maillon } from '../ariane';
 import { useTitrePage, useTitres } from '../hooks/ariane';
 import { useCore } from '../hooks/core';
-import { useFenetre, useLarge } from '../hooks/miseEnPage';
+import { useLarge } from '../hooks/miseEnPage';
 import { usePalette } from '../theme/ThemeProvider';
-import { LARGEUR_MAX, radius, space } from '../theme/tokens';
-import { BoutonSecondaire, IconeRecherche, Label, T } from './base';
+import { fonts, LARGEUR_MAX, radius, space } from '../theme/tokens';
+import { BoutonSecondaire, Label, T } from './base';
 
 /** Nom affiché de l'app (en-tête large), comme dans le canevas. */
 export const NOM_APP = 'Nos politiques ont du talent';
@@ -23,26 +24,29 @@ export const NOM_APP = 'Nos politiques ont du talent';
 /** Un onglet principal. */
 export type Section = keyof Onglets;
 
+/** Sources affichées dans le pied de page de chaque écran. */
+export const SOURCES_PIED = 'Données publiques : Assemblée nationale, Sénat, Légifrance, Conseil constitutionnel, HATVP, RNE · Licence Ouverte';
+
 /**
  * Navigation principale : barre du bas en portrait (filet signal au-dessus de l'onglet actif) ;
- * en mise en page large, en-tête avec le nom de l'app, les onglets soulignés et un accès à la recherche.
+ * en mise en page large, en-tête avec le nom de l'app et les onglets soulignés.
  */
 export function Navigation({ active, onNavigate }: { active: Section; onNavigate(s: Section): void }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const large = useLarge();
-  const fenetre = useFenetre();
+  const aller = useAller();
 
   if (large) {
     return (
       <View style={[styles.entete, { borderBottomColor: p.line, backgroundColor: p.surface, paddingTop: insets.top }]}>
-        <View accessibilityRole="tablist" accessibilityLabel="Navigation principale" style={styles.enteteContenu}>
-          <Pressable accessibilityRole="link" onPress={() => onNavigate('Accueil')} style={styles.marque}>
-            <Label ton="ink" style={styles.marqueTexte}>
-              {NOM_APP.toUpperCase()}
-            </Label>
+        <View style={styles.enteteContenu}>
+          <Pressable accessibilityRole="link" accessibilityLabel={`${NOM_APP}, Actualité`} onPress={() => onNavigate('Accueil')} style={styles.marque}>
+            <T variant="heading" style={styles.marqueTexte}>
+              {NOM_APP}
+            </T>
           </Pressable>
-          <View style={styles.ongletsLarges}>
+          <View accessibilityRole="tablist" accessibilityLabel="Navigation principale" style={styles.ongletsLarges}>
             {ONGLETS.map((o) => {
               const actif = o.cle === active;
               return (
@@ -53,22 +57,25 @@ export function Navigation({ active, onNavigate }: { active: Section; onNavigate
                   onPress={() => onNavigate(o.cle)}
                   style={[styles.ongletLarge, { borderBottomColor: actif ? p.signal : 'transparent' }]}
                 >
-                  <Label couleur={actif ? p.signal : p.inkMuted}>{o.libelle}</Label>
+                  <T variant={actif ? 'heading' : 'body'} couleur={actif ? p.ink : p.inkSoft}>
+                    {o.libelle}
+                  </T>
                 </Pressable>
               );
             })}
           </View>
-          {fenetre.recherche && (
-            <Pressable
-              accessibilityRole="search"
-              accessibilityLabel="Rechercher"
-              onPress={() => onNavigate('Recherche')}
-              style={[styles.champRecherche, { backgroundColor: p.surfaceSunken, borderColor: p.lineStrong }]}
-            >
-              <IconeRecherche couleur={p.inkMuted} taille={16} />
-              <T ton="inkMuted">Dossier, personne, amendement…</T>
+          <View style={styles.enteteDroite}>
+            <Pressable accessibilityRole="link" onPress={aller.suivis} style={styles.enteteLien}>
+              <T variant="small" ton="inkSoft">
+                Suivis
+              </T>
             </Pressable>
-          )}
+            <Pressable accessibilityRole="link" onPress={aller.reglages} style={styles.enteteLien}>
+              <T variant="small" ton="inkSoft">
+                Réglages
+              </T>
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -83,14 +90,9 @@ export function Navigation({ active, onNavigate }: { active: Section; onNavigate
       {ONGLETS.map((o) => {
         const actif = o.cle === active;
         return (
-          <Pressable
-            key={o.cle}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: actif }}
-            onPress={() => onNavigate(o.cle)}
-            style={[styles.onglet, { borderTopColor: actif ? p.signal : 'transparent' }]}
-          >
-            <T variant={actif ? 'heading' : 'body'} couleur={actif ? p.signal : p.inkMuted} style={styles.ongletTexte} numberOfLines={1}>
+          <Pressable key={o.cle} accessibilityRole="tab" accessibilityState={{ selected: actif }} onPress={() => onNavigate(o.cle)} style={styles.onglet}>
+            <View style={[styles.indicateur, { backgroundColor: actif ? p.signal : 'transparent' }]} />
+            <T variant="caption" couleur={actif ? p.ink : p.inkMuted} style={actif ? styles.ongletActif : undefined} numberOfLines={1}>
               {o.libelle}
             </T>
           </Pressable>
@@ -100,7 +102,7 @@ export function Navigation({ active, onNavigate }: { active: Section; onNavigate
   );
 }
 
-/** Fil d'Ariane : « DOSSIERS › PROGRAMMATION ÉNERGÉTIQUE › COMMISSION AN ». */
+/** Fil d'Ariane (paysage) : miettes soulignées et cliquables, « / », page courante en `ink`. */
 export function FilAriane({ maillons, onAller }: { maillons: Maillon[]; onAller(m: Maillon): void }) {
   const p = usePalette();
   return (
@@ -108,23 +110,66 @@ export function FilAriane({ maillons, onAller }: { maillons: Maillon[]; onAller(
       {maillons.map((m, i) => (
         <View key={m.cle} style={styles.maillon}>
           {i > 0 && (
-            <Label couleur={p.lineStrong} aria-hidden>
-              ›
-            </Label>
+            <T variant="small" couleur={p.lineStrong} aria-hidden>
+              /
+            </T>
           )}
           {m.aller.type === 'ici' ? (
-            <Label ton="ink" numberOfLines={1} style={styles.maillonTexte}>
+            <T variant="small" numberOfLines={1} style={styles.maillonIci}>
               {m.libelle}
-            </Label>
+            </T>
           ) : (
-            <Pressable accessibilityRole="link" onPress={() => onAller(m)} hitSlop={8} style={styles.maillonLien}>
-              <Label numberOfLines={1} style={styles.maillonTexte}>
+            <Pressable accessibilityRole="link" onPress={() => onAller(m)} hitSlop={8} style={[styles.maillonLien, { borderBottomColor: p.lineFaint }]}>
+              <T variant="small" couleur={p.inkSoft} numberOfLines={1}>
                 {m.libelle}
-              </Label>
+              </T>
             </Pressable>
           )}
         </View>
       ))}
+    </View>
+  );
+}
+
+/** Barre de retour (portrait) : « ‹ » et le nom de la page précédente. */
+export function BarreRetour({ maillon, onAller }: { maillon: Maillon; onAller(m: Maillon): void }) {
+  const p = usePalette();
+  return (
+    <View style={[styles.barreRetour, { borderBottomColor: p.line }]}>
+      <Pressable accessibilityRole="link" accessibilityLabel={`Retour : ${maillon.libelle}`} onPress={() => onAller(maillon)} style={styles.retourLien}>
+        <Svg width={20} height={20} viewBox="0 0 20 20" fill="none" stroke={p.ink} strokeWidth={1.8} aria-hidden>
+          <Path d="M12.5 4.5 7 10l5.5 5.5" />
+        </Svg>
+        <T variant="label" ton="ink" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {maillon.libelle}
+        </T>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Pied de page de chaque écran : Méthode et sources, Accessibilité et réglages, sources des données. */
+export function PiedDePage() {
+  const p = usePalette();
+  const aller = useAller();
+  const large = useLarge();
+  return (
+    <View style={[styles.pied, { borderTopColor: p.line }, large && styles.piedLarge]}>
+      <View style={styles.piedLiens}>
+        <Pressable accessibilityRole="link" onPress={aller.methode} style={[styles.piedLien, { borderBottomColor: p.lineStrong }]}>
+          <T variant="caption" ton="ink">
+            Méthode et sources
+          </T>
+        </Pressable>
+        <Pressable accessibilityRole="link" onPress={aller.reglages} style={[styles.piedLien, { borderBottomColor: p.lineStrong }]}>
+          <T variant="caption" ton="ink">
+            Accessibilité et réglages
+          </T>
+        </Pressable>
+      </View>
+      <T variant="caption" ton="inkMuted">
+        {SOURCES_PIED}
+      </T>
     </View>
   );
 }
@@ -140,13 +185,14 @@ function BandeauMaquette() {
 }
 
 /**
- * Écran : contenu défilant, marges de 16 px (24 en large), sections espacées de 20 px (24 en large).
+ * Écran : contenu défilant ; portrait : marges 20, sections espacées de 32 ; paysage : marges 32,
+ * sections 40, largeur 1 200 px au plus.
  *
- * - Onglet (Accueil, Recherche…) : la navigation est celle du navigateur d'onglets.
- * - Fiche empilée (Dossier, Étape…) : l'écran affiche lui-même la navigation principale (l'onglet
- *   d'origine actif) et le fil d'Ariane ; `titre` est le dernier maillon de ce fil (et le titre
- *   de la fenêtre web), sinon le nom générique de la page.
- * - `largeur` en mise en page large : « pleine » jusqu'à 1 280 px (canevas), « lecture » 880 px.
+ * - Onglet (Actualité, Chiffres…) : la navigation est celle du navigateur d'onglets.
+ * - Page empilée (Dossier, Étape…) : l'écran affiche lui-même la navigation principale (l'onglet
+ *   d'origine actif), le fil d'Ariane en paysage ou la barre de retour en portrait ; `titre` est le
+ *   dernier maillon de ce fil (et le titre de la fenêtre web), sinon le nom générique de la page.
+ * - `largeur` en paysage : « pleine » jusqu'à 1 200 px, « lecture » 880 px.
  */
 export function Ecran({
   children,
@@ -157,7 +203,7 @@ export function Ecran({
   children: ReactNode;
   titre?: string;
   largeur?: 'lecture' | 'pleine';
-  /** false : pas de fil d'Ariane (fiche sans parent utile). */
+  /** false : ni fil d'Ariane ni retour (page sans parent utile). */
   ariane?: boolean;
 }) {
   const p = usePalette();
@@ -178,23 +224,30 @@ export function Ecran({
     if (m.aller.type === 'onglet') versOnglet(m.aller.onglet);
     else if (m.aller.type === 'retirer') navigation.dispatch(StackActions.pop(m.aller.n));
   };
+  const precedent = maillons.length > 1 ? maillons[maillons.length - 2] : null;
 
   return (
     <View style={[styles.racine, { backgroundColor: p.surface }]}>
       {active && large && <Navigation active={active} onNavigate={versOnglet} />}
+      {!large && precedent && (
+        <View style={{ paddingTop: insets.top }}>
+          <BarreRetour maillon={precedent} onAller={allerAuMaillon} />
+        </View>
+      )}
       <ScrollView
         contentContainerStyle={[
           styles.contenu,
           large && styles.contenuLarge,
           large && { maxWidth: largeur === 'pleine' ? LARGEUR_MAX : 880 },
-          // Navigation en en-tête en large : elle prend la marge de sécurité du haut.
-          { paddingTop: (large ? 0 : insets.top) + space[large ? 6 : 3] },
+          // Navigation en en-tête en large, barre de retour en portrait : elles prennent la marge du haut.
+          { paddingTop: (large || precedent ? 0 : insets.top) + space[large ? 8 : 5] },
         ]}
         keyboardShouldPersistTaps="handled"
       >
         {source === 'fixtures' && <BandeauMaquette />}
-        {maillons.length > 1 && <FilAriane maillons={maillons} onAller={allerAuMaillon} />}
+        {large && maillons.length > 1 && <FilAriane maillons={maillons} onAller={allerAuMaillon} />}
         {children}
+        <PiedDePage />
       </ScrollView>
       {active && !large && <Navigation active={active} onNavigate={versOnglet} />}
     </View>
@@ -210,15 +263,15 @@ export function Colonnes({ principale, laterale }: { principale: ReactNode; late
   // Portrait : une seule colonne (une base de 560 px déborderait d'un téléphone).
   if (!large) {
     return (
-      <View style={{ gap: space[6] }}>
-        <View style={{ gap: space[5] }}>{principale}</View>
-        {laterale && <View style={{ gap: space[5] }}>{laterale}</View>}
+      <View style={{ gap: space[8] }}>
+        <View style={{ gap: space[6] }}>{principale}</View>
+        {laterale && <View style={{ gap: space[6] }}>{laterale}</View>}
       </View>
     );
   }
   return (
     <View style={styles.colonnes}>
-      <View style={[styles.principale, { gap: space[6] }]}>{principale}</View>
+      <View style={[styles.principale, { gap: space[8] }]}>{principale}</View>
       {laterale && <View style={styles.laterale}>{laterale}</View>}
     </View>
   );
@@ -229,7 +282,7 @@ export function Bloc({ children, gap = 3, style }: { children: ReactNode; gap?: 
   return <View style={[{ gap: space[gap] }, style]}>{children}</View>;
 }
 
-/** Lien retour : chevron + étiquette (« RETOUR »). */
+/** Lien retour : chevron + étiquette (« Retour »). */
 export function Retour({ libelle = 'Retour' }: { libelle?: string }) {
   const p = usePalette();
   const aller = useAller();
@@ -264,48 +317,46 @@ export function Erreur({ message, onReessayer }: { message: string; onReessayer?
 
 const styles = StyleSheet.create({
   racine: { flex: 1 },
-  contenu: { width: '100%', paddingHorizontal: space[4], paddingBottom: space[6], gap: space[5] },
-  contenuLarge: { alignSelf: 'center', paddingHorizontal: space[6], paddingBottom: space[12], gap: space[6] },
+  contenu: { width: '100%', paddingHorizontal: space[5], paddingBottom: space[8], gap: space[8] },
+  contenuLarge: { alignSelf: 'center', paddingHorizontal: space[8], paddingBottom: space[14], gap: space[10] },
   entete: { borderBottomWidth: StyleSheet.hairlineWidth },
   enteteContenu: {
     width: '100%',
     maxWidth: LARGEUR_MAX,
     alignSelf: 'center',
-    minHeight: 60,
-    paddingHorizontal: space[6],
+    minHeight: 64,
+    paddingHorizontal: space[8],
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    columnGap: space[6],
+    columnGap: space[8],
     rowGap: space[2],
   },
   marque: { minHeight: 44, justifyContent: 'center' },
-  marqueTexte: { letterSpacing: 1.2, fontSize: 12 },
-  ongletsLarges: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 28 },
-  ongletLarge: { minHeight: 44, justifyContent: 'center', borderBottomWidth: 2 },
-  champRecherche: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space[2],
-    minHeight: 40,
-    minWidth: 240,
-    paddingHorizontal: space[3],
-    borderWidth: 1,
-    borderRadius: radius.sm,
-  },
+  marqueTexte: { letterSpacing: -0.17 },
+  enteteDroite: { flexDirection: 'row', alignItems: 'center', columnGap: space[5] },
+  enteteLien: { minHeight: 44, justifyContent: 'center' },
+  piedLiens: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space[5], rowGap: space[2] },
+  ongletsLarges: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space[8] },
+  ongletLarge: { minHeight: 64, justifyContent: 'center', borderBottomWidth: 3 },
   nav: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  onglet: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderTopWidth: 2, paddingHorizontal: 2 },
-  // Cinq onglets : sans-serif 12 px (canevas).
-  ongletTexte: { fontSize: 12, lineHeight: 16 },
-  ariane: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space[2], rowGap: space[1] },
-  maillon: { flexDirection: 'row', alignItems: 'center', gap: space[2], maxWidth: '100%' },
-  maillonLien: { minHeight: 28, justifyContent: 'center' },
-  maillonTexte: { letterSpacing: 0.66, flexShrink: 1 },
+  onglet: { flex: 1, minHeight: 60, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+  indicateur: { width: 18, height: 3, borderRadius: 2, marginBottom: space[1] },
+  ongletActif: { fontFamily: fonts.sansSemiBold },
+  ariane: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 2, marginBottom: -space[2] },
+  maillon: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%' },
+  maillonLien: { minHeight: 32, justifyContent: 'center', borderBottomWidth: 1 },
+  maillonIci: { fontFamily: fonts.sansMedium, flexShrink: 1 },
+  barreRetour: { minHeight: 52, paddingHorizontal: space[2], paddingTop: space[1], justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  retourLien: { flexDirection: 'row', alignItems: 'center', gap: space[1], minHeight: 44, paddingHorizontal: space[2], alignSelf: 'flex-start', maxWidth: '100%' },
+  pied: { gap: 6, paddingTop: space[6], marginTop: space[2], borderTopWidth: StyleSheet.hairlineWidth },
+  piedLarge: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space[6], rowGap: space[2] },
+  piedLien: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center', borderBottomWidth: 1 },
   bandeau: { borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.sm, paddingHorizontal: space[3], paddingVertical: space[2] },
-  colonnes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: space[6] },
+  colonnes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: space[10] },
   principale: { flexGrow: 999, flexShrink: 1, flexBasis: 560, minWidth: 0 },
-  laterale: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0, gap: space[5] },
+  laterale: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0, gap: space[6] },
   retour: { flexDirection: 'row', alignItems: 'center', gap: space[1], minHeight: 44, alignSelf: 'flex-start' },
   etat: { gap: space[3], paddingVertical: space[6], alignItems: 'flex-start' },
 });

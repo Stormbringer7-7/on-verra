@@ -10,6 +10,7 @@ import { queryCache } from '@contrat/commands/middlewares';
 import { HorlogeSysteme } from '../../src/infra/composition';
 import { memoire } from '../../src/infra/memoire';
 import { positionnels } from '../../src/infra/PgDatabase';
+import { gaucheDroite } from '../../src/infra/pg/personnes';
 import { SansSynthese } from '../../src/infra/SansSynthese';
 import { borner, limiter } from '../../src/lectures/commun';
 import { semaineDe } from '../../src/lectures/dossiers';
@@ -80,5 +81,22 @@ describe('adaptateurs simples', () => {
   it('paramètres SQL nommés → positionnels, chacun une fois', () => {
     expect(positionnels('SELECT $a, $b, $a', { $a: 1, $b: 'x' })).toEqual({ text: 'SELECT $1, $2, $1', values: [1, 'x'] });
     expect(() => positionnels('SELECT $c', {})).toThrow(/manquant/);
+  });
+});
+
+describe('ordre gauche-droite des groupes', () => {
+  const g = (id: string, abrege = id) =>
+    ({ id, abrege, libelle: abrege, couleur: '#000000', sourceCouleur: 'arbitraire', chambre: 'AN' }) as const;
+  const ids = (l: { id: string }[]) => l.map((x) => x.id);
+
+  it('positionnés par position, puis les autres dans l’ordre reçu, non-inscrits en dernier', () => {
+    const recus = [g('ni', 'NI'), g('sans1'), g('droite'), g('sans2'), g('gauche'), g('centre')];
+    const positions = new Map([['droite', 0.9], ['gauche', 0.05], ['centre', 0.5], ['ni', 0.4]]);
+    expect(ids(gaucheDroite(recus, (x) => x, positions))).toEqual(['gauche', 'centre', 'droite', 'sans1', 'sans2', 'ni']);
+  });
+
+  it('sans aucune position (Sénat) : l’ordre reçu', () => {
+    const recus = [g('b'), g('a'), g('c')];
+    expect(ids(gaucheDroite(recus, (x) => x, new Map()))).toEqual(['b', 'a', 'c']);
   });
 });

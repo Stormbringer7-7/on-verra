@@ -14,6 +14,7 @@ import type {
 import { A, ART, BARRE_ENERGIE, BARRE_LOCATION, D, G, P, comme, lienFictif, orateur, prov } from './entites';
 import { DECLARATIONS_CAMILLE, FONCTIONS, resumes } from './fonctions';
 import { INTERETS } from './interets';
+import { SIEGEANTS_AN, votesNominatifs } from './sieges';
 
 const scrutin = (
   id: string,
@@ -149,6 +150,11 @@ export const FICHE_SCRUTIN_1874: FicheScrutin = {
       { personne: P.lea, position: 'pour', ligneDuGroupe: 'contre' },
     ],
   },
+  votes: votesNominatifs(
+    positions(VOTES_1874).map((g) => ({ groupe: g.groupe, ...g.decompte, nonVotants: g.nonVotants, absents: g.absents })),
+    { [P.camille.id]: 'contre', [P.louis.id]: 'abstention', [P.paulM.id]: 'contre', [P.karim.id]: 'pour', [P.lea.id]: 'pour', [P.hugo.id]: 'pour', [P.ines.id]: 'contre' },
+    new Map(SIEGEANTS_AN.map((m) => [m.personne.id, m.siege])),
+  ),
   compteRendu: {
     url: lienFictif('an/compte-rendu/2026-03-12-2e-seance'),
     ancre: 'p-1874',
@@ -156,6 +162,14 @@ export const FICHE_SCRUTIN_1874: FicheScrutin = {
   },
   provenance: prov('AN', 'scrutin', 'VTANR5L17V1874', lienFictif('an/scrutin/1874')),
 };
+
+const GROUPES_297 = positions([
+  [G.S1, 130, 6, 2, 7],
+  [G.S2, 8, 80, 1, 3],
+  [G.S3, 52, 4, 3, 5],
+  [G.S4, 2, 28, 1, 2],
+  [G.NIS, 6, 3, 2, 1],
+]).map((g, i) => (i === 0 ? { ...g, nonVotants: 2, membres: g.membres + 2 } : g));
 
 /** Sénat, nouvelle lecture : question préalable adoptée (rejet du texte). Pas de synthèse. */
 export const FICHE_SCRUTIN_SENAT_297: FicheScrutin = {
@@ -165,14 +179,13 @@ export const FICHE_SCRUTIN_SENAT_297: FicheScrutin = {
   sens: { pour: null, contre: null },
   nonVotants: 2,
   absents: 18,
-  groupes: positions([
-    [G.S1, 130, 6, 2, 7],
-    [G.S2, 8, 80, 1, 3],
-    [G.S3, 52, 4, 3, 5],
-    [G.S4, 2, 28, 1, 2],
-    [G.NIS, 6, 3, 2, 1],
-  ]).map((g, i) => (i === 0 ? { ...g, nonVotants: 2 } : g)),
+  groupes: GROUPES_297,
   votesDifferents: { total: 25, personnes: [{ personne: P.pierre, position: 'contre', ligneDuGroupe: 'pour' }] },
+  votes: votesNominatifs(
+    GROUPES_297.map((g) => ({ groupe: g.groupe, ...g.decompte, nonVotants: g.nonVotants, absents: g.absents })),
+    { [P.pierre.id]: 'contre', [P.paul.id]: 'contre' },
+    new Map(),
+  ),
   compteRendu: null,
   provenance: prov('SENAT', 'scrutin', '2025-297', lienFictif('senat/scrutin/2025-297')),
 };

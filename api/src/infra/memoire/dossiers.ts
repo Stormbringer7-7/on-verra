@@ -13,7 +13,7 @@ import type {
   TexteEnAttente,
 } from '@contrat/domain/model';
 
-import type { DossiersRepository, Pagination, PositionTexte } from '../../ports';
+import type { ActeSuivi, DossiersRepository, Pagination, PositionTexte } from '../../ports';
 import { type DonneesMemoire, paginer, premier } from './donnees';
 
 export class DossiersMemoire implements DossiersRepository {
@@ -165,6 +165,23 @@ export class DossiersMemoire implements DossiersRepository {
   async textesEnAttente(positions: PositionTexte[]): Promise<TexteEnAttente[]> {
     const tous = (await this.avancement())?.textes.elements ?? [];
     return positions.flatMap((p) => tous.filter((t) => t.dossier.id === p.dossier));
+  }
+
+  async resumesDe(ids: string[]) {
+    const tous = await this.resumes();
+    return ids.flatMap((id) => tous.filter((d) => d.id === id));
+  }
+
+  /** Les actes connus : ceux des exemples de Mes suivis. */
+  async actesDepuis(ids: string[], depuis: string, limite: number): Promise<ActeSuivi[]> {
+    const { exemples } = await this.donnees;
+    const actes = exemples.ConsulterSuivis.flatMap((e) => e.output.evenements).filter(
+      (e): e is ActeSuivi => e.type === 'acte' && ids.includes(e.dossier.id) && e.date >= depuis,
+    );
+    return actes
+      .filter((a, i) => actes.findIndex((x) => x.provenance.idNatif === a.provenance.idNatif) === i)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, limite);
   }
 
   async deposesParLeGouvernement(_depuis: string, limite: number) {

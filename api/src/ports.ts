@@ -19,13 +19,30 @@
 //   G6. 17e législature seulement pour l'instant ; les dates sont « AAAA-MM-JJ ».
 //
 // « Tables » : ce qui sert la méthode dans le schéma à jour (copie d'intégration opendata,
-// migrations 0001 à 0016 et projections 10 à 55). « En base au 24/10/2026 » : état de la base réelle
+// migrations 0001 à 0020 et projections 10 à 65). « En base au 24/10/2026 » : état de la base réelle
 // quand il diffère (table vide, projection pas encore chargée) — l'adaptateur rend alors vide ou null.
 
+import type { DemandeGroupes, Nommes } from '@contrat/domain/explorer';
 import type {
   AccuseSignalement,
+  CompteRecherche,
+  DeclinaisonRecherche,
+  NumeroOfficiel,
+  ResultatFamille,
+  Chambre,
+  DepartementRef,
+  FicheDepartement,
+  VotesDepartement,
+  CleFiltre,
+  Fait,
+  FiltresFaits,
+  GroupeFaits,
+  ScrutinFiltre,
+  SuggestionFiltre,
+  TypeFait,
   ActeSurLeDossier,
   AttenteHorsParlement,
+  EvenementSuivi,
   Origine,
   SituationTexte,
   TexteEnAttente,
@@ -269,7 +286,24 @@ export interface DossiersRepository {
    * Tables : canon.dossier, lecture.parcours_acte, lecture.parcours_dossier_synthese.
    */
   textesEnAttente(positions: PositionTexte[]): Promise<TexteEnAttente[]>;
+
+  /**
+   * Résumés de ces dossiers (Mes suivis), dans l'ordre des identifiants ; inconnus, retirés ou
+   * fusionnés omis (G2, G5). Mêmes champs que `lister`.
+   */
+  resumesDe(ids: string[]): Promise<DossierResume[]>;
+
+  /**
+   * Actes publiés et datés du parcours de ces dossiers à partir du jour `depuis`, du plus récent au
+   * plus ancien, au plus `limite` ; libellé « case · conclusion ou libellé de l'acte », tel que publié.
+   * Tables : lecture.parcours_acte (accompli, categorie 'case'), lecture.parcours_dossier (libellé),
+   * canon.dossier, canon.correspondance (provenance de l'étape).
+   */
+  actesDepuis(ids: string[], depuis: string, limite: number): Promise<ActeSuivi[]>;
 }
+
+/** Un acte du parcours d'un dossier suivi (Mes suivis). */
+export type ActeSuivi = Extract<EvenementSuivi, { type: 'acte' }>;
 
 /** Position d'un texte non abouti, telle que la lit le dépôt : le cœur la range en files. */
 export interface PositionTexte {
@@ -503,6 +537,31 @@ export interface RechercheRepository {
    * canon.organisation.
    */
   rechercher(demande: DemandeRecherche, pagination: Pagination): Promise<ResultatRecherche>;
+
+  /**
+   * Recherche par familles : nombre de résultats de chaque déclinaison pour la requête (q null :
+   * tous les objets de la législature), plafonné à PLAFOND_COMPTE. Mêmes règles de correspondance
+   * que `chercherDeclinaison`.
+   */
+  compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]): Promise<Partial<Record<DeclinaisonRecherche, CompteRecherche>>>;
+
+  /**
+   * Une page des résultats d'une déclinaison, les plus pertinents d'abord (q null : les plus
+   * récents). Chaque résultat dit sa fiche et ses filtres d'Explorer. `total` : le compte exact
+   * jusqu'au plafond, null au-delà.
+   * Tables : canon.dossier, canon.article_suivi, canon.organisation (groupe_politique, commission,
+   * commission_enquete, assemblee, departement), canon.personne, canon.fonction, canon.scrutin,
+   * canon.amendement, canon.intervention (texte_recherche), canon.question,
+   * canon.representant_interets, canon.action_representation, canon.declaration, canon.correspondance (INSEE).
+   */
+  chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination): Promise<Page<ResultatFamille>>;
+
+  /**
+   * Objets qui portent exactement ce numéro officiel (forme comparable, `numeroComparable`) :
+   * amendements (numéro publié), scrutins (numéro, chaque chambre), questions ; au plus `limite`.
+   * Le contexte de chacun dit son dossier et sa chambre, pour distinguer des homonymes.
+   */
+  candidatsNumero(numero: NumeroOfficiel, limite: number): Promise<ResultatFamille[]>;
 }
 
 // ---------- Signalements ----------
@@ -553,8 +612,76 @@ export interface Logger {
 }
 
 /** Ce que la racine de composition donne au cœur. */
+// ---------- Faits filtrés (Explorer) ----------
+
+/**
+ * Les lectures de l'Explorer (`@contrat/domain/explorer`), une méthode par type de lecture. Un
+ * fait n'est retenu par un filtre que par un lien publié (colonne ou `canon.lien`), jamais par
+ * ressemblance ; les filtres se cumulent. Règles par type de fait :
+ *   interventions : hors présidence de séance, avec un orateur ; dossier (colonne ou lien),
+ *     étape (réunion citée par un acte de la case), article (amendement discuté), groupe (celui
+ *     de l'orateur ce jour-là), personne (orateur certain), chambre et organe (réunion),
+ *     amendement (discuté) ; aucune sous un filtre scrutin ;
+ *   amendements : dossier, étape (acte de la case), article, groupe (lien groupe_auteur),
+ *     personne (lien auteur), chambre, organe d'examen ; aucun sous un filtre scrutin ;
+ *   votes : scrutins publics de la législature ; groupe (position de groupe publiée), personne
+ *     (vote publié), amendement mis aux voix ; aucun sous un filtre organe. Sous un filtre
+ *     amendement adopté ou rejeté sans scrutin public : un vote à main levée ;
+ *   contrôle : questions au Gouvernement (auteur, groupe de l'auteur, chambre) ; aucune sous un
+ *     filtre de loi, d'organe ou d'action législative ;
+ *   transparence : rapprochements de lobbying d'un dossier ou d'un amendement filtré (seuls, avec
+ *     leur statut), déclarations HATVP d'une personne ou des membres d'un groupe ;
+ *   personnes : orateurs certains et auteurs des faits retenus, plus les votants du scrutin filtré.
+ * Tables : canon.intervention, canon.reunion, canon.amendement, canon.lien, canon.scrutin,
+ * canon.vote, canon.position_groupe, canon.question, canon.declaration, lecture.parcours_acte,
+ * lecture.parcours_dossier, lecture.appartenance_groupe ; analytique.affirmation (rapprochements).
+ */
+export interface FaitsRepository {
+  /** Nom, pastille et fiche de chaque filtre posé ; null si un identifiant est inconnu ou retiré. */
+  nommer(filtres: FiltresFaits): Promise<Nommes>;
+  compter(filtres: FiltresFaits): Promise<Record<TypeFait, number>>;
+  /** Groupes de l'onglet, paginés, chacun avec ses premiers faits (`APERCU_GROUPE`). */
+  groupes(demande: DemandeGroupes): Promise<Page<GroupeFaits>>;
+  /** Faits d'un groupe (`GroupeFaits.cle`), paginés ; clé inconnue : page vide. */
+  deplier(demande: DemandeGroupes, cle: string): Promise<Page<Fait>>;
+  /** Valeurs du niveau suivant avec leur nombre d'interventions, amendements et votes, non nulles. */
+  suggerer(filtres: FiltresFaits, cle: CleFiltre, limite: number): Promise<SuggestionFiltre[]>;
+  /** Répartition par groupe du scrutin, et votes des membres du groupe ; null si inconnu. */
+  scrutin(scrutin: string, groupe: string | null): Promise<ScrutinFiltre | null>;
+}
+
+// ---------- Territoires ----------
+
+/**
+ * Département des élus (lien `territoire` mandat → département du COG, publié par la chambre) et ce
+ * qu'ils font, département par département. Élus sans département (Français établis hors de France)
+ * : comptés à part. Départements rendus par code croissant.
+ * Tables : lecture.departement, lecture.elu_departement, lecture.carte_scrutin,
+ * lecture.presence_departement, lecture.presence_elu, lecture.participation_scrutin, canon.vote,
+ * canon.personne. Projections absentes : listes vides, null pour une fiche.
+ */
+export interface TerritoiresRepository {
+  /** Votes des élus de chaque département sur un scrutin ; null si le scrutin est inconnu (G5). */
+  carteScrutin(scrutin: string): Promise<{
+    scrutin: ScrutinResume;
+    departements: { departement: DepartementRef; votes: VotesDepartement }[];
+    horsDepartement: number;
+  } | null>;
+
+  /** Participation des élus actuels de chaque département (année en cours de leur chambre). */
+  cartePresence(chambre: Chambre): Promise<{ departements: { departement: DepartementRef; presence: Indicateur }[]; horsDepartement: number }>;
+
+  /** Élus en fonction aujourd'hui (députés puis sénateurs, par circonscription puis nom) et présence par chambre. */
+  departement(code: string): Promise<Omit<FicheDepartement, 'scrutin' | 'limites'> | null>;
+
+  /** Votes, sur un scrutin, des élus du département alors en mandat ; null si le scrutin est inconnu. */
+  votesDepartement(code: string, scrutin: string): Promise<FicheDepartement['scrutin']>;
+}
+
 export interface Depots {
   dossiers: DossiersRepository;
+  territoires: TerritoiresRepository;
+  faits: FaitsRepository;
   discussions: DiscussionsRepository;
   personnes: PersonnesRepository;
   scrutins: ScrutinsRepository;

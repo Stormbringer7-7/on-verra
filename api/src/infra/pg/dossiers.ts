@@ -67,7 +67,7 @@ import type {
   TypeDocument,
   VersionArticle,
 } from '@contrat/domain/model';
-import type { DossiersRepository, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
+import type { ActeSuivi, DossiersRepository, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
 import { groupe as groupeRef } from './personnes';
 
 // ---------- Vocabulaire ----------
@@ -892,6 +892,36 @@ export class PgDossiers implements DossiersRepository {
     });
   }
 
+  // ----- Mes suivis -----
+
+  async resumesDe(ids: string[]): Promise<DossierResume[]> {
+    return this.resumes([...new Set(ids.filter(estUuid))]);
+  }
+
+  async actesDepuis(ids: string[], depuis: string, limite: number): Promise<ActeSuivi[]> {
+    const uuids = [...new Set(ids.filter(estUuid))];
+    if (uuids.length === 0 || !(await this.projection())) return [];
+    const lignes = await this.db.all<{ dossier: string; etape: string; date: string; cle: string; libelle: string }>(
+      `SELECT a.dossier_id AS dossier, a.etape_id AS etape, a.debut::text AS date, a.cle,
+              p.libelle || COALESCE(' · ' || COALESCE(a.conclusion, a.libelle), '') AS libelle
+       FROM lecture.parcours_acte a
+       JOIN lecture.parcours_dossier p ON p.dossier_id = a.dossier_id AND p.cle = a.cle
+       WHERE a.dossier_id = ANY($ids::uuid[]) AND a.categorie = 'case' AND a.accompli
+         AND a.debut >= $depuis::date AND a.debut <= a.date_reference AND ${vivant('a.etape_id')}
+       ORDER BY a.debut DESC, a.ordre DESC
+       LIMIT $limite`,
+      { ids: uuids, depuis, limite: Math.max(0, Math.floor(limite)) },
+    );
+    const [refs, provenances] = await Promise.all([this.resumes([...new Set(lignes.map((l) => l.dossier))]), this.provenances(lignes.map((l) => l.etape))]);
+    const titres = new Map(refs.map((r) => [r.id, r.titre]));
+    return lignes.flatMap((l) => {
+      const titre = titres.get(l.dossier);
+      const provenance = provenances.get(l.etape);
+      if (titre === undefined || !provenance) return [];
+      return [{ type: 'acte' as const, date: l.date, dossier: { id: l.dossier, titre }, cle: dans(CLES, l.cle), libelle: l.libelle, provenance }];
+    });
+  }
+
   // ----- Dossier -----
 
   /** Initiateurs publiés du dossier (personnes ou organisations), dans l'ordre publié. */
@@ -1345,7 +1375,8 @@ export class PgDossiers implements DossiersRepository {
   // ----- Amendements -----
 
   /** Résumés d'amendements (G2 : retirés et fusionnés ignorés), par identifiant. */
-  private async resumesAmendements(ids: string[]): Promise<Map<string, AmendementResume>> {
+  /** Résumés d'amendements (aussi pour l'Explorer) ; inconnus ou retirés omis. */
+  async resumesAmendements(ids: string[]): Promise<Map<string, AmendementResume>> {
     const resultat = new Map<string, AmendementResume>();
     const uniques = [...new Set(ids.filter(estUuid))];
     if (uniques.length === 0) return resultat;

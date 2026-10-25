@@ -78,7 +78,7 @@ describe.skipIf(!URL_LECTURE)('PgScrutins (base réelle, lecture seule)', () => 
     });
     // Compte rendu : la séance que cite l'acte du vote (AN1-DEBATS-DEC), ce jour-là.
     expect(f.compteRendu).toMatchObject({
-      url: 'https://www.assemblee-nationale.fr/dyn/opendata/CRSANR5L17S2026O1N259.html',
+      url: 'https://www.assemblee-nationale.fr/dyn/17/comptes-rendus/seance/CRSANR5L17S2026O1N259',
       provenance: { systeme: 'AN', idNatif: 'CRSANR5L17S2026O1N259' },
     });
   });
@@ -103,15 +103,33 @@ describe.skipIf(!URL_LECTURE)('PgScrutins (base réelle, lecture seule)', () => 
     for (const p of f.votesDifferents.personnes) expect(p.position).not.toBe(p.ligneDuGroupe);
   });
 
-  it('fiche Sénat 2025-325 : décompte publié sans sort, trois amendements identiques → objet non choisi', async () => {
+  it('fiche AN : chaque député en mandat, cohérent avec les groupes, de la gauche vers la droite', async () => {
+    const t0 = Date.now();
+    const f = (await depot.fiche(s7259))!;
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    expect(new Set(f.votes.map((v) => v.personne.id)).size).toBe(f.votes.length);
+    for (const g of f.groupes) {
+      const votes = f.votes.filter((v) => v.personne.groupe?.id === g.groupe.id);
+      const n = (p: string) => votes.filter((v) => v.position === p).length;
+      expect([n('pour'), n('contre'), n('abstention'), n('non_votant'), n('absent')], g.groupe.abrege).toEqual([
+        g.decompte.pour, g.decompte.contre, g.decompte.abstention, g.nonVotants, g.absents,
+      ]);
+    }
+    const rangs = new Map(f.groupes.map((g) => [g.groupe.id, g.rang]));
+    const suite = f.votes.map((v) => (v.personne.groupe ? (rangs.get(v.personne.groupe.id) ?? 99) : 99));
+    expect(suite).toEqual([...suite].sort((a, b) => a - b));
+    for (const v of f.votes) if (v.position === 'absent') expect([v.siege, v.parDelegation]).toEqual([null, false]);
+  });
+
+  it('fiche Sénat 2025-325 : décompte et sort publiés, trois amendements identiques → objet non choisi', async () => {
     const f = (await depot.fiche(s325))!;
     expect(f.scrutin).toMatchObject({
       chambre: 'SENAT',
       numero: '325',
       date: '2026-07-01',
       nature: 'amendement',
-      sort: null,
-      adopte: null,
+      sort: 'rejeté',
+      adopte: false,
       decompte: { pour: 133, contre: 211, abstention: 0 },
       dossier: { id: dossier },
       etape: null,

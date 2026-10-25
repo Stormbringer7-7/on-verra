@@ -79,7 +79,7 @@ describe('fixtures du contrat', () => {
     expect(groupes.length).toBeGreaterThan(0);
     for (const { chemin, valeur } of groupes) {
       expect(String(valeur.couleur ?? ''), chemin).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(['officielle', 'famille', 'arbitraire'], chemin).toContain(valeur.sourceCouleur);
+      expect(['officielle', 'famille', 'gauche_droite', 'arbitraire'], chemin).toContain(valeur.sourceCouleur);
     }
   });
 
@@ -108,6 +108,29 @@ describe('fixtures du contrat', () => {
       expect(cases.filter((c) => c.courante).length, e.titre).toBeLessThanOrEqual(1);
       expect(cases.map((c) => c.rang), e.titre).toEqual(cases.map((_, i) => i + 1));
       for (const c of cases) if (c.etat === 'a_venir' || c.etat === 'sans_objet') expect(c.fin, `${e.titre} ${c.cle}`).toBeNull();
+    }
+  });
+
+  it('donnent chaque parlementaire de l’hémicycle, cohérent avec les décomptes par groupe', () => {
+    for (const e of fixtures.ConsulterScrutin) {
+      const f = e.output;
+      for (const g of f.groupes) {
+        const votes = f.votes.filter((v) => v.personne.groupe?.id === g.groupe.id);
+        const n = (p: string) => votes.filter((v) => v.position === p).length;
+        expect([n('pour'), n('contre'), n('abstention'), n('non_votant'), n('absent')], `${e.titre} ${g.groupe.abrege}`).toEqual([
+          g.decompte.pour, g.decompte.contre, g.decompte.abstention, g.nonVotants, g.absents,
+        ]);
+      }
+      expect(new Set(f.votes.map((v) => v.personne.id)).size, e.titre).toBe(f.votes.length);
+      for (const d of f.votesDifferents.personnes) {
+        expect(f.votes.find((v) => v.personne.id === d.personne.id)?.position, `${e.titre} ${d.personne.nom}`).toBe(d.position);
+      }
+    }
+    for (const e of fixtures.ConsulterInstitution) {
+      const i = e.output;
+      if (i.type !== 'an' && i.type !== 'senat') continue;
+      expect(i.membres.length, e.titre).toBe(i.sieges);
+      for (const g of i.groupes) expect(i.membres.filter((m) => m.personne.groupe?.id === g.groupe.id).length, g.groupe.abrege).toBe(g.sieges);
     }
   });
 

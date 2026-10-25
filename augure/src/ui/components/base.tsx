@@ -7,10 +7,10 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type
 
 import type { Decompte } from '@/core';
 import { useLarge } from '../hooks/miseEnPage';
-import { usePalette } from '../theme/ThemeProvider';
+import { aLEchelle, useEchelle, usePalette } from '../theme/ThemeProvider';
 import { radius, space, type, type TypeVariant } from '../theme/tokens';
 
-type Ton = 'ink' | 'inkMuted' | 'signal';
+type Ton = 'ink' | 'inkSoft' | 'inkMuted' | 'signal' | 'caution';
 
 export function T({
   variant = 'body',
@@ -20,7 +20,8 @@ export function T({
   ...props
 }: TextProps & { variant?: TypeVariant; ton?: Ton; couleur?: string; style?: StyleProp<TextStyle> }) {
   const p = usePalette();
-  return <Text {...props} style={[type[variant], { color: couleur ?? p[ton] }, style]} />;
+  const echelle = useEchelle();
+  return <Text {...props} style={[aLEchelle(type[variant], echelle), { color: couleur ?? p[ton] }, style]} />;
 }
 
 /** Titre d'écran (h1) : 30 px en portrait, 44 px en large ; `surtitre` en étiquette au-dessus. */
@@ -53,7 +54,7 @@ export function TitreSection({ children, action }: { children: ReactNode; action
   );
 }
 
-/** Carte du canevas : fond `surface-raised`, rayon 4, 16 px (20 en large) ; cliquable si `onPress`. */
+/** Carte du design system v2 : fond `surface-raised`, rayon 10, 20 px (28 en large) ; cliquable si `onPress`. */
 export function Carte({
   children,
   onPress,
@@ -73,7 +74,7 @@ export function Carte({
   const fond: ViewStyle = contour
     ? { borderWidth: 1, borderColor: p.line, backgroundColor: 'transparent' }
     : { backgroundColor: p.surfaceRaised };
-  const forme = [styles.carte, { padding: large ? space[5] : space[4] }, fond, style];
+  const forme = [styles.carte, { padding: large ? space[7] : space[5] }, fond, style];
   if (!onPress) return <View style={forme}>{children}</View>;
   return (
     <Pressable
@@ -87,7 +88,7 @@ export function Carte({
   );
 }
 
-/** Ligne de liste (52 px au moins, filet `line` en bas), cliquable si `onPress`. */
+/** Ligne de liste (64 px au moins, filet `line` en bas), cliquable si `onPress`. */
 export function Ligne({ children, onPress, accessibilityLabel }: { children: ReactNode; onPress?: () => void; accessibilityLabel?: string }) {
   const p = usePalette();
   const forme = [styles.ligne, { borderBottomColor: p.line }];
@@ -114,7 +115,7 @@ export function Carre({ couleur, taille = 10 }: { couleur: string; taille?: numb
   return <View style={{ width: taille, height: taille, borderWidth: 1.5, borderColor: couleur }} />;
 }
 
-/** Étiquette mono en majuscules : `577 SIÈGES`, `SCRUTIN N° 2214`. */
+/** Étiquette en casse normale, sans 500 (« 577 sièges », « Scrutin n° 2214 »). */
 export function Label(props: TextProps & { ton?: Ton; couleur?: string; style?: StyleProp<TextStyle> }) {
   return <T variant="label" ton="inkMuted" {...props} />;
 }
@@ -188,8 +189,9 @@ export function Segmente<K extends string>({
   label: string;
 }) {
   const p = usePalette();
+  const large = useLarge();
   return (
-    <View accessibilityRole="tablist" accessibilityLabel={label} style={[styles.segmente, { borderColor: p.lineStrong }]}>
+    <View accessibilityRole="tablist" accessibilityLabel={label} style={[styles.segmente, { backgroundColor: p.surfaceRaised }, large && styles.segmenteLarge]}>
       {options.map((o) => {
         const actif = o.cle === valeur;
         return (
@@ -198,9 +200,9 @@ export function Segmente<K extends string>({
             accessibilityRole="tab"
             accessibilityState={{ selected: actif }}
             onPress={() => onChange(o.cle)}
-            style={[styles.segment, { backgroundColor: actif ? p.ink : 'transparent' }]}
+            style={[styles.segment, { backgroundColor: actif ? p.ink : 'transparent', paddingHorizontal: large ? space[5] : space[3] }]}
           >
-            <T variant="label" couleur={actif ? p.surface : p.inkMuted}>
+            <T variant="heading" style={styles.segmentTexte} couleur={actif ? p.surface : p.inkSoft}>
               {o.libelle}
             </T>
           </Pressable>
@@ -321,15 +323,17 @@ export function Separateur() {
 
 const styles = StyleSheet.create({
   titreAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
-  carte: { borderRadius: radius.md, gap: 10, minWidth: 0 },
-  ligne: { flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 52, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  chambre: { minWidth: 52, minHeight: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space[1] },
-  barre: { flexDirection: 'row', gap: 2, overflow: 'hidden' },
-  segmente: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.sm, padding: 2, gap: 2 },
-  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  carte: { borderRadius: radius.lg, gap: 14, minWidth: 0 },
+  ligne: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  chambre: { minWidth: 52, minHeight: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.full, paddingHorizontal: space[2] },
+  barre: { flexDirection: 'row', gap: 2, overflow: 'hidden', borderRadius: radius.full },
+  segmente: { flexDirection: 'row', borderRadius: radius.md, padding: space[1], gap: space[1] },
+  segmenteLarge: { alignSelf: 'flex-start', maxWidth: '100%' },
+  segment: { flexGrow: 1, flexBasis: 0, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  segmentTexte: { fontSize: 15 },
   action: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  secondaire: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space[3] },
-  panneau: { borderRadius: radius.md, padding: space[4], gap: space[3] },
-  puce: { flexShrink: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: space[3], borderWidth: 1, borderRadius: radius.sm },
+  secondaire: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.full, paddingHorizontal: space[4] },
+  panneau: { borderRadius: radius.lg, padding: space[5], gap: space[3] },
+  puce: { flexShrink: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: space[4], borderWidth: 1, borderRadius: radius.full },
   ongletFiche: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2 },
 });

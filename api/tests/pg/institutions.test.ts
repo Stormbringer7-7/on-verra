@@ -42,9 +42,13 @@ describe.skipIf(!URL_LECTURE)('PgInstitutions (base réelle, lecture seule)', ()
     expect(abreges).toEqual(expect.arrayContaining(['RN', 'EPR', 'LFI-NFP', 'SOC', 'DR', 'NI']));
     expect(new Set(abreges).size).toBe(abreges.length);
     expect(an.groupes.find((g) => g.groupe.abrege === 'RN')!.groupe.couleur).toMatch(/^#[0-9A-F]{6}$/i);
-    // Ordre stable : effectif décroissant (pas de numéro de siège dans canon).
-    const sieges = an.groupes.map((g) => g.sieges);
-    expect(sieges).toEqual([...sieges].sort((a, b) => b - a));
+    // De gauche à droite d'après les sièges publiés (lecture.position_groupe) ; non-inscrits en dernier.
+    const ordre = an.groupes.map((g) => g.groupe.abrege);
+    expect(ordre.indexOf('LFI-NFP')).toBeLessThan(ordre.indexOf('SOC'));
+    expect(ordre.indexOf('SOC')).toBeLessThan(ordre.indexOf('EPR'));
+    expect(ordre.indexOf('EPR')).toBeLessThan(ordre.indexOf('DR'));
+    expect(ordre.indexOf('DR')).toBeLessThan(ordre.indexOf('RN'));
+    expect(ordre[ordre.length - 1]).toBe('NI');
   });
 
   it('Sénat : groupes du Sénat lui-même (pas les copies de l’AMO), un sénateur compté une fois', async () => {
@@ -59,6 +63,23 @@ describe.skipIf(!URL_LECTURE)('PgInstitutions (base réelle, lecture seule)', ()
       { ids },
     );
     expect(systemes.map((s) => s.systeme)).toEqual(['SENAT']);
+  });
+
+  it('composition nominative : chaque parlementaire une fois, avec son groupe, rangé comme les groupes', async () => {
+    for (const ch of ['an', 'senat'] as const) {
+      const t0 = Date.now();
+      const c = await depot.chambre(ch, '2026-10-24');
+      expect(Date.now() - t0, ch).toBeLessThan(5_000);
+      expect(c.membres).toHaveLength(c.sieges);
+      expect(new Set(c.membres.map((m) => m.personne.id)).size).toBe(c.membres.length);
+      for (const g of c.groupes) expect(c.membres.filter((m) => m.personne.groupe?.id === g.groupe.id).length, g.groupe.abrege).toBe(g.sieges);
+      const rangs = new Map(c.groupes.map((g) => [g.groupe.id, g.rang]));
+      const suite = c.membres.map((m) => (m.personne.groupe ? (rangs.get(m.personne.groupe.id) ?? 99) : 99));
+      expect(suite).toEqual([...suite].sort((a, b) => a - b));
+    }
+    // Sénat : le « N° de siège Hémicycle » publié pour presque tous (347 sur 348 au 25/10/2026).
+    const senat = await depot.chambre('senat', '2026-10-24');
+    expect(senat.membres.filter((m) => m.siege !== null).length).toBeGreaterThan(300);
   });
 
   it('Gouvernement au 24/10/2026 : Lecornu II, Premier ministre en tête, gouvernements de la législature', async () => {

@@ -100,10 +100,11 @@ function ContenuScrutin({ fiche: f }: { fiche: FicheScrutin }) {
                 {f.nonVotants > 0 && <T variant="data" ton="inkMuted">{`· ${f.nonVotants} non-votants`}</T>}
                 <T variant="data" ton="inkMuted">{`· ${f.absents} absents`}</T>
               </View>
-              <Hemicycle groupes={f.groupes} />
+              <Hemicycle groupes={f.groupes} votes={f.votes} onPersonne={(id) => aller.personne(id)} />
               <T variant="caption" ton="inkMuted">
-                {`Un point par ${s.chambre === 'AN' ? 'député' : 'sénateur'} en mandat ce jour-là, groupes de la gauche vers la droite ; la place d’un point n’est pas son siège. « Absent » : en mandat, sans vote publié.`}
+                {`Un point par ${s.chambre === 'AN' ? 'député' : 'sénateur'} en mandat ce jour-là, groupes de la gauche vers la droite, puis dans l’ordre des sièges publiés (pas le plan exact de la salle). « Absent » : en mandat, sans vote publié.`}
               </T>
+              <Action onPress={() => aller.onglet('Carte', { scrutin: s.id })}>Ce vote, département par département →</Action>
             </Section>
             <Section titre="Qui a voté quoi">
               {f.groupes.map((g) => (

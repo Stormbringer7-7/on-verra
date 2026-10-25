@@ -2,20 +2,24 @@
 // groupe (couleurs publiées), Gouvernement en fonction et gouvernements de la législature,
 // décisions récentes du Conseil constitutionnel reliées à leur dossier. `canon` seulement.
 //
-// Ordre des groupes : canon ne garde pas le numéro de siège des votants (`numPlace` reste dans le
-// brut), si bien que la gauche et la droite de l'hémicycle ne sont pas connues ; les groupes sont
-// rangés par effectif décroissant, puis par sigle (ordre stable), et `rang` suit cet ordre.
+// Ordre des groupes : de la gauche vers la droite d'après les sièges publiés (`gaucheDroite`,
+// `lecture.position_groupe`) quand ils le permettent (AN) ; sinon par effectif décroissant, puis par
+// sigle (ordre stable). Membres : chaque parlementaire, avec son siège publié (`ordreHemicycle`).
 
-import type { DecisionCC, GouvernementResume, Institution, MembreGouvernement, Provenance } from '@contrat/domain/model';
+import type { DecisionCC, GouvernementResume, GroupeRef, Institution, MembreGouvernement, Provenance, Siegeant } from '@contrat/domain/model';
 import type { InstitutionsRepository, SqlDatabase } from '../../ports';
 import {
   actif,
   dossiersRef,
+  feminin,
+  gaucheDroite,
   gouvernementALaDateSql,
   groupe,
   groupeALaDateSql,
   jour,
   membreDuGouvernementSql,
+  ordreHemicycle,
+  positionsDesGroupes,
   provenance,
   provenanceSql,
   titrePublie,
@@ -65,15 +69,29 @@ export class PgInstitutions implements InstitutionsRepository {
   async chambre(chambre: 'an' | 'senat', date: string): Promise<Chambre> {
     const ch = chambre === 'an' ? 'AN' : 'SENAT';
     const params = { type: chambre === 'an' ? 'depute' : 'senateur', chambre: ch, date };
+    // Siège : AN, celui du dernier vote publié avec un siège dans les 180 jours avant la date (lu
+    // scrutin par scrutin : 7 fois plus rapide que personne par personne) ; Sénat, le « N° de siège
+    // Hémicycle » actuel (lien `siege`, lu par sénateur : l'index de `de_id` sert).
+    const sieges =
+      ch === 'AN'
+        ? `SELECT DISTINCT ON (v.personne_id) v.personne_id, v.siege
+           FROM canon.scrutin s JOIN canon.vote v ON v.scrutin_id = s.entite_id
+           WHERE s.chambre = 'AN' AND s.date BETWEEN $date::date - 180 AND $date::date AND v.siege IS NOT NULL
+           ORDER BY v.personne_id, s.date DESC`
+        : `SELECT m.personne_id, (SELECT (l.attributs->>'numero')::int FROM canon.lien l
+             WHERE l.de_id = m.personne_id AND l.nature = 'siege' AND l.attributs ? 'numero' LIMIT 1) AS siege
+           FROM m`;
     const [lignes, legislature] = await Promise.all([
-      this.db.all<{ groupe: Parameters<typeof groupe>[0]; sieges: number }>(
+      this.db.all<{ id: string; nom: string; civilite: string | null; groupe: Parameters<typeof groupe>[0]; siege: number | null }>(
         `WITH m AS (
            SELECT DISTINCT f.personne_id FROM canon.fonction f
            WHERE f.type = $type AND f.debut <= $date::date AND (f.fin IS NULL OR f.fin >= $date::date)
              AND ${actif('f.entite_id')} AND ${actif('f.personne_id')}),
-         g AS (SELECT (${groupeALaDateSql('m.personne_id', '$chambre', '$date::date')})::jsonb AS groupe FROM m)
-         SELECT groupe, count(*)::int AS sieges FROM g GROUP BY groupe
-         ORDER BY count(*) DESC, groupe->>'abrege'`,
+         sieges AS (${sieges})
+         SELECT m.personne_id::text AS id, p.nom_affiche AS nom, p.civilite,
+                (${groupeALaDateSql('m.personne_id', '$chambre', '$date::date')})::jsonb AS groupe, sg.siege
+         FROM m JOIN canon.personne p ON p.entite_id = m.personne_id
+         LEFT JOIN sieges sg ON sg.personne_id = m.personne_id`,
         params,
       ),
       ch === 'AN'
@@ -86,17 +104,33 @@ export class PgInstitutions implements InstitutionsRepository {
           )
         : Promise.resolve(null),
     ]);
-    const groupes = lignes
-      .filter((l) => l.groupe)
-      .map((l, rang) => ({ groupe: groupe(l.groupe)!, sieges: l.sieges, rang }));
+    // Gauche → droite d'après les sièges publiés quand ils le permettent (AN) ; sinon par taille.
+    const parGroupe = new Map<string, { groupe: GroupeRef; sieges: number }>();
+    for (const l of lignes) {
+      const g = groupe(l.groupe);
+      if (g) parGroupe.set(g.id, { groupe: g, sieges: (parGroupe.get(g.id)?.sieges ?? 0) + 1 });
+    }
+    const parTaille = [...parGroupe.values()].sort((a, b) => b.sieges - a.sieges || a.groupe.abrege.localeCompare(b.groupe.abrege));
+    const positions = await positionsDesGroupes(this.db, parTaille.map((g) => g.groupe.id));
+    const groupes = gaucheDroite(parTaille, (g) => g.groupe, positions).map((g, rang) => ({ ...g, rang }));
+    const rangs = new Map(groupes.map((g) => [g.groupe.id, g.rang]));
+    const membres: Siegeant[] = lignes
+      .map((l) => {
+        const g = groupe(l.groupe);
+        const f = feminin(l.civilite);
+        const titre = ch === 'AN' ? (f ? 'Députée' : 'Député') : f ? 'Sénatrice' : 'Sénateur';
+        return { personne: { id: l.id, nom: l.nom, fonction: g ? `${titre} · ${g.libelle}` : titre, groupe: g }, siege: l.siege };
+      })
+      .sort(ordreHemicycle(rangs));
     return {
       type: chambre,
       libelle: chambre === 'an' ? 'Assemblée nationale' : 'Sénat',
       legislature: legislature?.legislature ?? null,
       date,
-      sieges: lignes.reduce((s, l) => s + l.sieges, 0),
+      sieges: lignes.length,
       groupes,
-      sansGroupe: lignes.filter((l) => !l.groupe).reduce((s, l) => s + l.sieges, 0),
+      sansGroupe: membres.filter((m) => !m.personne.groupe).length,
+      membres,
     };
   }
 

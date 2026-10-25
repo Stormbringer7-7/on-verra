@@ -1,8 +1,9 @@
 // Fixtures : institutions du canevas (hémicycles par groupe, Gouvernement, Conseil constitutionnel).
 
 import type { GroupeRef, Institution } from '../../core/domain/model';
-import { D, G, P, comme, lienFictif, prov } from './entites';
+import { D, P, comme, lienFictif, prov } from './entites';
 import { RESUMES } from './dossiers';
+import { COMPOSITION_AN, COMPOSITION_SENAT, SIEGEANTS_AN, SIEGEANTS_SENAT } from './sieges';
 
 const sieges = (lignes: [GroupeRef, number][]) => lignes.map(([groupe, n], rang) => ({ groupe, sieges: n, rang }));
 
@@ -13,8 +14,9 @@ export const INSTITUTIONS: Record<'an' | 'senat' | 'gouvernement' | 'cc', Instit
     legislature: '17',
     date: '2026-10-24',
     sieges: 577,
-    groupes: sieges([[G.A, 152], [G.B, 118], [G.C, 98], [G.D, 71], [G.E, 59], [G.F, 50], [G.NI, 29]]),
+    groupes: sieges(COMPOSITION_AN),
     sansGroupe: 0,
+    membres: SIEGEANTS_AN,
   },
   senat: {
     type: 'senat',
@@ -22,8 +24,9 @@ export const INSTITUTIONS: Record<'an' | 'senat' | 'gouvernement' | 'cc', Instit
     legislature: null,
     date: '2026-10-24',
     sieges: 348,
-    groupes: sieges([[G.S1, 145], [G.S2, 92], [G.S3, 64], [G.S4, 33], [G.NIS, 14]]),
+    groupes: sieges(COMPOSITION_SENAT),
     sansGroupe: 0,
+    membres: SIEGEANTS_SENAT,
   },
   gouvernement: {
     type: 'gouvernement',

@@ -1,39 +1,25 @@
-// Recherche (canevas, « Rechercher ») : un mot, tous les types ou un seul. Sans mot ni type :
-// « Par où commencer ». Une section par type (dossiers, personnes, amendements, scrutins,
-// organisations) ; filtrée par type, la liste est paginée.
+// Recherche (design v4, canevas « Recherche ») : un mot, un nom ou un numéro. Six familles, quatre
+// d'objets et deux de faits, chacune avec son nombre ; une famille choisie s'affine par ses
+// déclinaisons. Sans mot : on parcourt. Un numéro officiel (CE123, scrutin 1874) donne le résultat
+// exact, ou les candidats quand il est ambigu (n° 655), chacun avec son dossier et sa chambre.
+// Une déclinaison seule : sa liste paginée. Chaque résultat ouvre sa fiche.
 
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
-import { Rechercher, type Trouve, type TypeRecherche } from '@/core';
-import { useAller, type Onglets } from '../../navigation';
-import { BoutonSecondaire, Carre, IconeRecherche, Label, Ligne, Pastille, Puce, T, TitreSection } from '../components/base';
+import { ChercherParFamilles, type DeclinaisonRecherche, type FamilleRecherche, type SectionRecherche } from '@/core';
+import { type Onglets } from '../../navigation';
+import { IconeRecherche, Puce, T } from '../components/base';
 import { Chargement, Ecran, Erreur } from '../components/Ecran';
+import { Avertissement, Puces } from '../components/fondations';
 import { nombre } from '../format';
 import { useCommand } from '../hooks/core';
-import { demandeRecherche, LONGUEUR_MIN, type Filtre } from '../recherche';
 import { useLarge } from '../hooks/miseEnPage';
+import { PucesFamilles, Resultat, Section } from '../components/recherche/Resultats';
+import { demandeFamilles, libelleCompte } from '../recherche';
 import { usePalette } from '../theme/ThemeProvider';
 import { fonts, radius, space } from '../theme/tokens';
-
-const TYPES: { cle: Filtre; libelle: string }[] = [
-  { cle: 'tout', libelle: 'Tout' },
-  { cle: 'dossiers', libelle: 'Dossiers' },
-  { cle: 'personnes', libelle: 'Personnes' },
-  { cle: 'amendements', libelle: 'Amendements' },
-  { cle: 'scrutins', libelle: 'Scrutins' },
-  { cle: 'organisations', libelle: 'Organisations' },
-];
-
-const libelleType = (t: TypeRecherche) => TYPES.find((x) => x.cle === t)!.libelle;
-
-const COMMENCER: { titre: string; aide: string; type: TypeRecherche }[] = [
-  { titre: 'Suivre une loi', aide: 'Un dossier, du dépôt au Journal officiel', type: 'dossiers' },
-  { titre: 'Une personne', aide: 'Ses fonctions, ses votes, ses déclarations', type: 'personnes' },
-  { titre: 'Un amendement', aide: 'Qui a proposé quoi, et ce qu’il est devenu', type: 'amendements' },
-  { titre: 'Un groupe d’intérêts', aide: 'Actions déclarées et dossiers rapprochés', type: 'organisations' },
-];
 
 /** Délai avant de lancer la recherche pendant la frappe. */
 const ATTENTE_MS = 300;
@@ -46,48 +32,13 @@ function useDiffere<T>(valeur: T, ms: number): T {
   return differee;
 }
 
-function Resultat({ trouve }: { trouve: Trouve }) {
-  const p = usePalette();
-  const aller = useAller();
-  const ouvrir = () => {
-    switch (trouve.type) {
-      case 'dossiers':
-        return aller.dossier(trouve.id);
-      case 'personnes':
-        return aller.personne(trouve.id);
-      case 'amendements':
-        return aller.amendement(trouve.id);
-      case 'scrutins':
-        return aller.scrutin(trouve.id);
-      case 'organisations':
-        // Organisations trouvées : les représentants d'intérêts (seule fiche d'organisation de l'app).
-        return aller.representant(trouve.id);
-    }
-  };
-  return (
-    <Ligne onPress={ouvrir} accessibilityLabel={`${trouve.titre}. ${trouve.contexte}`}>
-      {trouve.type === 'personnes' ? (
-        // Couleur du groupe (donnée), ou neutre sans groupe.
-        <Pastille couleur={trouve.groupe?.couleur ?? p.lineStrong} />
-      ) : (
-        <Carre couleur={p.lineStrong} />
-      )}
-      <View style={styles.resultat}>
-        <T variant="text" style={styles.titre}>
-          {trouve.titre}
-        </T>
-        <Label style={styles.contexte}>{trouve.contexte}</Label>
-      </View>
-    </Ligne>
-  );
-}
-
 export function Recherche() {
   const p = usePalette();
   const large = useLarge();
   const route = useRoute<RouteProp<Onglets, 'Recherche'>>();
   const [q, setQ] = useState(route.params?.q ?? '');
-  const [type, setType] = useState<Filtre>('tout');
+  const [famille, setFamille] = useState<FamilleRecherche | null>(null);
+  const [declinaisons, setDeclinaisons] = useState<DeclinaisonRecherche[]>([]);
   const [page, setPage] = useState(1);
   const qDiffere = useDiffere(q, ATTENTE_MS);
 
@@ -99,32 +50,49 @@ export function Recherche() {
     if (qRoute !== undefined) setQ(qRoute);
   }
 
-  const demande = demandeRecherche(qDiffere, type, page);
-  const resultat = useCommand(demande ? Rechercher(demande) : null);
-  const choisir = (t: Filtre) => {
-    setType(t);
-    setPage(1);
-  };
+  const demande = demandeFamilles(qDiffere, famille, declinaisons, page);
+  const resultat = useCommand(ChercherParFamilles(demande));
+  const donnees = resultat.statut !== 'erreur' ? resultat.donnees : undefined;
+
   const changerMot = (texte: string) => {
     setQ(texte);
     setPage(1);
   };
+  const choisirFamille = (f: FamilleRecherche) => {
+    setFamille(famille === f ? null : f);
+    setDeclinaisons([]);
+    setPage(1);
+  };
+  const basculer = (d: DeclinaisonRecherche) => {
+    setDeclinaisons(declinaisons.includes(d) ? declinaisons.filter((x) => x !== d) : [...declinaisons, d]);
+    setPage(1);
+  };
+  const voirTout = (s: SectionRecherche) => {
+    setFamille(s.famille);
+    setDeclinaisons([s.declinaison]);
+    setPage(1);
+  };
 
-  const explorer = q.trim().length < LONGUEUR_MIN && type === 'tout';
-  const donnees = demande && resultat.statut !== 'erreur' ? resultat.donnees : undefined;
-  const sections = donnees?.sections.filter((s) => s.resultats.elements.length > 0) ?? [];
+  const objets = donnees?.familles.filter((f) => f.nature === 'objet') ?? [];
+  const faits = donnees?.familles.filter((f) => f.nature === 'fait') ?? [];
+  const ouverte = donnees?.familles.find((f) => f.famille === famille) ?? null;
+  const numero = donnees?.numero ?? null;
+  const exact = numero && numero.candidats.length > 0 ? numero.candidats : null;
+  const detail = donnees?.sections.length === 1 && (demande.declinaisons?.length ?? 0) === 1;
 
   return (
     <Ecran>
-      <View style={[styles.champBloc, large && styles.champLarge]}>
-        <Label>Rechercher</Label>
+      <View style={[styles.entete, large && styles.enteteLarge]}>
+        <T variant="display" accessibilityRole="header">
+          Recherche
+        </T>
         <View style={[styles.champ, { backgroundColor: p.surfaceSunken, borderColor: p.lineStrong }]}>
           <IconeRecherche couleur={p.inkMuted} />
           <TextInput
-            accessibilityLabel="Rechercher un dossier, une personne, un amendement, une organisation"
+            accessibilityLabel="Rechercher : un mot, un nom, un numéro"
             value={q}
             onChangeText={changerMot}
-            placeholder="Dossier, personne, amendement, organisation…"
+            placeholder="Un mot, un nom, un numéro (CE123, scrutin 1874…)"
             placeholderTextColor={p.inkMuted}
             autoCorrect={false}
             returnKeyType="search"
@@ -134,94 +102,91 @@ export function Recherche() {
         </View>
       </View>
 
-      <ScrollView
-        horizontal={!large}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.types, large && styles.typesLarges]}
-        accessibilityRole="tablist"
-        accessibilityLabel="Type"
-      >
-        {TYPES.map((t) => (
-          <Puce key={t.cle} actif={type === t.cle} onPress={() => choisir(t.cle)}>
-            {t.libelle}
-          </Puce>
-        ))}
-      </ScrollView>
+      {exact && (
+        <View style={[styles.exact, { backgroundColor: p.surfaceRaised, borderColor: p.inkSoft }]}>
+          <T variant="label" ton="inkSoft">
+            {exact.length > 1
+              ? `${nombre(exact.length)} objets portent ce numéro : précisez avec le dossier ou la chambre`
+              : 'Résultat exact'}
+          </T>
+          {exact.map((r) => (
+            <Resultat key={`${r.declinaison}:${r.id}`} r={r} />
+          ))}
+        </View>
+      )}
+      {numero && !exact && (
+        <Avertissement titre={`Aucun objet ne porte le numéro « ${numero.saisi} »`}>
+          Voici les résultats du mot, tel quel.
+        </Avertissement>
+      )}
 
-      {explorer && (
-        <View style={styles.section}>
-          <TitreSection>Par où commencer</TitreSection>
-          <View style={styles.grille}>
-            {COMMENCER.map((c) => (
-              <Pressable
-                key={c.type}
-                accessibilityRole="button"
-                onPress={() => choisir(c.type)}
-                style={[styles.depart, large && styles.departLarge, { backgroundColor: p.surfaceRaised, borderColor: p.line }]}
-              >
-                <T variant="heading">{c.titre}</T>
-                <T variant="small" ton="inkMuted">
-                  {c.aide}
-                </T>
-              </Pressable>
-            ))}
-          </View>
+      {donnees && (
+        <View style={styles.familles}>
+          <T variant="label" ton="inkMuted">
+            Objets
+          </T>
+          <PucesFamilles familles={objets} famille={famille} choisir={choisirFamille} />
+          <T variant="label" ton="inkMuted">
+            Faits
+          </T>
+          <PucesFamilles familles={faits} famille={famille} choisir={choisirFamille} />
+          {ouverte && (
+            <View style={[styles.affiner, { backgroundColor: p.surfaceRaised, borderColor: p.line }]}>
+              <T variant="small" ton="inkMuted">
+                {`${ouverte.libelle} : affiner`}
+              </T>
+              <Puces label={`${ouverte.libelle} : déclinaisons`}>
+                {ouverte.declinaisons
+                  .filter((d) => d.indisponible === null)
+                  .map((d) => (
+                    <Puce
+                      key={d.declinaison}
+                      variante="contour"
+                      actif={declinaisons.includes(d.declinaison)}
+                      onPress={() => basculer(d.declinaison)}
+                      accessibilityLabel={`${d.libelle}, ${libelleCompte(d.compte, nombre)} résultats`}
+                    >
+                      {`${d.libelle} ${libelleCompte(d.compte, nombre)}`}
+                    </Puce>
+                  ))}
+              </Puces>
+              {ouverte.declinaisons
+                .filter((d) => d.indisponible !== null)
+                .map((d) => (
+                  <T key={d.declinaison} variant="small" ton="inkMuted">
+                    {`${d.libelle} : ${d.indisponible}`}
+                  </T>
+                ))}
+            </View>
+          )}
         </View>
       )}
 
-      {!explorer && !demande && (
-        <T ton="inkMuted">Tapez au moins {LONGUEUR_MIN} lettres pour chercher parmi les {libelleType(type as TypeRecherche).toLowerCase()}.</T>
+      {resultat.statut === 'erreur' && <Erreur message={resultat.message} onReessayer={resultat.recharger} />}
+      {resultat.statut === 'chargement' && !donnees && <Chargement libelle="Recherche" />}
+
+      {donnees && !exact && (
+        <View style={styles.resultats}>
+          <T variant="title" accessibilityRole="header">
+            {donnees.q ? 'Résultats' : 'Parcourir'}
+          </T>
+          {donnees.sections.map((s) => (
+            <Section key={s.declinaison} s={s} detail={detail} voirTout={() => voirTout(s)} page={setPage} />
+          ))}
+          {donnees.sections.length === 0 && <T ton="inkMuted">Aucun résultat. Essayez un autre mot, ou retirez une puce.</T>}
+        </View>
       )}
-      {demande && resultat.statut === 'erreur' && <Erreur message={resultat.message} onReessayer={resultat.recharger} />}
-      {demande && resultat.statut === 'chargement' && !donnees && <Chargement libelle="Recherche" />}
-
-      {sections.map((s) => {
-        const r = s.resultats;
-        const total = r.total ?? (r.suivante ? `${nombre(r.elements.length)}+` : r.elements.length);
-        return (
-          <View key={s.type}>
-            <Label>
-              {libelleType(s.type)} · {typeof total === 'number' ? nombre(total) : total}
-            </Label>
-            {r.elements.map((t) => (
-              <Resultat key={`${t.type}:${t.id}`} trouve={t} />
-            ))}
-            {type === 'tout' && r.suivante !== null && (
-              <Pressable accessibilityRole="button" onPress={() => choisir(s.type)} style={styles.plus}>
-                <Label ton="signal">Tous les {libelleType(s.type).toLowerCase()} →</Label>
-              </Pressable>
-            )}
-            {type !== 'tout' && (r.page > 1 || r.suivante !== null) && (
-              <View style={styles.pages}>
-                {r.page > 1 && <BoutonSecondaire onPress={() => setPage(r.page - 1)}>← Précédents</BoutonSecondaire>}
-                <Label>Page {r.page}</Label>
-                {r.suivante !== null && <BoutonSecondaire onPress={() => setPage(r.suivante!)}>Suivants →</BoutonSecondaire>}
-              </View>
-            )}
-          </View>
-        );
-      })}
-
-      {donnees && sections.length === 0 && <T ton="inkMuted">Aucun résultat. Essayez un autre mot ou un autre type.</T>}
     </Ecran>
   );
 }
 
 const styles = StyleSheet.create({
-  champBloc: { gap: 6 },
-  champLarge: { maxWidth: 880 },
-  champ: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, borderWidth: 1, borderRadius: radius.sm },
-  saisie: { flex: 1, minWidth: 0, minHeight: 48, fontFamily: fonts.sans, fontSize: 18 },
-  types: { gap: 6 },
-  typesLarges: { flexDirection: 'row', flexWrap: 'wrap' },
-  section: { gap: 10 },
-  grille: { flexDirection: 'row', flexWrap: 'wrap', gap: space[3] },
-  // Deux par ligne en large (canevas : grille de cartes), une par ligne en portrait.
-  departLarge: { flexBasis: '40%' },
-  depart: { flexGrow: 1, flexBasis: '100%', minHeight: 76, gap: space[1], padding: 14, borderWidth: 1, borderRadius: radius.md },
-  resultat: { flex: 1, minWidth: 0, gap: 2 },
-  titre: { lineHeight: 20 },
-  contexte: { letterSpacing: 0.44 },
-  plus: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  pages: { flexDirection: 'row', alignItems: 'center', gap: space[3], paddingTop: space[3] },
+  entete: { gap: space[3] },
+  enteteLarge: { maxWidth: 880 },
+  champ: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 16, borderWidth: 1, borderRadius: radius.full },
+  saisie: { flex: 1, minWidth: 0, minHeight: 48, fontFamily: fonts.sans, fontSize: 17 },
+  exact: { gap: space[2], padding: space[4], borderWidth: 1.5, borderRadius: radius.lg },
+  familles: { gap: space[3] },
+  affiner: { gap: space[2], padding: 14, borderWidth: 1, borderRadius: radius.lg },
+  resultats: { gap: space[6] },
 });

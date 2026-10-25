@@ -13,6 +13,16 @@ export interface GroupeSiegeant {
   rang: number;
 }
 
+/** Parlementaire en mandat à la date de la composition ; `personne.groupe` : son groupe ce jour-là. */
+export interface Siegeant {
+  personne: PersonneRef;
+  /**
+   * Siège publié, null sinon. AN : celui de son dernier vote en scrutin public (`numPlace`,
+   * numéroté de la droite vers la gauche). Sénat : « N° de siège Hémicycle » de l'export du Sénat.
+   */
+  siege: number | null;
+}
+
 export interface MembreGouvernement {
   personne: PersonneRef;
   /** Fonction telle que publiée (« Ministre de la Transition énergétique »). */
@@ -55,6 +65,12 @@ export type Institution =
       /** De la gauche vers la droite ; sièges sans groupe : non-inscrits (un groupe à part). */
       groupes: GroupeSiegeant[];
       sansGroupe: number;
+      /**
+       * Chaque parlementaire (au plus 577 ou 348 : pas de pagination, l'hémicycle les dessine tous),
+       * de la gauche vers la droite : groupe (`rang`), puis siège décroissant (AN), à défaut
+       * nom (ordre alphabétique, nombres compris) ; sans groupe à la fin.
+       */
+      membres: Siegeant[];
     }
   | {
       type: 'gouvernement';

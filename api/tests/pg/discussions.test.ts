@@ -92,7 +92,7 @@ describe.skipIf(!URL_LECTURE)('PgDiscussions (base réelle, lecture seule)', () 
         point: 'Protection et souveraineté agricoles',
       },
       compteRendu: {
-        url: 'https://www.assemblee-nationale.fr/dyn/opendata/CRSANR5L17S2026O1N237.html',
+        url: 'https://www.assemblee-nationale.fr/dyn/17/comptes-rendus/seance/CRSANR5L17S2026O1N237',
         ancre: "/compteRendu//paragraphe[@id_syceron='4091148']",
         provenance: { systeme: 'AN', type: 'intervention', idNatif: 'CRSANR5L17S2026O1N237#4091148' },
       },

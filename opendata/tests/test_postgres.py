@@ -119,6 +119,46 @@ class RevueRnePostgres(_Postgres, ContratRevueRne, unittest.TestCase):
 
 
 @unittest.skipIf(CX is None, "Postgres d'essais indisponible")
+class RelectureCompteRendu(unittest.TestCase):
+    """Compte rendu AN republié (provisoire puis définitif) : des interventions insérées décalent
+    l'ordre des suivantes (CRSANR5L17S2027O1N039 : 45 insérées, 440 décalées, 1 retirée)."""
+
+    @classmethod
+    def setUpClass(cls):
+        remettre_a_zero(CX)
+
+    def test_interventions_inserees_decalees_et_retirees(self):
+        from src.adaptateurs.sources.an import seances
+        from src.adaptateurs.stockage.postgres import EntrepotPostgres
+        from src.chargement import ContexteCanon, ecrire
+        from src.domaine import EnregistrementSource, Systeme
+        from src.identites import RegistreIdentites
+        from tests.test_sources_an import NS, compte_rendu, doc, par, point
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite CASCADE")
+        e = EntrepotPostgres(CX)
+        ctx = ContexteCanon(e, RegistreIdentites(e), {}, {})
+
+        def charger(version, *paragraphes):
+            with ctx.registre.transaction():
+                src, _ = e.enregistrer_source(EnregistrementSource(Systeme.AN, "cr", "CRS1", version))
+                for element in seances.seance(doc(seances.SEANCES, compte_rendu(point("X", "", *paragraphes))), NS, {}):
+                    ecrire(ctx, element, src, None)
+
+        # v1 : #1, #2, #3 ; v2 : #1, #9 et #4 insérés, #3 décalé du rang 2 au rang 3, #2 n'est plus publié
+        # (retiré, il garde son rang 1, que #9 occupe désormais)
+        charger("v1", par(1, "PA1", "A", "a"), par(2, "PA2", "B", "b"), par(3, "PA3", "C", "c"))
+        charger("v2", par(1, "PA1", "A", "a"), par(9, "PA4", "N", "n"), par(4, "PA5", "D", "d"), par(3, "PA3", "C", "c"))
+        lignes = CX.execute(
+            "SELECT c.id_source, i.ordre, e.retiree_de_la_source_le IS NOT NULL FROM canon.intervention i "
+            "JOIN canon.entite e ON e.entite_id = i.entite_id "
+            "JOIN canon.correspondance c ON c.entite_id = i.entite_id ORDER BY 1").fetchall()
+        self.assertEqual(lignes, [("CRS1#1", 0, False), ("CRS1#2", 1, True), ("CRS1#3", 3, False),
+                                  ("CRS1#4", 2, False), ("CRS1#9", 1, False)])
+        doubles = {c["nom"]: c["nombre"] for c in e.controles()}["intervention_ordre_en_double"]
+        self.assertEqual(doubles, 0)
+
+
+@unittest.skipIf(CX is None, "Postgres d'essais indisponible")
 class Projections(unittest.TestCase):
     """Un groupe de 4 députés, 2 scrutins : la participation se lit par rapport au groupe."""
 
@@ -207,3 +247,91 @@ class Projections(unittest.TestCase):
         self.assertRegex(premiere["NOUVEAU"][0], r"^#[0-9A-F]{6}$")
         ProjecteurPostgres(CX).projeter()
         self.assertEqual(couleurs(), premiere)  # on retombe sur les mêmes couleurs
+
+    def test_position_gauche_droite_et_couleur_par_les_sieges(self):
+        """Sièges AN (numPlace) : l'AN numérote de la droite vers la gauche ; un groupe sans couleur
+        connue prend celle de sa position sur le dégradé rouge (gauche) → bleu (droite)."""
+        from datetime import date
+        from src.adaptateurs.stockage.postgres import EntrepotPostgres, ProjecteurPostgres
+        from src.chargement import ContexteCanon, ecrire
+        from src.domaine import EnregistrementSource, IdentiteNative, Systeme
+        from src.domaine.objets import Dependants, Objet
+        from src.identites import RegistreIdentites
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite CASCADE")
+        e = EntrepotPostgres(CX)
+        ctx = ContexteCanon(e, RegistreIdentites(e), {}, {})
+        AN = lambda t, i: IdentiteNative(Systeme.AN, t, i)
+        # GD siège à droite (sièges 1 et 3), GG à gauche (600 et 650), GM au milieu (300) ; aucun n'a de couleur
+        membres = {"P1": ("GD", 1), "P2": ("GD", 3), "P3": ("GM", 300), "P4": ("GG", 600), "P5": ("GG", 650)}
+        with ctx.registre.transaction():
+            src, _ = e.enregistrer_source(EnregistrementSource(Systeme.AN, "x", "y", "z"))
+            for g in ("GD", "GM", "GG"):
+                ecrire(ctx, Objet("organisation", AN("organe", g), {"type": "groupe_politique", "nom": g, "abrege": g,
+                                                                   "chambre": "AN"}), src, None)
+            for pa in membres:
+                ecrire(ctx, Objet("personne", AN("acteur", pa), {"nom": pa, "nom_affiche": pa}), src, None)
+            ecrire(ctx, Objet("scrutin", AN("scrutin", "S1"), {"chambre": "AN", "numero": "1", "date": date(2025, 3, 1),
+                                                              "titre": "S1"}), src, None)
+            ecrire(ctx, Dependants("vote", {"scrutin_id": AN("scrutin", "S1")}, [
+                {"personne_id": AN("acteur", pa), "position": "pour", "groupe_id": AN("organe", g), "par_delegation": False,
+                 "cause": None, "siege": siege} for pa, (g, siege) in membres.items()]), src, None)
+        ProjecteurPostgres(CX).projeter()
+        lus = {abrege: (float(position), couleur, source) for abrege, position, couleur, source in CX.execute(
+            "SELECT o.abrege, p.position, c.couleur, c.source FROM lecture.position_groupe p "
+            "JOIN lecture.couleur_groupe c USING (groupe_id) JOIN canon.organisation o ON o.entite_id = p.groupe_id")}
+        self.assertEqual(lus["GD"][0], round(1 - (2 - 1) / 649, 4))  # siège médian 2, bornes 1 et 650 : à droite
+        self.assertEqual(lus["GG"][0], round(1 - (625 - 1) / 649, 4))
+        self.assertLess(lus["GG"][0], lus["GM"][0])
+        self.assertEqual(lus["GD"][1:], ("#4A7FE0", "gauche_droite"))
+        self.assertEqual(lus["GG"][2], "gauche_droite")
+
+    def test_territoires_des_elus(self):
+        """Département publié par la chambre (lien `territoire`) : carte d'un scrutin, présence par
+        département (année en cours, comparée au groupe), Français de l'étranger hors carte."""
+        from datetime import date
+        from src.adaptateurs.stockage.postgres import EntrepotPostgres, ProjecteurPostgres
+        from src.chargement import ContexteCanon, ecrire
+        from src.domaine import EnregistrementSource, IdentiteNative, Systeme
+        from src.domaine.objets import Dependants, Objet
+        from src.identites import RegistreIdentites
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite CASCADE")
+        e = EntrepotPostgres(CX)
+        ctx = ContexteCanon(e, RegistreIdentites(e), {}, {})
+        AN = lambda t, i: IdentiteNative(Systeme.AN, t, i)
+        GIRONDE = IdentiteNative(Systeme.INSEE, "departement", "33")
+        # P1 et P2 : Gironde ; P3 : Français de l'étranger (aucun lien de territoire)
+        with ctx.registre.transaction():
+            src, _ = e.enregistrer_source(EnregistrementSource(Systeme.AN, "x", "y", "z"))
+            ecrire(ctx, Objet("organisation", GIRONDE, {"type": "departement", "nom": "Gironde"}), src, None)
+            ecrire(ctx, Objet("organisation", AN("organe", "GA"), {"type": "groupe_politique", "nom": "A", "chambre": "AN"}),
+                   src, None)
+            for pa, circo in (("P1", "2"), ("P2", "5"), ("P3", None)):
+                ecrire(ctx, Objet("personne", AN("acteur", pa), {"nom": pa, "nom_affiche": pa}), src, None)
+                ecrire(ctx, Objet("fonction", AN("mandat", f"M{pa}"), {"personne_id": AN("acteur", pa), "type": "depute",
+                                                                         "titre": "Député", "debut": date(2024, 7, 1)}), src, None)
+                ecrire(ctx, Objet("fonction", AN("mandat", f"G{pa}"), {"personne_id": AN("acteur", pa),
+                                                                         "organisation_id": AN("organe", "GA"),
+                                                                         "type": "membre_groupe", "titre": "Membre",
+                                                                         "debut": date(2024, 7, 1)}), src, None)
+                if circo:
+                    ecrire(ctx, Dependants("lien", {"de_id": AN("mandat", f"M{pa}"), "nature": "territoire"},
+                                           [{"vers_id": GIRONDE, "ordre": 0, "attributs": {"circonscription": circo}}]),
+                           src, None)
+            jour = date(date.today().year, 1, 15)
+            ecrire(ctx, Objet("scrutin", AN("scrutin", "S1"), {"chambre": "AN", "numero": "1", "date": jour, "titre": "S1",
+                                                              "legislature": "17"}), src, None)
+            ecrire(ctx, Dependants("vote", {"scrutin_id": AN("scrutin", "S1")}, [
+                {"personne_id": AN("acteur", p), "position": pos, "groupe_id": AN("organe", "GA"), "par_delegation": False,
+                 "cause": None} for p, pos in (("P1", "pour"), ("P3", "contre"))]), src, None)
+            ecrire(ctx, Dependants("position_groupe", {"scrutin_id": AN("scrutin", "S1")}, [
+                {"groupe_id": AN("organe", "GA"), "position_majoritaire": "pour", "membres": 3, "pour": 1, "contre": 1,
+                 "abstentions": 0, "non_votants": 0}]), src, None)
+        ProjecteurPostgres(CX).projeter()
+        self.assertEqual(CX.execute("SELECT chambre, code, circonscription FROM lecture.elu_departement "
+                                    "ORDER BY circonscription").fetchall(), [("AN", "33", "2"), ("AN", "33", "5")])
+        self.assertEqual(CX.execute("SELECT code, membres, pour, contre, absents FROM lecture.carte_scrutin").fetchall(),
+                         [("33", 2, 1, 0, 1)])
+        # Gironde : 1 participation sur 2 possibles ; attendu = participation du groupe (2 sur 3)
+        code, elus, occasions, taux, attendu = CX.execute(
+            "SELECT code, elus, occasions, taux, taux_attendu FROM lecture.presence_departement").fetchone()
+        self.assertEqual((code, elus, occasions, float(taux), float(attendu)), ("33", 2, 2, 50.0, 66.7))

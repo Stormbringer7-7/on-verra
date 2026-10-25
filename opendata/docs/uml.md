@@ -530,6 +530,7 @@ erDiagram
         bool par_delegation
         text cause
         uuid source_id FK
+        int siege
     }
     position_groupe {
         uuid scrutin_id PK, FK
@@ -901,6 +902,7 @@ Code : [amendement()](../src/adaptateurs/sources/an/amendements.py#L112)
 | acte du dossier qui cite le scrutin (`voteRefs`), sinon `objet/dossierLegislatif` | `dossier_id`, `etape_id` | références explicites, jamais par le titre |
 | numéro cité par le titre + `seanceRef` | `amendement_id` | l'amendement de ce numéro discuté dans cette séance ; ambigu ou introuvable → **revue** |
 | `decompteNominatif` : `acteurRef`, `parDelegation`, `causePositionVote` | `vote.personne_id`, `position`, `par_delegation`, `cause` | pours → pour, nonVotants → non_votant… |
+| `decompteNominatif` : `numPlace` | `vote.siege` | siège occupé ce jour-là ; numérotation de la droite (≈ 1) vers la gauche (≈ 650) : position gauche-droite des groupes (`lecture.position_groupe`) |
 | `groupe/organeRef`, `nombreMembresGroupe`, `decompteVoix` | `position_groupe.*` | tels quels |
 | `positionMajoritaire` | `position_groupe.position_majoritaire` | **recalculée** depuis le décompte (la valeur publiée est parfois fausse) ([majoritaire()](../src/adaptateurs/sources/an/scrutins.py#L58)) |
 

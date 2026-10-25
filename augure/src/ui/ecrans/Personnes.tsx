@@ -6,7 +6,7 @@ import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import type { Onglets } from '@/navigation';
+import type { Pages } from '@/navigation';
 import { Segmente, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
 import { Ecran } from '@/ui/components/Ecran';
@@ -16,7 +16,7 @@ import { Classements } from '@/ui/components/personnes/Classements';
 type Vue = 'annuaire' | 'classements';
 
 export function Personnes() {
-  const params = useRoute<RouteProp<Onglets, 'Personnes'>>().params;
+  const params = useRoute<RouteProp<Pages, 'Personnes'>>().params;
   const [vue, setVue] = useState<Vue>(params?.vue ?? 'annuaire');
 
   return (

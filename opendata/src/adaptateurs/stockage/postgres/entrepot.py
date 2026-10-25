@@ -527,13 +527,19 @@ class EntrepotPostgres:
              "SELECT 'fonction ' || entite_id FROM canon.fonction WHERE fin < debut UNION ALL "
              "SELECT 'organisation ' || entite_id FROM canon.organisation WHERE fin < debut UNION ALL "
              "SELECT 'etape ' || entite_id FROM canon.etape WHERE fin < debut"),
+            ("intervention_ordre_en_double", False,
+             "Deux interventions vivantes au même rang d'une réunion : un compte rendu republié n'a pas "
+             "retiré celles qu'il ne donne plus",
+             "SELECT i.reunion_id || ' #' || i.ordre FROM canon.intervention i "
+             "JOIN canon.entite e ON e.entite_id = i.entite_id AND e.retiree_de_la_source_le IS NULL "
+             "AND e.fusionnee_dans IS NULL GROUP BY i.reunion_id, i.ordre HAVING count(*) > 1"),
             ("cas_a_revoir", False, "Rapprochements en attente de revue humaine (rien n'en est appliqué)",
              "SELECT type || ' ' || cle FROM analytique.cas_revue WHERE statut = 'A_REVOIR'"),
         ]
         if self.cx.execute("SELECT to_regclass('lecture.couleur_groupe') IS NOT NULL").fetchone()[0]:
             requetes.append(
                 ("groupe_actif_couleur_arbitraire", False,
-                 "Groupe qui a des membres, sans couleur officielle ni famille : couleur de secours "
+                 "Groupe qui a des membres, sans couleur officielle, famille ni position : couleur de secours "
                  "(compléter lecture.couleur_groupe_famille, projections/12_couleur_groupe.sql)",
                  "SELECT o.chambre || ' ' || COALESCE(o.abrege, o.nom) FROM lecture.couleur_groupe c "
                  "JOIN canon.organisation o ON o.entite_id = c.groupe_id WHERE c.source = 'arbitraire' "
