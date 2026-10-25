@@ -1,48 +1,18 @@
-"""Compilation de la base hébergée : schéma, adaptateurs de sources, transformations communes.
+"""Racine de composition de l'ETL : étapes des sources et choix de l'adaptateur de l'Entrepot.
 
-C'est le seul endroit qui assemble le pipeline. Ajouter une source = ajouter ses étapes à
-SOURCES ; ajouter une donnée calculée = ajouter une étape à TRANSFORMATIONS.
+C'est le seul endroit qui assemble le chargement canonique (Postgres par défaut, mémoire pour les
+essais). Ajouter une source = ajouter ses étapes à ETAPES_CANON.
 """
 
-import sqlite3
-from dataclasses import replace
 from pathlib import Path
 
-from .adaptateurs import an
-from .etl import construire
-from .transformations import classement, indicateurs
-
-SCHEMA = Path(__file__).parent / "schema"
-LEGISLATURES = an.LEGISLATURES
-
-SOURCES = [*an.ETAPES]
-# Les transformations voient toutes les sources chargées, quelle que soit leur origine.
-TRANSFORMATIONS = [replace(e, apres=(*e.apres, *(s.nom for s in SOURCES)))
-                   for e in [classement.ETAPE, indicateurs.ETAPE]]
-ETAPES = [*SOURCES, *TRANSFORMATIONS]
-
-
-def compiler(base: Path, cache: Path, legislatures: list[str] = LEGISLATURES, forcer: bool = False,
-             age_max: float | None = None):
-    construire(base, cache, SCHEMA, ETAPES, forcer, age_max, legislatures=legislatures)
-    db = sqlite3.connect(base)
-    nb_lois = db.execute("SELECT COUNT(*) FROM lois").fetchone()[0]
-    nb_scrutins = db.execute("SELECT COUNT(*) FROM scrutins").fetchone()[0]
-    nb_votes = db.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
-    db.close()
-    print(f"{nb_lois} lois, {nb_scrutins} scrutins, {nb_votes} votes nominatifs -> {base}")
-
-
-# Modèle canonique CivicTrace : mêmes principes, mais écrit via le port `Entrepot` (Postgres par
-# défaut, mémoire pour les essais). Les anciennes étapes ci-dessus alimentent encore la base
-# SQLite publiée, jusqu'à la bascule de l'API.
-from .adaptateurs.sources import an as an_canon  # noqa: E402
-from .adaptateurs.sources import constit as constit_canon  # noqa: E402
-from .adaptateurs.sources import hatvp as hatvp_canon  # noqa: E402
-from .adaptateurs.sources import insee as insee_canon  # noqa: E402
-from .adaptateurs.sources import modifications as modifications_canon  # noqa: E402
-from .adaptateurs.sources import rne as rne_canon  # noqa: E402
-from .adaptateurs.sources import senat as senat_canon  # noqa: E402
+from .adaptateurs.sources import an as an_canon
+from .adaptateurs.sources import constit as constit_canon
+from .adaptateurs.sources import hatvp as hatvp_canon
+from .adaptateurs.sources import insee as insee_canon
+from .adaptateurs.sources import modifications as modifications_canon
+from .adaptateurs.sources import rne as rne_canon
+from .adaptateurs.sources import senat as senat_canon
 
 # `textes.modifications` après les textes et les amendements des deux chambres (diffs d'articles).
 ETAPES_CANON = [*insee_canon.ETAPES, *an_canon.ETAPES, *senat_canon.ETAPES, *constit_canon.ETAPES, *hatvp_canon.ETAPES,

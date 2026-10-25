@@ -3,7 +3,7 @@
 Construits par `python -m src projeter` depuis `canon` seul, c'est-à-dire des données 100 % fiables.
 Les requêtes sont versionnées dans `src/projections/NN_*.sql`. Règle commune : **jamais un chiffre sans
 « par rapport à quoi »**, sans dénominateur, ni sans ce que la donnée ne dit pas
-(`docs/propositions.md` à la racine du repo).
+(règles de fond du [wiki](../../docs/README.md)).
 
 ## Participation aux scrutins publics
 

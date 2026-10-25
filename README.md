@@ -1,34 +1,19 @@
-# big-brother
+# big-brother — Nos politiques ont du talent
 
-Stack de services autour des votes de l'Assemblée nationale.
+Suivre une loi du dépôt au Journal officiel, et les personnes et institutions qui la font, à
+partir de l'open data officiel (Assemblée nationale, Sénat, DILA, HATVP, RNE, INSEE). Seul ce qui
+est 100 % fiable est affiché comme un fait ; le reste passe en revue humaine.
 
-| dossier | rôle |
+| Dossier | Rôle |
 |---|---|
-| [`opendata/`](opendata) | import de l'open data AN (tous les scrutins) → une base SQLite par législature, publication versionnée (index, manifestes, correctifs) |
-| [`augure/`](augure) | app « Nos politiques ont du talent » : Expo (iOS, Android, web) qui lit les bases publiées |
-
-Pas d'API : opendata publie des fichiers statiques et les apps les téléchargent.
-
-Les bases se compilent depuis `opendata/` (voir son README) ; l'app les télécharge depuis le service `publication`.
-
-## Déploiement (Docker)
+| [`opendata/`](opendata) | ETL Python : charge chaque jour la base Postgres `civictrace` |
+| [`api/`](api) | API Node : une route par commande de l'app, lecture seule |
+| [`augure/`](augure) | app Expo (iOS, Android, web) |
+| [`debatron/`](debatron) | plan du debatron, pas encore de code |
 
 ```bash
-docker compose up -d --build          # app : http://localhost:8080 · publication : http://localhost:8081
-docker compose logs -f extraction     # premier import : ~4 min (téléchargement AN + compilation)
-docker compose down                   # arrêter (les volumes sont gardés)
+cp .env.example .env && docker compose up -d --build    # app : http://127.0.0.1:8080
 ```
 
-| service | image | rôle |
-|---|---|---|
-| `extraction` | `opendata/Dockerfile` (Python, bibliothèque standard) | télécharge l'open data, compile et publie une base par législature dans le volume `publication`, puis recommence toutes les `INTERVALLE_MAJ` secondes (1 jour) ; seules les législatures qui ont changé reçoivent une nouvelle version |
-| `publication` | `opendata/Dockerfile.nginx` (nginx) | sert le volume `publication` aux applications : `index.json`, `<leg>/manifest.json`, bases, correctifs ; CORS ouvert, `courante.db` jamais servie |
-| `web` | `augure/Dockerfile` (export Expo → nginx) | sert l'app web ; `/donnees` relaie le service `publication` (même origine pour l'app) |
-
-Volumes : `cache` (fichiers bruts de l'AN et bases compilées, ~600 Mo, privé) et `publication`
-(~33 Mo compressés, ce qui est servi). Tant que la première publication n'existe pas, l'app web
-affiche une erreur avec un bouton « Réessayer ».
-
-Les apps mobiles lisent directement le service `publication` : construire l'app avec
-`EXPO_PUBLIC_PUBLICATION_URL=https://<hôte de publication>`. Derrière un proxy HTTPS, exposer
-les ports 8080 (app) et 8081 (publication).
+Documentation (architecture, développement, déploiement, revue) : **[docs/README.md](docs/README.md)**.
+En cours, à faire, idées : [docs/TODO.md](docs/TODO.md).

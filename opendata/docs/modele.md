@@ -1,6 +1,6 @@
 # Modèle canonique CivicTrace — état au 24/10/2026
 
-Pipeline à côté de l'ancien (SQLite publiée, lue par l'API actuelle), qui reste inchangé.
+Base lue par l'API (schémas `canon` et `lecture`) ; chargée chaque jour par le service `donnees`.
 
 ```
 DATABASE_URL=postgres://…/civictrace python -m src migrer        # schéma (schema_pg/NNNN_*.sql)

@@ -1,16 +1,13 @@
 # Entrée publique de big-brother : HTTPS automatique (Let's Encrypt), un seul domaine.
 #   https://{$DOMAINE}/            app web « Nos politiques ont du talent » (service web)
 #   https://{$DOMAINE}/api/…       API (service api) : commandes de l'app
-#   https://{$DOMAINE}/donnees/…   publication SQLite historique (service publication, profil « historique » :
-#                                  arrêté par défaut, la route répond alors 502)
 #
 # Variable (fichier .env à la racine, voir .env.example) :
 #   DOMAINE   nom de domaine public ; « localhost » pour tester en local (certificat interne de Caddy)
 # Let's Encrypt ne demande pas d'e-mail : Caddy obtient et renouvelle les certificats seul.
 
 {$DOMAINE} {
-	# Compression des réponses textuelles (HTML, JS, JSON, wasm). Les bases .db.gz, déjà
-	# compressées et servies en application/octet-stream, ne sont pas recompressées.
+	# Compression des réponses textuelles (HTML, JS, JSON).
 	encode zstd gzip
 
 	header {
@@ -22,18 +19,12 @@
 		-Server
 	}
 
-	# API : les commandes de l'app (POST /api/assemblee/consulter…). /api est retiré avant de transmettre.
+	# API : les commandes de l'app (POST /api/dossiers/lister…). /api est retiré avant de transmettre.
 	handle_path /api/* {
 		reverse_proxy api:3000
 	}
 
-	# Publication opendata : directement depuis le service publication (CORS, cache, courante.db
-	# bloquée : règles posées par son nginx). /donnees est retiré avant de transmettre.
-	handle_path /donnees/* {
-		reverse_proxy publication:80
-	}
-
-	# Tout le reste : l'app web (application monopage, en-têtes COOP/COEP posés par son nginx).
+	# Tout le reste : l'app web (application monopage, servie par son nginx).
 	handle {
 		reverse_proxy web:80
 	}

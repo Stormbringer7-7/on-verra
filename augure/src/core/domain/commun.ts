@@ -112,8 +112,7 @@ export interface Chiffre {
 }
 
 /**
- * Mesure comparée : jamais un chiffre sans « par rapport à quoi » (opendata/docs/indicateurs.md,
- * docs/propositions.md). Valeur, dénominateur, référence de comparaison et ce que la donnée ne dit pas.
+ * Mesure comparée : jamais un chiffre sans « par rapport à quoi » (opendata/docs/indicateurs.md). Valeur, dénominateur, référence de comparaison et ce que la donnée ne dit pas.
  */
 export interface Indicateur {
   /** « Écarts au groupe », « Participation aux scrutins publics ». */

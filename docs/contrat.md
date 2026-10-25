@@ -80,14 +80,8 @@ Tables : schéma à jour de la copie d'intégration opendata (migrations 0001 à
 
 Un `FixturesBus` (app) ou un adaptateur mémoire (API) répond à une entrée en cherchant l'exemple dont l'`input` est égal (JSON) ; aucune réponse sinon.
 
-## À faire (relevé à l'intégration du 24/10/2026)
+## À faire
 
-- [ ] Contrat : `VoteDifferent.miseAuPoint` (les mises au point ne s'affichent que dans « Pourquoi ce vote », pas sur l'écran Scrutin).
-- [ ] Contrat : filtre par groupe dans `FiltreAnnuaire` ; pagination des questions dans `ConsulterPersonne` ; `FicheAmendement.barre` nullable (un amendement sans dossier renvoie 404).
-- [ ] Contrat : sujet de synthèse distinct pour le résumé court d'une étape (`resume_etape` a deux textes dans les fixtures) ; type « interventions » dans `TypeRecherche` (index `intervention.texte_recherche` non utilisé).
-- [ ] Fixtures : incohérences relevées par l'adaptateur mémoire (annuaire `total: 961` pour 9 éléments ; en-têtes de Claire différents selon l'onglet ; votes « de la semaine » hors de la semaine) ; fixtures manquantes (article sans version, filtres d'amendements, onglets dossiers/déclarations de Claire, classements hors AN · écarts).
-- [ ] App : fusionner `ui/components/commun/BarreParcours` (`BarreDossierVue`, `BarreCompacte`) et `ui/components/dossiers/BarreDossier`.
-- [ ] API : classement par absences (5 à 25 s) et annuaire (1,5 à 5 s) mesurés pendant un chargement : à remesurer, index `(chambre, date)` sur `lecture.participation_scrutin` ou projection sur 12 mois glissants.
-- [x] Nom de l'app : « Nos politiques ont du talent » (écran et `app.json`), décidé le 25/10/2026.
-- [x] Question produit : les non-inscrits gardent leur « position majoritaire » (publiée par l'AN) et restent au classement des écarts : ça montre s'ils votent ensemble ou non (décidé le 25/10/2026).
-- [ ] Déploiement : rôle Postgres dédié (`SELECT` sur `canon`/`lecture`, `INSERT` sur `analytique.signalement`, droits qui survivent au `DROP SCHEMA lecture` de `projeter`) ; limite de débit sur `/api/signalement/envoyer`. Fait le 25/10/2026 : base `civictrace`, `shm_size`, service `donnees` ([deploiement.md](deploiement.md)).
+Dans [TODO.md](TODO.md), section « API et contrat ». Décidé le 25/10/2026 : nom de l'app « Nos
+politiques ont du talent » ; les non-inscrits gardent leur « position majoritaire » (publiée par
+l'AN) et restent au classement des écarts, ce qui montre s'ils votent ensemble ou non.

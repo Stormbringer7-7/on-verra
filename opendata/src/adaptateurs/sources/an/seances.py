@@ -18,7 +18,7 @@ from xml.etree import ElementTree
 from ....chargement import Document, Flux
 from ....domaine.objets import CasRevue, Dependants, Objet
 from .cas import amendement_cite, candidats_orateur
-from .commun import DOCUMENT, LICENCE, Systeme, an, documents, fichier, instant
+from .commun import LICENCE, Systeme, an, documents, fichier, instant, url_compte_rendu
 
 SEANCES = fichier("comptes_rendus.xml.zip", "vp/syceronbrut/syseron.xml.zip")
 NUMEROS = re.compile(r"\d+")
@@ -65,7 +65,7 @@ def seance(doc: Document, ns: str, dossier_du_texte: dict[tuple[str, str], set[s
     yield Objet("document", an("document", uid), {
         "type": "compte_rendu", "type_source": "CRS", "numero": uid,
         "titre": f"Compte rendu intégral, {meta.findtext(q('dateSeanceJour'))}" if meta is not None else None,
-        "date": debut.date() if debut else None, "url": f"{DOCUMENT}/{uid}.html"}, "/compteRendu")
+        "date": debut.date() if debut else None, "url": url_compte_rendu(uid)}, "/compteRendu")
     # L'heure de début vient de l'agenda : deux sources pour un même champ, ce serait le dernier
     # écrivain qui gagne. Le compte rendu n'apporte que son propre rattachement.
     yield Objet("reunion", reunion, {"type": "seance", "chambre": "AN", "compte_rendu_id": an("document", uid)},

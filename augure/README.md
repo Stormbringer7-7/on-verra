@@ -38,6 +38,30 @@ npm run typecheck
 npm run lint
 ```
 
+## Lancer et construire (iOS, Android, web)
+
+`npm run app -- <commande>` ([scripts/app.mjs](scripts/app.mjs)) lit **un seul** fichier d'env :
+`.env.<env>` avec `--env=<env>`, sinon `.env` (modèle : [.env.example](.env.example) ; `APP_ID`,
+`EXPO_PUBLIC_SOURCE`, `EXPO_PUBLIC_API_URL`). `ios/` et `android/` sont générés par le prebuild,
+refait d'office s'ils manquent ou viennent d'un autre env.
+
+```bash
+npm run app -- serve --env=staging                # Expo seul (Metro)
+npm run app -- run --env=staging android --device # liste des appareils, choix, installation
+npm run app -- run ios --device="iPhone 17"       # appareil nommé ; Expo déjà lancé : réutilisé
+npm run app -- apply --env=staging version        # devpatch + 1 (minor, major : voir aide)
+npm run app -- build --env=prod aab xcarchive web # → dist/prod/<version>/ (apk : installable direct)
+```
+
+La version est dans [version.json](version.json) (x.X.D) : iOS reçoit `x.X.D`, Android
+`versionName x.X.D-<env>` (sans suffixe pour `.env`) et `versionCode` MMmmDDDD. `build` passe
+d'abord par `apply version`. L'`.aab` est signé avec la clé de debug tant qu'aucune clé de
+publication n'est configurée ; l'`.xcarchive` est signée par l'équipe `APPLE_TEAM_ID`.
+
+Icônes et splash : `assets/logo.svg` (logo au repos), puis `scripts/icones.sh`. Le splash natif
+montre le logo au repos ; `ui/components/Ouverture.tsx` prend le relais et ouvre l'œil (sur le
+web, `public/index.html` montre le même logo pendant le chargement).
+
 ## Architecture
 
 ```

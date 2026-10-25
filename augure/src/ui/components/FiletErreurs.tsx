@@ -1,3 +1,4 @@
+import * as SplashScreen from 'expo-splash-screen';
 import { Component, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -14,6 +15,8 @@ export class FiletErreurs extends Component<{ children: ReactNode }, { erreur: E
 
   componentDidCatch(erreur: Error) {
     console.error('[augure] erreur d’affichage', erreur);
+    // Erreur avant l'Ouverture animée : le splash natif masquerait ce message.
+    SplashScreen.hide();
   }
 
   private reessayer = () => {

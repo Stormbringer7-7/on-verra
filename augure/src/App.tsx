@@ -12,16 +12,23 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, NavigationContainer, type LinkingOptions, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useState, type ComponentType } from 'react';
-import { View } from 'react-native';
+import { useCallback, useState, type ComponentType } from 'react';
+import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import monoRegulier from '../assets/polices/IBMPlexMono_400Regular.woff2';
+import monoMoyen from '../assets/polices/IBMPlexMono_500Medium.woff2';
+import sansRegulier from '../assets/polices/IBMPlexSansCondensed_400Regular.woff2';
+import sansDemiGras from '../assets/polices/IBMPlexSansCondensed_600SemiBold.woff2';
+import sansGras from '../assets/polices/IBMPlexSansCondensed_700Bold.woff2';
 import { createContainer } from './di/container';
 import { liens, type Onglets, type Pages } from './navigation';
 import { LIBELLES_PAGES, ONGLETS, type Page } from './ui/ariane';
 import { Navigation, NOM_APP } from './ui/components/Ecran';
 import { FiletErreurs } from './ui/components/FiletErreurs';
+import { Ouverture } from './ui/components/Ouverture';
 import { Accueil } from './ui/ecrans/Accueil';
 import { Amendement } from './ui/ecrans/Amendement';
 import { Article } from './ui/ecrans/Article';
@@ -41,6 +48,27 @@ import { ArianeProvider, useTitres } from './ui/hooks/ariane';
 import { CoreProvider } from './ui/hooks/core';
 import { useLarge } from './ui/hooks/miseEnPage';
 import { ThemeProvider, usePalette } from './ui/theme/ThemeProvider';
+
+const POLICES_NATIVES = {
+  IBMPlexSansCondensed_400Regular,
+  IBMPlexSansCondensed_600SemiBold,
+  IBMPlexSansCondensed_700Bold,
+  IBMPlexMono_400Regular,
+  IBMPlexMono_500Medium,
+};
+
+/** Mêmes polices en woff2, réduites aux caractères latins, ponctuation, flèches et symboles
+ * (scripts/polices-web.sh) : ≈ 140 Ko au lieu de ≈ 650 Ko. Glyphe absent : police du système. */
+const POLICES_WEB: Record<keyof typeof POLICES_NATIVES, number> = {
+  IBMPlexSansCondensed_400Regular: sansRegulier,
+  IBMPlexSansCondensed_600SemiBold: sansDemiGras,
+  IBMPlexSansCondensed_700Bold: sansGras,
+  IBMPlexMono_400Regular: monoRegulier,
+  IBMPlexMono_500Medium: monoMoyen,
+};
+
+// Le splash natif (logo au repos) reste affiché jusqu'à ce que l'Ouverture animée prenne le relais.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Pile = createNativeStackNavigator<Pages>();
 const Tabs = createBottomTabNavigator<Onglets>();
@@ -77,20 +105,24 @@ function Application() {
   // Configuration invalide (EXPO_PUBLIC_SOURCE, adresse de l'API) : levée ici, montrée par le filet.
   const [{ bus, source }] = useState(() => createContainer());
   // Polices introuvables (réseau, vieux navigateur) : l'app s'affiche avec celles du système.
-  const [polices, erreurPolices] = useFonts({
-    IBMPlexSansCondensed_400Regular,
-    IBMPlexSansCondensed_600SemiBold,
-    IBMPlexSansCondensed_700Bold,
-    IBMPlexMono_400Regular,
-    IBMPlexMono_500Medium,
-  });
+  // Sur le web, on ne les attend pas : le navigateur les substitue à leur arrivée (≈ 2 s gagnées
+  // en 4G lente) ; en natif, un nom de police non chargé n'est pas permis.
+  const [polices, erreurPolices] = useFonts(Platform.OS === 'web' ? POLICES_WEB : POLICES_NATIVES);
+  const pret = polices || erreurPolices || Platform.OS === 'web';
+  const [ouvert, setOuvert] = useState(false);
+  const terminer = useCallback(() => setOuvert(true), []);
 
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <StatusBar style="light" />
         <CoreProvider bus={bus} source={source}>
-          <ArianeProvider>{polices || erreurPolices ? <Navigateurs /> : <Fond />}</ArianeProvider>
+          <ArianeProvider>
+            <View style={{ flex: 1 }}>
+              {pret ? <Navigateurs /> : <Fond />}
+              {pret && !ouvert && <Ouverture onPret={SplashScreen.hide} onTerminee={terminer} />}
+            </View>
+          </ArianeProvider>
         </CoreProvider>
       </ThemeProvider>
     </SafeAreaProvider>

@@ -6,23 +6,20 @@
 #   web         : (nginx) app web ; /api relaie « api »
 #   pgadmin     : (profil « admin ») administration de Postgres, http://127.0.0.1:8083
 #   caddy       : seule entrée publique, HTTPS automatique — https://$DOMAINE (/ = app, /api = api)
-#   extraction, publication : (profil « historique ») ancienne chaîne SQLite des scrutins AN et sa
-#                 publication sous /donnees ; plus lues par l'app, arrêtées par défaut
 #
 #   cp .env.example .env                 # DOMAINE, POSTGRES_PASSWORD
-#   docker compose up -d --build         # base vide : premier chargement ≈ 40 min (docs/deploiement.md
-#                                        # pour partir d'un dump et du cache brut, sans attendre)
+#   docker compose up -d --build         # base vide : premier chargement ≈ 40 min (docs/README.md,
+#                                        # « Déployer » : partir d'un dump et du cache brut)
 #   docker compose logs -f donnees
 #
 # Données persistées sur l'hôte : opendata/data (cache des fichiers bruts, rapports de contrôle).
 # La base (volume « postgres ») se reconstruit depuis l'open data si elle est perdue.
-# web, publication, api et postgres restent joignables depuis la machine seulement (127.0.0.1:8080, :8081,
-# :8082 et :5433), pour le développement ; depuis l'extérieur, tout passe par Caddy.
+# web, api et postgres restent joignables depuis la machine seulement (127.0.0.1:8080, :8082 et
+# :5433), pour le développement ; depuis l'extérieur, tout passe par Caddy.
 
 name: big-brother
 
 x-postgres-url: &postgres-url postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/civictrace
-x-postgres-url-historique: &postgres-url-historique postgres://big-brother:${POSTGRES_PASSWORD:-big-brother}@postgres:5432/big-brother
 
 services:
   donnees:
@@ -39,29 +36,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-
-  extraction:
-    profiles: [historique]
-    build:
-      context: ./opendata
-      dockerfile: Dockerfile
-    environment:
-      INTERVALLE_MAJ: "86400"          # secondes entre deux mises à jour (1 jour)
-      AGE_MAX: "20"                    # heures avant de redemander un fichier à l'AN (304 s'il n'a pas changé)
-      DATABASE_URL: *postgres-url-historique
-    volumes:
-      # Dossiers de l'hôte : survivent à down, rebuild, « down -v » et « volume prune ».
-      - ./opendata/data:/app/data      # open data AN, base complète, partitions : privé
-      - ./opendata/publication:/srv/publication
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      # Prêt dès que la première publication existe.
-      test: ["CMD", "test", "-f", "/srv/publication/index.json"]
-      interval: 30s
-      start_period: 15m
     restart: unless-stopped
 
   postgres:
@@ -115,17 +89,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-
-  publication:
-    profiles: [historique]
-    build:
-      context: ./opendata
-      dockerfile: Dockerfile.nginx
-    ports:
-      - "127.0.0.1:8081:80"
-    volumes:
-      - ./opendata/publication:/srv/publication:ro
     restart: unless-stopped
 
   web:

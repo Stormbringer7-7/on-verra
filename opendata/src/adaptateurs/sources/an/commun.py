@@ -1,6 +1,7 @@
 """Particularités de l'open data de l'Assemblée nationale communes aux flux canoniques."""
 
 import json
+import re
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
@@ -13,6 +14,23 @@ from ....etl import Fichier
 LICENCE = "Licence Ouverte / Etalab 2.0"
 DEPOT = "https://data.assemblee-nationale.fr/static/openData/repository/{leg}"
 DOCUMENT = "https://www.assemblee-nationale.fr/dyn/opendata"
+SITE = "https://www.assemblee-nationale.fr/dyn"
+
+
+def url_compte_rendu(uid: str | None) -> str | None:
+    """Page publique d'un compte rendu cité par l'AN. Séance (`CRSAN…`) : publiée en XML seulement
+    sous `dyn/opendata` (le `.html` y répond 404) ; la page lisible est `dyn/<leg>/comptes-rendus/
+    seance/<uid>`, qui redirige vers l'adresse datée et porte les ancres `id_syceron` des
+    interventions. Commission (`CRC…`) : `dyn/opendata/<uid>.html`. Sénat (`CRSSN…`, cité par
+    l'agenda) : l'AN ne l'héberge pas (500), aucune adresse n'est supposée."""
+    if not uid:
+        return None
+    if uid.startswith("CRSAN"):
+        legislature = re.search(r"L(\d+)", uid)
+        return f"{SITE}/{legislature.group(1) if legislature else '17'}/comptes-rendus/seance/{uid}"
+    if uid.startswith("CRC"):
+        return f"{DOCUMENT}/{uid}.html"
+    return None
 
 
 def fichier(nom: str, chemin: str, legislature: str = "17") -> Fichier:

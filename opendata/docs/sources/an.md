@@ -129,8 +129,8 @@ Identités de l'entité : `AN:dossier:DLR5L17N54085` (OFFICIAL_ID) et `SENAT:dos
 > texte déposé.
 
 Code : [dossier()](../../src/adaptateurs/sources/an/dossiers.py#L96) ·
-Tests : [test_etapes_publiees_avec_identite_composite](../../tests/test_sources_an.py#L121),
-[test_projet_de_loi_initiative_gouvernement_meme_avec_ministres_initiateurs](../../tests/test_sources_an.py#L131)
+Tests : [test_etapes_publiees_avec_identite_composite](../../tests/test_sources_an.py#L133),
+[test_projet_de_loi_initiative_gouvernement_meme_avec_ministres_initiateurs](../../tests/test_sources_an.py#L143)
 
 ### Étapes (actes) — `AN:etape:DLR5L17N54085:<uid de l'acte>`
 
@@ -160,7 +160,7 @@ Ce qui en sort :
 L'identité d'une étape est composite (`dossier:acte`), parce qu'un même uid d'acte peut être repris
 d'un dossier à l'autre. Code : [actes()](../../src/adaptateurs/sources/an/dossiers.py#L64),
 [type_etape()](../../src/adaptateurs/sources/an/dossiers.py#L48) ·
-Test : [test_etapes_publiees_avec_identite_composite](../../tests/test_sources_an.py#L121)
+Test : [test_etapes_publiees_avec_identite_composite](../../tests/test_sources_an.py#L133)
 
 ### Personne et mandat — `AN:acteur:PA793432`
 
@@ -227,7 +227,7 @@ un numéro ambigu ou introuvable part en revue (`amendement_ambigu`, `amendement
 
 Code : [scrutin()](../../src/adaptateurs/sources/an/scrutins.py#L78), [majoritaire()](../../src/adaptateurs/sources/an/scrutins.py#L58),
 [nature()](../../src/adaptateurs/sources/an/scrutins.py#L39) ·
-Tests : [test_scrutin](../../tests/test_sources_an.py#L270), [test_nature](../../tests/test_sources_an.py#L291)
+Tests : [test_scrutin](../../tests/test_sources_an.py#L282), [test_nature](../../tests/test_sources_an.py#L303)
 
 ### Amendement — `AN:amendement:AMANR5L17PO838901BTC2765P0D1N000357`
 
@@ -251,7 +251,7 @@ dispositif et exposé en HTML **tels que publiés**. Liens (`canon.lien`) : `aut
 Ce que l'AN ne publie pas : les avis du rapporteur et du Gouvernement (le Sénat, oui).
 
 Code : [amendement()](../../src/adaptateurs/sources/an/amendements.py#L112), [sort()](../../src/adaptateurs/sources/an/amendements.py#L28) ·
-Tests : [test_amendement](../../tests/test_sources_an.py#L239), [test_irrecevable_sans_sort](../../tests/test_sources_an.py#L259)
+Tests : [test_amendement](../../tests/test_sources_an.py#L251), [test_irrecevable_sans_sort](../../tests/test_sources_an.py#L271)
 
 #### Article suivi et étape de l'amendement
 
@@ -352,10 +352,10 @@ Règles : `PA0` = voix collective (pas d'orateur) ; un `PA` hors référentiel =
 `orateur_sans_identifiant` ; plusieurs amendements en discussion commune = liens vers tous, sans choisir.
 
 Code : [seance()](../../src/adaptateurs/sources/an/seances.py#L55), [numeros_cites()](../../src/adaptateurs/sources/an/seances.py#L36) ·
-Tests : [test_tour_de_parole_regroupe_les_paragraphes_consecutifs](../../tests/test_sources_an.py#L50),
-[test_numero_de_texte_rattache_au_dossier](../../tests/test_sources_an.py#L61),
-[test_voix_collective_et_identifiant_hors_referentiel](../../tests/test_sources_an.py#L75),
-[test_discussion_commune_liens_sans_choisir](../../tests/test_sources_an.py#L65)
+Tests : [test_tour_de_parole_regroupe_les_paragraphes_consecutifs](../../tests/test_sources_an.py#L62),
+[test_numero_de_texte_rattache_au_dossier](../../tests/test_sources_an.py#L73),
+[test_voix_collective_et_identifiant_hors_referentiel](../../tests/test_sources_an.py#L87),
+[test_discussion_commune_liens_sans_choisir](../../tests/test_sources_an.py#L77)
 
 ### Intervention en commission — `AN:intervention:CRCANR5L17S2026PO419865N040#14`
 
@@ -370,7 +370,7 @@ député, membre du Gouvernement, présence à la réunion). Rien n'est relié a
 
 Code : [compte_rendu()](../../src/adaptateurs/sources/an/commissions.py#L97),
 [candidats_orateur()](../../src/adaptateurs/sources/an/cas.py#L28) ·
-Tests : [test_decoupage](../../tests/test_sources_an.py#L192), [test_compte_rendu_sans_reunion_ignore](../../tests/test_sources_an.py#L231)
+Tests : [test_decoupage](../../tests/test_sources_an.py#L204), [test_compte_rendu_sans_reunion_ignore](../../tests/test_sources_an.py#L243)
 
 ### Réunion, ordre du jour, présences — agenda
 
@@ -379,7 +379,7 @@ Brut : `agenda.json.zip` (`reunion` : `@xsi:type`, `organeReuniRef`, `compteRend
 Canon : `canon.reunion`, `canon.point_odj` (avec `etat`), `canon.participation` (présent, excusé,
 absent : la base de l'indicateur de présence en commission), `canon.audition`, `canon.evenement_agenda`.
 
-Code : [reunion()](../../src/adaptateurs/sources/an/agenda.py#L20) · Test : [test_reunion_points_presences](../../tests/test_sources_an.py#L147)
+Code : [reunion()](../../src/adaptateurs/sources/an/agenda.py#L20) · Test : [test_reunion_points_presences](../../tests/test_sources_an.py#L159)
 
 ### Textes et articles — `AN:version_texte:<uid>`, `AN:article:<uid>#<numéro>`
 

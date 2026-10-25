@@ -20,3 +20,5 @@ AGENTS.md
 .dockerignore
 *.log
 .DS_Store
+.env*
+!.env.example

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="theme-color" content="#0b0d0c" />
+    <title>%WEB_TITLE%</title>
+    <!-- Réinitialisation recommandée par react-native-web, plus le fond et le logo au repos
+         (couleurs de ui/theme/tokens.ts) : visibles pendant le téléchargement du script et des
+         polices, à la place et à la taille où ui/components/Ouverture.tsx prend le relais. -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        background: #0b0d0c;
+      }
+      body {
+        overflow: hidden;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      #chargement {
+        margin: auto;
+        width: 200px;
+        height: 200px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Activez JavaScript pour utiliser l'application.</noscript>
+    <!-- Remplacé par l'app dès que React monte. -->
+    <div id="root">
+      <!-- assets/logo.svg au repos, sans fond ; la demi-pupille remplace sa zone de coupe. -->
+      <svg id="chargement" viewBox="0 0 1024 1024" role="img" aria-label="Chargement de Nos politiques ont du talent">
+        <defs>
+          <mask id="allees" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+            <rect width="1024" height="1024" fill="#fff" />
+            <g stroke="#000" stroke-width="18">
+              <line x1="512" y1="640" x2="512" y2="180" transform="rotate(-54 512 640)" />
+              <line x1="512" y1="640" x2="512" y2="180" transform="rotate(-18 512 640)" />
+              <line x1="512" y1="640" x2="512" y2="180" transform="rotate(18 512 640)" />
+              <line x1="512" y1="640" x2="512" y2="180" transform="rotate(54 512 640)" />
+            </g>
+          </mask>
+        </defs>
+        <g transform="translate(0 70)">
+          <g fill="none" stroke="#e6ece8" stroke-width="34" mask="url(#allees)">
+            <path d="M 122 640 A 390 390 0 0 1 902 640" />
+            <path d="M 202 640 A 310 310 0 0 1 822 640" />
+            <path d="M 282 640 A 230 230 0 0 1 742 640" />
+          </g>
+          <path d="M 440 656 A 72 72 0 0 1 584 656 Z" fill="#ff3b30" />
+          <rect x="105" y="656" width="814" height="12" fill="#5d6a64" />
+        </g>
+      </svg>
+    </div>
+  </body>
+</html>

@@ -1,11 +1,8 @@
-# Données générées, jamais versionnées : régénérées par `python3 -m src importer && python3 -m src publier`.
-#   data/brut/        open data de l'AN téléchargé (cache, ~150 Mo)
-#   data/on_verra.db  base complète compilée
-#   data/partitions/  une base par législature
-#   data/archives/    publications précédentes mises de côté (pas versionnées pour l'instant)
+# Données générées, jamais versionnées (python -m src canon) :
+#   data/brut/      open data téléchargé (cache, ≈ 2,3 Go)
+#   data/rapports/  rapports de contrôle
+#   data/dumps/     dumps de la base pour le déploiement
 data/
-#   publication/      ce que sert le service « publication » (bases .db.gz, correctifs, manifestes)
-publication/
 
 # Python
 __pycache__/
@@ -17,3 +14,6 @@ __pycache__/
 
 # Rapport de revue des rapprochements : généré depuis la base (python -m src revue rapport)
 docs/revue/
+
+# Ancienne publication SQLite (retirée le 25/10/2026) : dossier local à supprimer, jamais versionné.
+publication/

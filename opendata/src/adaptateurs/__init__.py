@@ -1,6 +1,7 @@
-"""Adaptateurs de sources : un sous-paquet par producteur de données (an = Assemblée nationale).
-
-Un adaptateur expose `ETAPES` (liste d'`etl.Etape`) : extraction de ses fichiers bruts, mise en
-forme et chargement dans les tables du schéma commun. Il ne connaît ni la publication ni
-l'interface ; les transformations communes à toutes les sources vivent dans `transformations/`.
+"""Adaptateurs de l'ETL, derrière les ports de `ports.py` :
+- sources/   un sous-paquet par producteur (an, senat, constit, hatvp, rne, insee) : chacun expose
+             `ETAPES` (liste d'`etl.Etape`) et analyse ses documents bruts en objets du domaine,
+             sans écrire de SQL ;
+- stockage/  l'Entrepot (Postgres, mémoire pour les essais) et le Projecteur ;
+- synthese   le port Synthetiseur : seul `SansSynthese` est branché.
 """

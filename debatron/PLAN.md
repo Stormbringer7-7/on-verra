@@ -148,7 +148,8 @@ Le debatron lit CivicTrace par un port en lecture seule ; il n'écrit jamais ded
 | Positions réelles | votes nominatifs, positions de groupe, écarts |
 | Contexte | étapes, chronologie, décision du Conseil constitutionnel, lobbying déclaré (marqué « à vérifier ») |
 
-Les versions d'article arriveront avec le système de navette de CivicTrace (en cours).
+Les versions d'article sont chargées (`canon.version_article`, navette reliée : cf.
+[modifications.md](../opendata/docs/modifications.md)).
 
 ## 6 bis. Sources hors CivicTrace : actualités, INSEE, déclarations et témoignages
 

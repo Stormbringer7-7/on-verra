@@ -8,7 +8,7 @@ devient un cas de revue humaine, jamais tranché par le code.
 
 Python 3.10+, bibliothèque standard et `psycopg` 3. 17e législature d'abord.
 
-Index de toute la documentation : [docs/README.md](../docs/README.md).
+Documentation principale (architecture, déploiement) : [docs/README.md](../docs/README.md).
 
 ## Démarrage
 
@@ -76,7 +76,7 @@ src/
 | [rapprochements.md](docs/rapprochements.md) | ce qui est relié automatiquement, ce qui ne l'est jamais, revue |
 | [modifications.md](docs/modifications.md) | changements article par article et amendement à l'origine |
 | [indicateurs.md](docs/indicateurs.md) | projections `lecture` : barre de parcours, indicateurs et leurs limites |
-| [TODO.md](TODO.md) | reste à faire côté données |
+| [TODO.md](../docs/TODO.md) | en cours, à faire et idées (tout le dépôt) |
 
 **Ajouter une source** : un module sous `src/adaptateurs/sources/<source>/` qui produit des
 `Objet`, `Dependants` et `Rapprochement` (domaine) avec leur provenance, sans écrire en base ; une
@@ -109,21 +109,3 @@ la date de naissance n'est pas utilisée pour rapprocher.
 
 Les tests Postgres utilisent une base jetable : `DATABASE_URL_ESSAIS` (par défaut
 `civictrace_essais` sur le Postgres du compose). Son nom doit finir par `_essais`.
-
-## Chaîne historique (SQLite, scrutins AN)
-
-En service tant que la bascule n'est pas faite : l'ancienne app et l'ancienne API lisent des bases
-SQLite par législature (14e à 17e, scrutins de l'AN seulement), publiées par le service
-`extraction` du `docker-compose.yml` et chargées dans les schémas Postgres `lNN`.
-
-```bash
-python3 -m src importer [--legislatures 17] [--forcer]   # → data/on_verra.db
-python3 -m src mettre-a-jour                             # re-télécharge, publie si nouveau scrutin
-python3 -m src publier [--forcer] [--legislatures 17]    # index.json + <leg>/manifest.json, bases, correctifs
-python3 -m src charger                                   # publication → Postgres (schémas lNN)
-python3 -m src lois | scrutin | depute | indicateurs | 49-3 | censure   # consultation en ligne de commande
-```
-
-Code : `src/etl/`, `src/schema/`, `src/adaptateurs/an/`, `src/transformations/`,
-`src/partition.py`, `src/publication.py`. Elle disparaîtra avec les législatures 14 à 16 dans le
-modèle canonique (cf. [TODO.md](TODO.md)).

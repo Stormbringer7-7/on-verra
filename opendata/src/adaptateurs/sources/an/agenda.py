@@ -6,7 +6,7 @@ leurs noms ne figurent que dans les comptes rendus de commission.
 
 from ....chargement import Document, Flux
 from ....domaine.objets import Dependants, Objet
-from .commun import DOCUMENT, LICENCE, Systeme, an, documents, fichier, instant, liste, lire, val
+from .commun import LICENCE, Systeme, an, documents, fichier, instant, liste, lire, url_compte_rendu, val
 
 AGENDA = fichier("agenda.json.zip", "vp/reunions/Agenda.json.zip")
 TYPES_REUNION = {"seance_type": "seance", "reunionCommission_type": "commission"}
@@ -24,7 +24,7 @@ def reunion(doc: Document):
     if compte_rendu:
         yield Objet("document", an("document", compte_rendu), {
             "type": "compte_rendu", "type_source": compte_rendu[:3], "numero": compte_rendu,
-            "url": f"{DOCUMENT}/{compte_rendu}.html"}, "/reunion/compteRenduRef")
+            "url": url_compte_rendu(compte_rendu)}, "/reunion/compteRenduRef")
     yield Objet("reunion", ident, {
         "type": TYPES_REUNION.get(r.get("@xsi:type"), "autre"), "chambre": "AN",
         "organe_id": an("organe", val(r.get("organeReuniRef"))), "debut": instant(r.get("timeStampDebut")),

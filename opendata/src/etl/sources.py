@@ -6,7 +6,6 @@ import shutil
 import time
 import urllib.error
 import urllib.request
-import zipfile
 from dataclasses import dataclass
 from email.utils import formatdate
 from pathlib import Path
@@ -45,10 +44,3 @@ class Fichier:
         partiel.replace(cible)
         return cible
 
-
-def lire_json_zip(chemin: Path, sous_dossier: str = ""):
-    """Chaque document JSON d'une archive zip, éventuellement limité à un sous-dossier."""
-    with zipfile.ZipFile(chemin) as z:
-        for nom in z.namelist():
-            if nom.endswith(".json") and f"/{sous_dossier}" in f"/{nom}":
-                yield json.loads(z.read(nom))

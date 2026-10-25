@@ -1,6 +1,5 @@
 # Les images n'embarquent que src/ et docker/ : les données viennent des volumes.
 data/
-publication/
 tests/
 **/__pycache__/
 *.pyc

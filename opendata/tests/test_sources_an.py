@@ -10,6 +10,7 @@ from src.chargement import Document
 from src.domaine import IdentiteNative, Systeme
 from src.domaine.objets import CasRevue, Dependants, Objet
 from src.adaptateurs.sources.an import agenda, dossiers, seances
+from src.adaptateurs.sources.an.commun import url_compte_rendu
 
 NS = "{http://schemas.assemblee-nationale.fr/referentiel}"
 
@@ -43,6 +44,17 @@ def interventions(elements):
 
 class Seances(unittest.TestCase):
     INDEX = {("17", "1364"): {"DLR_FIN_DE_VIE"}, ("17", "1281"): {"DLR_SOINS"}}
+
+    def test_adresse_publique_des_comptes_rendus(self):
+        # Vérifié le 25/10/2026 : dyn/opendata/CRSANR5L17S2027O1N018.html répond 404 (seul le .xml
+        # existe) ; dyn/17/comptes-rendus/seance/<uid> redirige vers « premiere-seance-du-lundi-
+        # 12-octobre-2026 », dont les ancres sont les id_syceron (#4182347).
+        self.assertEqual(url_compte_rendu("CRSANR5L17S2027O1N018"),
+                         "https://www.assemblee-nationale.fr/dyn/17/comptes-rendus/seance/CRSANR5L17S2027O1N018")
+        self.assertEqual(url_compte_rendu("CRCANR5L17S2027PO884839N001"),
+                         "https://www.assemblee-nationale.fr/dyn/opendata/CRCANR5L17S2027PO884839N001.html")
+        self.assertIsNone(url_compte_rendu("CRSSNR5S2025IDS20241009"))   # Sénat : l'AN répond 500
+        self.assertIsNone(url_compte_rendu(None))
 
     def analyser(self, xml):
         return list(seances.seance(doc(seances.SEANCES, xml), NS, self.INDEX))
