@@ -74,6 +74,15 @@ describe('fixtures du contrat', () => {
     }
   });
 
+  it('donnent une couleur et sa source à tout groupe', () => {
+    const groupes = noeuds.filter((n) => 'abrege' in n.valeur && 'chambre' in n.valeur && 'libelle' in n.valeur);
+    expect(groupes.length).toBeGreaterThan(0);
+    for (const { chemin, valeur } of groupes) {
+      expect(String(valeur.couleur ?? ''), chemin).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(['officielle', 'famille', 'arbitraire'], chemin).toContain(valeur.sourceCouleur);
+    }
+  });
+
   it('donnent une provenance complète à chaque fait sourcé', () => {
     const provenances = noeuds.filter((n) => 'idNatif' in n.valeur);
     expect(provenances.length).toBeGreaterThan(0);

@@ -170,10 +170,18 @@ export interface GroupeRef {
   id: string;
   abrege: string;
   libelle: string;
-  /** Couleur officielle (`canon.organisation.couleur`) : une donnée, jamais de l'habillage. */
-  couleur: string | null;
+  /** Toujours remplie (`lecture.couleur_groupe`) ; d'où elle vient : `sourceCouleur`. */
+  couleur: string;
+  sourceCouleur: SourceCouleur;
   chambre: Chambre;
 }
+
+/**
+ * officielle : publiée par la chambre ; famille : celle du groupe de l'Assemblée de la même famille
+ * politique (table relue, le Sénat n'en publie aucune) ; arbitraire : couleur de secours, stable
+ * pour un même groupe. Seule l'officielle est une donnée de la source.
+ */
+export type SourceCouleur = 'officielle' | 'famille' | 'arbitraire';
 
 export interface PersonneRef {
   id: string;

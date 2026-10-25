@@ -147,7 +147,7 @@ function Rang({ ligne }: { ligne: LigneClassement }) {
           <T variant="heading">{ligne.personne.nom}</T>
           {ligne.personne.groupe && (
             <View style={styles.groupe}>
-              <Pastille couleur={ligne.personne.groupe.couleur ?? p.lineStrong} taille={8} />
+              <Pastille couleur={ligne.personne.groupe.couleur} taille={8} />
               <T variant="caption" ton="inkMuted">
                 {ligne.personne.groupe.libelle}
               </T>

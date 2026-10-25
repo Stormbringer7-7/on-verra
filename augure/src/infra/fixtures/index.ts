@@ -7,6 +7,7 @@
 
 import type { InputOf, OutputOf } from '../../core/commands/bus';
 import * as definitions from '../../core/commands/definitions';
+import { AVANCEMENT, AVANCEMENT_HORS_PARLEMENT, AVANCEMENT_NOUVELLE_LECTURE } from './avancement';
 import { ACCUEIL, AMENDEMENT_CE123, AMENDEMENT_COM56, ARTICLE_ENERGIE_3, ARTICLE_LOCATION_2, ETAPES, FICHE_ENERGIE, FICHE_LOCATION, LISTE_DOSSIERS, LISTE_DOSSIERS_PARLEMENTAIRES } from './dossiers';
 import { LISTE_INTERVENTIONS_CE123, LISTE_INTERVENTIONS_SEANCE_AN } from './discussions';
 import { A, ART, D, P } from './entites';
@@ -34,6 +35,11 @@ export const fixtures: Fixtures = {
   ListerDossiers: [
     { titre: 'Tous les dossiers', input: {}, output: LISTE_DOSSIERS },
     { titre: 'Proposés par des parlementaires', input: { origine: 'parlementaire' }, output: LISTE_DOSSIERS_PARLEMENTAIRES },
+  ],
+  ConsulterAvancement: [
+    { titre: 'Où en sont les textes (épargne : promulgation hors délai, à vérifier)', input: {}, output: AVANCEMENT },
+    { titre: 'Attentes hors du Parlement', input: { horsParlement: true }, output: AVANCEMENT_HORS_PARLEMENT },
+    { titre: 'Une file : la nouvelle lecture', input: { etape: 'Nouvelle lecture' }, output: AVANCEMENT_NOUVELLE_LECTURE },
   ],
   ConsulterDossier: [
     { titre: 'Énergie : procédure accélérée, CMP conclusive, Conseil saisi', input: { id: D.energie.id }, output: FICHE_ENERGIE },

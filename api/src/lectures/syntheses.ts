@@ -212,4 +212,5 @@ export const REMPLIR: Remplisseurs = {
   ConsulterRepresentant: tel,
   Rechercher: tel,
   SignalerErreur: tel,
+  ConsulterAvancement: tel,
 };

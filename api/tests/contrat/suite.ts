@@ -64,6 +64,11 @@ function suivantes(nom: NomCommande, s: any): Command[] {
       return [...ids(s.dossiers).map((id) => commande('ConsulterDossier', { id })), ...ids(s.votes).map((id) => commande('ConsulterScrutin', { id }))];
     case 'ListerDossiers':
       return ids(s.dossiers.elements, 3).map((id) => commande('ConsulterDossier', { id }));
+    case 'ConsulterAvancement':
+      return [
+        ...(s.textes.elements as { dossier: { id: string } }[]).slice(0, 2).map((t) => commande('ConsulterDossier', { id: t.dossier.id })),
+        ...(s.files as { etape: string }[]).slice(0, 1).map((f) => commande('ConsulterAvancement', { etape: f.etape, taille: 3 })),
+      ];
     case 'ConsulterDossier': {
       const id = s.entete.id as string;
       const cles = (s.etapes as { cle: string }[]).slice(0, 2).map((e) => e.cle);
@@ -106,6 +111,8 @@ const DEPART: Command[] = [
   commande('ConsulterAccueil', {}),
   commande('ListerDossiers', {}),
   commande('ListerDossiers', { origine: 'parlementaire', taille: 3 }),
+  commande('ConsulterAvancement', {}),
+  commande('ConsulterAvancement', { horsParlement: true }),
   commande('ListerPersonnes', {}),
   commande('ListerPersonnes', { role: 'elu_local' }),
   commande('ClasserPersonnes', { chambre: 'AN', critere: 'ecarts', ordre: 'desc' }),
@@ -219,6 +226,20 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
           }
         });
       }
+    });
+
+    it('tout groupe a une couleur, et sa source', () => {
+      let groupes = 0;
+      for (const r of reussis) {
+        visiter(r.sortie, (o, chemin) => {
+          if (!('abrege' in o && 'chambre' in o && 'libelle' in o)) return;
+          groupes++;
+          const ici = `${r.commande.type} ${chemin}`;
+          expect(String(o.couleur ?? ''), `${ici} couleur`).toMatch(/^#[0-9a-f]{6}$/i);
+          expect(['officielle', 'famille', 'arbitraire'], `${ici} sourceCouleur`).toContain(o.sourceCouleur);
+        });
+      }
+      expect(groupes).toBeGreaterThan(0);
     });
 
     it('pagination cohérente', () => {

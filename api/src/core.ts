@@ -6,6 +6,7 @@ import { CommandBus, type CommandDefinition, type Handler } from '@contrat/comma
 import * as definitions from '@contrat/commands/definitions';
 import { logging, queryCache } from '@contrat/commands/middlewares';
 
+import { lecturesAvancement } from './lectures/avancement';
 import type { Handlers, LecturesDeps } from './lectures/commun';
 import { lecturesDiscussions } from './lectures/discussions';
 import { lecturesDossiers } from './lectures/dossiers';
@@ -26,6 +27,7 @@ export interface CoreDeps extends LecturesDeps {
 export function handlers(deps: LecturesDeps): Handlers {
   return {
     ...lecturesDossiers(deps),
+    ...lecturesAvancement(deps),
     ...lecturesDiscussions(deps),
     ...lecturesScrutins(deps),
     ...lecturesPersonnes(deps),

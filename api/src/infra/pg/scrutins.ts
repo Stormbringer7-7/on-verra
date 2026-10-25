@@ -27,6 +27,7 @@ import type {
 } from '@contrat/domain/model';
 import { exprimes, majoritaire } from '@contrat/domain/votes';
 import type { ScrutinsRepository, SqlDatabase, SqlParams } from '../../ports';
+import { type GroupeLu, couleurGroupeSql, groupe } from './personnes';
 
 // ---------- Fragments communs (discussions.ts, recherche.ts) ----------
 
@@ -65,7 +66,7 @@ export const sqlProvenance = (colonne: string, type: string) => `COALESCE(
 /** GroupeRef (JSON) d'une organisation `o` (null si absente) ; abrégé : publié, sinon nom court, sinon nom. */
 export const sqlGroupe = (o: string) =>
   `CASE WHEN ${o}.entite_id IS NULL THEN NULL ELSE json_build_object('id', ${o}.entite_id,
-     'abrege', COALESCE(${o}.abrege, ${o}.nom_court, ${o}.nom), 'libelle', ${o}.nom, 'couleur', ${o}.couleur,
+     'abrege', COALESCE(${o}.abrege, ${o}.nom_court, ${o}.nom), 'libelle', ${o}.nom, ${couleurGroupeSql(o)},
      'chambre', ${o}.chambre) END`;
 
 /**
@@ -392,12 +393,12 @@ export class PgScrutins implements ScrutinsRepository {
   private async groupes(ids: (string | null)[]): Promise<Map<string, GroupeRef>> {
     const connus = ids.filter((g): g is string => g !== null);
     if (!connus.length) return new Map();
-    const lignes = await this.db.all<{ groupe: GroupeRef }>(
+    const lignes = await this.db.all<{ groupe: GroupeLu }>(
       `SELECT ${sqlGroupe('o')} AS groupe FROM canon.organisation o ${vivante('o.entite_id', 'xo')}
        WHERE o.entite_id = ANY($ids::uuid[])`,
       { $ids: connus },
     );
-    return new Map(lignes.map((l) => [l.groupe.id, l.groupe]));
+    return new Map(lignes.map((l) => [l.groupe.id, groupe(l.groupe)!]));
   }
 
   /**

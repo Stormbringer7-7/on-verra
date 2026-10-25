@@ -530,6 +530,15 @@ class EntrepotPostgres:
             ("cas_a_revoir", False, "Rapprochements en attente de revue humaine (rien n'en est appliqué)",
              "SELECT type || ' ' || cle FROM analytique.cas_revue WHERE statut = 'A_REVOIR'"),
         ]
+        if self.cx.execute("SELECT to_regclass('lecture.couleur_groupe') IS NOT NULL").fetchone()[0]:
+            requetes.append(
+                ("groupe_actif_couleur_arbitraire", False,
+                 "Groupe qui a des membres, sans couleur officielle ni famille : couleur de secours "
+                 "(compléter lecture.couleur_groupe_famille, projections/12_couleur_groupe.sql)",
+                 "SELECT o.chambre || ' ' || COALESCE(o.abrege, o.nom) FROM lecture.couleur_groupe c "
+                 "JOIN canon.organisation o ON o.entite_id = c.groupe_id WHERE c.source = 'arbitraire' "
+                 "AND EXISTS (SELECT 1 FROM lecture.appartenance_groupe ag WHERE ag.groupe_id = c.groupe_id "
+                 "AND ag.fin >= CURRENT_DATE)"))
         resultats = []
         for nom, bloquant, explication, requete in requetes:
             (nombre,) = self.cx.execute(f"SELECT count(*) FROM ({requete}) q").fetchone()

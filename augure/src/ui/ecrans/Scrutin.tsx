@@ -161,7 +161,7 @@ function LigneGroupe({ groupe: g }: { groupe: PositionDeGroupe }) {
   return (
     <Ligne>
       <View style={styles.personne}>
-        <Pastille couleur={g.groupe.couleur ?? p.inkMuted} />
+        <Pastille couleur={g.groupe.couleur} />
         <T style={{ flex: 1 }}>{g.groupe.libelle}</T>
         <Label couleur={g.ligne ? couleurVote(p, g.ligne) : p.inkMuted}>
           {g.ligne ? `${POSITION[g.ligne]} ${part} %` : 'Pas de ligne majoritaire'}

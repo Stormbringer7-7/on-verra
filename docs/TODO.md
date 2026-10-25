@@ -112,6 +112,44 @@ Relevé à l'intégration du 24/10/2026 ([contrat.md](contrat.md)).
 - [ ] Fixtures : incohérences relevées par l'adaptateur mémoire (annuaire `total: 961` pour 9 éléments ; en-têtes de Claire différents selon l'onglet ; votes « de la semaine » hors de la semaine) ; fixtures manquantes (article sans version, filtres d'amendements, onglets dossiers/déclarations de Claire, classements hors AN · écarts).
 - [ ] API : classement par absences (5 à 25 s) et annuaire (1,5 à 5 s) mesurés pendant un chargement : à remesurer (l'annuaire a été accéléré le 25/10/2026), index `(chambre, date)` sur `lecture.participation_scrutin` ou projection sur 12 mois glissants.
 
+## Design v4 « Filtrer ou voir » (relevé le 25/10/2026)
+
+**Source** : même canevas, renommé « Nos politiques ont du talent — navigation par filtres ».
+- Onglets : Actualité · Chiffres · Carte · Recherche · Guide. Suivis et Réglages passent dans l'en-tête en paysage.
+- Le cœur est une vue filtrée unique (Explorer) :
+  - un fil de filtres par famille (Lois, Personnes, Institutions, Territoires, Action législative) ;
+  - une phrase chiffrée, un objet focal avec « Fiche » ;
+  - des onglets de faits : interventions, amendements, votes, contrôle, transparence, personnes ;
+  - « Regrouper par », « Élargir », comparaison de deux groupes.
+- Recherche : 6 familles, déclinaisons, numéros exacts ou ambigus.
+- Remplace la navigation du plan v3 ci-dessous ; tokens, composants et écrans du v3 restent valables.
+
+**Lots**
+- [x] **Où en sont les textes (contrat et API).**
+  - Engorgement par case du parcours et attentes hors du Parlement (Conseil constitutionnel, promulgation, JO).
+  - `ConsulterAvancement`, fixtures, cœur, adaptateurs mémoire et Postgres.
+- [ ] Où en sont les textes, suite :
+  - [x] SQL de `PgDossiers.positions` validé sur la vraie base le 25/10/2026 (2 128 textes non aboutis, 0,3 s). Un renvoi en commission ou une nomination de rapporteur ne vaut pas examen : sans cette règle, 1 533 textes étaient « en examen » en 1re lecture AN, au lieu de 99 ;
+  - carte dans Chiffres, et liste par file ;
+  - contrôle opendata qui ouvre un cas de revue pour chaque délai dépassé d'après nos données ;
+  - décrets d'application (lot 4 du plan v3 : échéanciers Légifrance).
+- [ ] **Faits filtrés (contrat).** Une commande pour l'Explorer : filtres → compteurs par type de fait, faits regroupés, suggestions de filtres avec leur nombre ; fixtures tirées du canevas.
+- [ ] Explorer, puis Recherche par familles, puis Actualité, Carte, Guide, Suivis, Réglages.
+
+**Règles de tous les écrans** (rappelées le 25/10/2026, souvent oubliées)
+- [x] **Tout groupe a une couleur** (25/10/2026) : projection `lecture.couleur_groupe` (officielle, sinon famille d'après une table relue, sinon couleur de secours stable), `GroupeRef.sourceCouleur`, contrôle `groupe_actif_couleur_arbitraire`. En base : les 20 groupes actuels du Sénat en famille, 28 anciens groupes en secours.
+  - Règle (utilisateur, 25/10/2026) : couleur connue et sûre (officielle, ou même parti qu'un groupe AN), sinon couleur selon la position gauche-droite, sinon couleur aléatoire seedée. Plus de rapprochements de « famille » discutables : Union Centriste, RDSE et Les Indépendants sont en couleur seedée en attendant le niveau gauche-droite.
+  - [ ] **Niveau gauche-droite** : position d'un groupe = position médiane de ses membres dans l'hémicycle, d'après les sièges publiés.
+    - AN : `numPlace` de chaque vote (scrutins AN), à charger dans `canon.vote`. Vérifié sur 400 scrutins : la médiane par groupe suit l'ordre de la droite vers la gauche (RN 75, UDR 98, DR 187, HOR 233, EPR 301, DEM 348, SOC 446, LIOT 465, ECOS 512, GDR 586, LFI 605).
+    - Sénat : `sen.sennumsie` (« N° de siège Hémicycle ») dans l'export SQL « Les Sénateurs » (data.gouv.fr, Sénat), à charger. La numérotation ne suit pas l'ordre gauche-droite : il faut le plan de la salle (siège → angle) ; source à trouver côté Sénat (plan de la salle des séances).
+    - Sert aussi à ordonner les groupes de gauche à droite dans l'hémicycle.
+- [ ] **Hémicycle cliquable et zoomable** jusqu'au député (molette, pincement, double tap ; pas de boutons obligatoires), sur les écrans Scrutin et Institutions.
+- [ ] **Vraie carte de France** (contours des départements, source institutionnelle : IGN Admin Express ou contours Etalab), même zoom que l'hémicycle. Remplace la grille de cases du lot 3 v3.
+- [ ] **Débat et LLM** : le service attend un port. Tant qu'aucun adaptateur n'est branché, aucun élément du débat n'est affiché (ni bouton « Débattre », ni écran « Pas encore disponible »).
+
+**Relevé en passant**
+- [ ] `npm run test:pg` : 3 tests de valeurs à remettre à jour après le rafraîchissement des données (`discussions` amendement 357 ; `scrutins` VTANR5L17V7259 et Sénat 2025-325, dont le sort publié est désormais « rejeté »).
+
 ## Intégration du design v3 (relevé le 25/10/2026)
 
 **Source**
@@ -167,7 +205,7 @@ sont mis à jour dans le même lot.
   - [ ] Projections : `lecture.carte_scrutin` (répartition par département pour un scrutin) et `lecture.presence_departement`.
   - [ ] Contrat : `ConsulterCarte { scrutin | presence }`, `ConsulterDepartement { code, scrutin? }`, `TrouverRepresentants { codePostal }`. Cette dernière route n'est jamais journalisée (« nous ne le gardons pas »).
   - [ ] Écrans :
-    - Carte : une case par département, de même taille, sur une grille fixe dans l'app ; outre-mer et Français de l'étranger en liste ;
+    - Carte : vraie carte des départements, zoomable (voir « Règles de tous les écrans » du v4) ; outre-mer en encarts, Français de l'étranger en liste ;
     - Département ;
     - Qui me représente. Les « résumés locaux IA » restent `Synthese` à null.
 - [ ] **Lot 4. Rendre des comptes.**
@@ -180,7 +218,7 @@ sont mis à jour dans le même lot.
     - query `ConsulterApplicationLois` ;
     - écran, et bilan du ministre sur sa fiche.
 - [ ] **Lot 5. Débat simulé**, selon [debatron/PLAN.md](../debatron/PLAN.md).
-  - Les écrans Préparer, Débat et Synthèse dépendent du port `Modele` : tant que `SansModele` est le seul adaptateur, le bouton « Débattre » mène à un écran « Pas encore disponible ».
+  - Les écrans Préparer, Débat et Synthèse dépendent du port `Modele` : tant que `SansModele` est le seul adaptateur, rien du débat n'est affiché (ni bouton « Débattre », ni écran).
   - Le vrai résultat du vote (synthèse) se branche sur `ConsulterScrutin`.
 
 **Décisions à prendre (mes propositions entre parenthèses)**

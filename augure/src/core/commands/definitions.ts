@@ -6,6 +6,8 @@ import type {
   Accueil,
   AccuseSignalement,
   Annuaire,
+  AvancementDesTextes,
+  DemandeAvancement,
   CibleInterventions,
   Classement,
   CleCase,
@@ -40,6 +42,12 @@ export const ConsulterAccueil = defineQuery<Vide, Accueil>('accueil/consulter');
 
 /** Dossiers de la législature (17e par défaut), filtrés par état, origine et thème. */
 export const ListerDossiers = defineQuery<FiltreDossiers, ListeDossiers>('dossiers/lister');
+
+/**
+ * Où en sont les textes non aboutis : une file par case du parcours (en examen, en attente,
+ * attente médiane) et les attentes hors du Parlement ; liste filtrable par file, paginée.
+ */
+export const ConsulterAvancement = defineQuery<DemandeAvancement, AvancementDesTextes>('textes/avancement');
 
 /**
  * Tout le dossier (parcours, texte, votes, acteurs, intérêts, chiffres, sources) ; la liste des

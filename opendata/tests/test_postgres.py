@@ -169,3 +169,41 @@ class Projections(unittest.TestCase):
         # P4 : un écart (contre) sur un vote en groupe ; P1 : aucun sur deux
         self.assertEqual(ligne("P4", "indicateur_ecarts", "votes_en_groupe, ecarts, ecarts_contre"), (1, 1, 1))
         self.assertEqual(ligne("P1", "indicateur_ecarts", "votes_en_groupe, ecarts"), (2, 0))
+
+    def test_couleur_de_chaque_groupe(self):
+        """Officielle si publiée ; sinon celle du groupe AN de la même famille ; sinon de secours, stable."""
+        from datetime import date
+        from src.adaptateurs.stockage.postgres import EntrepotPostgres, ProjecteurPostgres
+        from src.chargement import ContexteCanon, ecrire
+        from src.domaine import EnregistrementSource, IdentiteNative, Systeme
+        from src.domaine.objets import Objet
+        from src.identites import RegistreIdentites
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite CASCADE")
+        e = EntrepotPostgres(CX)
+        ctx = ContexteCanon(e, RegistreIdentites(e), {}, {})
+        groupes = (
+            (Systeme.AN, "DR", {"abrege": "DR", "couleur": "#8CB0DC", "chambre": "AN"}),
+            (Systeme.SENAT, "UMPPO", {"abrege": "UMPPO", "chambre": "SENAT"}),
+            (Systeme.SENAT, "NOUVEAU", {"abrege": "NOUVEAU", "chambre": "SENAT"}),
+        )
+        with ctx.registre.transaction():
+            src, _ = e.enregistrer_source(EnregistrementSource(Systeme.AN, "x", "y", "z"))
+            ecrire(ctx, Objet("personne", IdentiteNative(Systeme.AN, "acteur", "P1"), {"nom": "P1", "nom_affiche": "P1"}), src, None)
+            for systeme, code, champs in groupes:
+                ecrire(ctx, Objet("organisation", IdentiteNative(systeme, "organe", code),
+                                  {"type": "groupe_politique", "nom": code, **champs}), src, None)
+            # le groupe AN a un membre aujourd'hui
+            ecrire(ctx, Objet("fonction", IdentiteNative(Systeme.AN, "mandat", "G1"),
+                              {"personne_id": IdentiteNative(Systeme.AN, "acteur", "P1"), "type": "membre_groupe", "titre": "Membre",
+                               "organisation_id": IdentiteNative(Systeme.AN, "organe", "DR"), "debut": date(2024, 7, 1)}), src, None)
+        couleurs = lambda: dict(CX.execute(
+            "SELECT o.abrege, (c.couleur, c.source) FROM lecture.couleur_groupe c "
+            "JOIN canon.organisation o ON o.entite_id = c.groupe_id").fetchall())
+        ProjecteurPostgres(CX).projeter()
+        premiere = couleurs()
+        self.assertEqual(premiere["DR"], ("#8CB0DC", "officielle"))
+        self.assertEqual(premiere["UMPPO"], ("#8CB0DC", "famille"))
+        self.assertEqual(premiere["NOUVEAU"][1], "arbitraire")
+        self.assertRegex(premiere["NOUVEAU"][0], r"^#[0-9A-F]{6}$")
+        ProjecteurPostgres(CX).projeter()
+        self.assertEqual(couleurs(), premiere)  # on retombe sur les mêmes couleurs

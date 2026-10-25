@@ -63,10 +63,12 @@ import type {
   StatAmendementsEtape,
   StatutVersionArticle,
   Systeme,
+  TexteEnAttente,
   TypeDocument,
   VersionArticle,
 } from '@contrat/domain/model';
-import type { DossiersRepository, Pagination, SqlDatabase, SqlParams } from '../../ports';
+import type { DossiersRepository, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
+import { groupe as groupeRef } from './personnes';
 
 // ---------- Vocabulaire ----------
 
@@ -547,6 +549,7 @@ export class PgDossiers implements DossiersRepository {
       abrege: string | null;
       libelle: string | null;
       couleur: string | null;
+      source_couleur: string | null;
       chambre: string | null;
     }>(
       `SELECT q.cle::int AS cle, p.entite_id AS id, p.nom_affiche AS nom, p.civilite,
@@ -559,13 +562,15 @@ export class PgDossiers implements DossiersRepository {
                WHERE f.personne_id = p.entite_id AND f.type = 'membre_gouvernement' AND COALESCE(f.qualite, '') <> 'membre'
                  AND (f.debut IS NULL OR f.debut <= q.jour) AND (f.fin IS NULL OR f.fin >= q.jour) AND ${vivant('f.entite_id')}
                ORDER BY f.debut DESC NULLS LAST LIMIT 1) AS gouvernement,
-              g.id AS groupe_id, g.abrege, g.libelle, g.couleur, g.chambre
+              g.id AS groupe_id, g.abrege, g.libelle, g.couleur, g.source_couleur, g.chambre
        FROM (SELECT u.id, COALESCE(NULLIF(u.jour, '')::date, CURRENT_DATE) AS jour, u.cle
              FROM unnest($ids::uuid[], $jours::text[]) WITH ORDINALITY AS u(id, jour, cle)) q
        JOIN canon.personne p ON p.entite_id = q.id
        LEFT JOIN LATERAL (
-         SELECT o.entite_id AS id, COALESCE(o.nom_court, o.abrege, o.nom) AS abrege, o.nom AS libelle, o.couleur, o.chambre
+         SELECT o.entite_id AS id, COALESCE(o.nom_court, o.abrege, o.nom) AS abrege, o.nom AS libelle,
+                COALESCE(cg.couleur, o.couleur) AS couleur, cg.source AS source_couleur, o.chambre
          FROM lecture.appartenance_groupe ag JOIN canon.organisation o ON o.entite_id = ag.groupe_id
+         LEFT JOIN lecture.couleur_groupe cg ON cg.groupe_id = o.entite_id
          WHERE ag.personne_id = p.entite_id AND ag.debut <= q.jour AND ag.fin >= q.jour AND o.chambre IN ('AN', 'SENAT')
          ORDER BY ag.debut DESC LIMIT 1) g ON true
        WHERE ${vivant('p.entite_id')}`,
@@ -577,7 +582,7 @@ export class PgDossiers implements DossiersRepository {
       const mandat = l.mandat === 'depute' ? (f ? 'Députée' : 'Député') : l.mandat === 'senateur' ? (f ? 'Sénatrice' : 'Sénateur') : null;
       const groupe: GroupeRef | null =
         l.groupe_id && (l.chambre === 'AN' || l.chambre === 'SENAT')
-          ? { id: l.groupe_id, abrege: l.abrege ?? '', libelle: l.libelle ?? '', couleur: l.couleur, chambre: l.chambre }
+          ? groupeRef({ id: l.groupe_id, abrege: l.abrege ?? '', libelle: l.libelle ?? '', couleur: l.couleur, sourceCouleur: l.source_couleur, chambre: l.chambre })
           : null;
       resultat.set(`${d.id}|${d.jour ?? ''}`, { id: l.id, nom: l.nom, fonction: mandat ?? l.gouvernement ?? null, groupe });
       if (f) this.feminins.add(l.id);
@@ -793,6 +798,98 @@ export class PgDossiers implements DossiersRepository {
       ),
     ]);
     return { total: total?.n ?? 0, dossiers: await this.resumes(ids.map((l) => l.id)) };
+  }
+
+  // ----- Où en sont les textes -----
+
+  async positions(legislature: string): Promise<{ dateReference: string; indetermines: number; positions: PositionTexte[] } | null> {
+    if (!(await this.projection())) return null;
+    const lignes = await this.db.all<{
+      dossier: string;
+      initiative: string | null;
+      date_reference: string;
+      cle: string | null;
+      libelle: string | null;
+      chambre: string | null;
+      en_examen: boolean | null;
+      depuis: string | null;
+      jours: number | null;
+      hors_parlement: string | null;
+    }>(
+      `WITH d AS (
+         SELECT s.dossier_id, s.date_reference, k.initiative
+         FROM lecture.parcours_dossier_synthese s
+         JOIN canon.dossier k ON k.entite_id = s.dossier_id
+         WHERE k.legislature = $legislature AND s.retire_le IS NULL AND ${vivant('k.entite_id')}
+       ), c AS (
+         SELECT p.* FROM lecture.parcours_dossier p JOIN d ON d.dossier_id = p.dossier_id
+       ), abouti AS (
+         -- publié au JO, ou rejeté en 1re lecture de la chambre de dépôt ou en lecture définitive
+         SELECT DISTINCT dossier_id FROM c
+         WHERE etat = 'faite'
+           AND (cle IN ('jo', 'promulgation_jo') OR (cle IN ('seance_1_o', 'lecture_1_o', 'lecture_definitive') AND conclusion ~* 'rejet'))
+       ), position AS (
+         -- case active (faite ou en cours) de plus haut rang ; en cours, elle n'est « en examen »
+         -- qu'avec un acte d'examen (réunion, rapport, débat, décision, saisine du Conseil) : un
+         -- dépôt, un renvoi en commission ou une nomination de rapporteur seuls la laissent en attente
+         SELECT DISTINCT ON (c.dossier_id) c.dossier_id, c.rang, c.cle, c.libelle, c.chambre, c.etat = 'faite' AS faite,
+                c.etat = 'en_cours' AND EXISTS (
+                  SELECT 1 FROM lecture.parcours_acte a
+                  WHERE a.dossier_id = c.dossier_id AND a.cle = c.cle AND a.categorie = 'case' AND a.accompli
+                    AND (a.code_source !~ '(DEPOT|SAISIE|NOMIN)$' OR a.code_source LIKE 'CC-SAISIE%')) AS en_examen,
+                CASE WHEN c.etat = 'en_cours' THEN c.debut ELSE COALESCE(c.fin, c.debut) END AS depuis
+         FROM c WHERE c.etat IN ('faite', 'en_cours')
+         ORDER BY c.dossier_id, c.rang DESC
+       ), suite AS (
+         -- case suivante qui aura encore lieu (le Conseil constitutionnel à venir, facultatif, est sauté)
+         SELECT DISTINCT ON (c.dossier_id) c.dossier_id, c.cle
+         FROM c JOIN position p ON p.dossier_id = c.dossier_id AND c.rang > p.rang
+         WHERE c.etat <> 'sans_objet' AND NOT (c.cle = 'cc' AND c.etat = 'a_venir')
+         ORDER BY c.dossier_id, c.rang
+       )
+       SELECT d.dossier_id AS dossier, d.initiative, d.date_reference::text AS date_reference,
+              p.cle, p.libelle, p.chambre, p.en_examen, p.depuis::text AS depuis, (d.date_reference - p.depuis)::int AS jours,
+              CASE
+                WHEN p.cle = 'cc' AND p.en_examen THEN 'decision_cc'
+                WHEN p.faite AND p.cle <> 'depot' AND s.cle IN ('promulgation', 'promulgation_jo') THEN 'promulgation'
+                WHEN p.faite AND p.cle = 'promulgation' AND s.cle = 'jo' THEN 'publication_jo'
+              END AS hors_parlement
+       FROM d
+       LEFT JOIN position p ON p.dossier_id = d.dossier_id
+       LEFT JOIN suite s ON s.dossier_id = d.dossier_id
+       WHERE d.dossier_id NOT IN (SELECT dossier_id FROM abouti)`,
+      { legislature },
+    );
+    if (lignes.length === 0) return null;
+    const positions: PositionTexte[] = [];
+    let indetermines = 0;
+    for (const l of lignes) {
+      const cle = dans(CLES, l.cle);
+      if (!cle || l.en_examen === null) {
+        indetermines++;
+        continue;
+      }
+      positions.push({
+        dossier: l.dossier,
+        origine: dans(['gouvernement', 'parlementaire'] as const, l.initiative),
+        etape: { cle, libelle: l.libelle ?? '', lieu: dans(LIEUX, l.chambre) },
+        situation: l.en_examen ? 'en_examen' : 'en_attente',
+        depuis: l.depuis,
+        jours: l.jours,
+        horsParlement: dans(['decision_cc', 'promulgation', 'publication_jo'] as const, l.hors_parlement),
+      });
+    }
+    return { dateReference: lignes[0].date_reference, indetermines, positions };
+  }
+
+  async textesEnAttente(positions: PositionTexte[]): Promise<TexteEnAttente[]> {
+    const resumes = new Map((await this.resumes(positions.map((p) => p.dossier))).map((r) => [r.id, r]));
+    return positions.flatMap((p) => {
+      const r = resumes.get(p.dossier);
+      if (!r) return [];
+      const { horsParlement: _h, dossier: _d, ...position } = p;
+      return [{ ...position, dossier: { id: r.id, titre: r.titre }, dernierActe: r.dernierEvenement, prochaineEcheance: r.prochaineEcheance }];
+    });
   }
 
   // ----- Dossier -----

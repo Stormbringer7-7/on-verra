@@ -33,6 +33,7 @@ import type {
   QuestionResume,
   RoleDansLesDossiers,
   RolePersonne,
+  SourceCouleur,
   Systeme,
   TypeFonction,
 } from '@contrat/domain/model';
@@ -70,7 +71,23 @@ export const provenanceSql = (colonne: string) => `(
 /** Référence de groupe (GroupeRef) depuis une ligne de canon.organisation. */
 export const groupeSql = (alias: string) =>
   `json_build_object('id', ${alias}.entite_id, 'abrege', COALESCE(${alias}.abrege, ${alias}.nom_court, ${alias}.nom),
-     'libelle', ${alias}.nom, 'couleur', ${alias}.couleur, 'chambre', ${alias}.chambre)`;
+     'libelle', ${alias}.nom, ${couleurGroupeSql(alias)}, 'chambre', ${alias}.chambre)`;
+
+/**
+ * Couleur d'un groupe (projection `lecture.couleur_groupe` : officielle, de famille ou de secours),
+ * en deux clés de json_build_object : 'couleur' et 'sourceCouleur'.
+ */
+export const couleurGroupeSql = (alias: string) =>
+  `'couleur', COALESCE((SELECT cg.couleur FROM lecture.couleur_groupe cg WHERE cg.groupe_id = ${alias}.entite_id), ${alias}.couleur),
+   'sourceCouleur', COALESCE((SELECT cg.source FROM lecture.couleur_groupe cg WHERE cg.groupe_id = ${alias}.entite_id),
+                             CASE WHEN ${alias}.couleur IS NOT NULL THEN 'officielle' END)`;
+
+/** Couleur de secours quand la projection ne connaît pas le groupe (jamais vide : règle de l'app). */
+export const COULEUR_INCONNUE = '#8D949A';
+
+/** Source de couleur lue, ou « arbitraire » (secours). */
+export const sourceCouleur = (valeur: string | null | undefined): SourceCouleur =>
+  valeur === 'officielle' || valeur === 'famille' ? valeur : 'arbitraire';
 
 /**
  * Groupe politique d'une personne dans une chambre à une date (fonction membre_groupe en cours).
@@ -99,9 +116,23 @@ export function provenance(lue: Provenance | null | undefined, type: string, id:
 
 export const chambre = (valeur: string | null | undefined): Chambre => (valeur === 'SENAT' ? 'SENAT' : 'AN');
 
-export function groupe(lu: (Omit<GroupeRef, 'chambre'> & { chambre: string | null }) | null | undefined): GroupeRef | null {
+/** GroupeRef tel que le lit groupeSql (couleur et source pouvant manquer). */
+export type GroupeLu = Omit<GroupeRef, 'chambre' | 'couleur' | 'sourceCouleur'> & {
+  couleur: string | null;
+  sourceCouleur?: string | null;
+  chambre: string | null;
+};
+
+export function groupe(lu: GroupeLu | null | undefined): GroupeRef | null {
   if (!lu) return null;
-  return { id: lu.id, abrege: lu.abrege, libelle: lu.libelle, couleur: lu.couleur ?? null, chambre: chambre(lu.chambre) };
+  return {
+    id: lu.id,
+    abrege: lu.abrege,
+    libelle: lu.libelle,
+    couleur: lu.couleur ?? COULEUR_INCONNUE,
+    sourceCouleur: lu.couleur ? sourceCouleur(lu.sourceCouleur) : 'arbitraire',
+    chambre: chambre(lu.chambre),
+  };
 }
 
 /** Titres des dossiers : `titre_court` est un identifiant technique (« fin_de_vie_17e »), d'où le titre. */

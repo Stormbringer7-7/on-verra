@@ -25,6 +25,10 @@
 import type {
   AccuseSignalement,
   ActeSurLeDossier,
+  AttenteHorsParlement,
+  Origine,
+  SituationTexte,
+  TexteEnAttente,
   AmendementResume,
   Annuaire,
   ArticleResume,
@@ -241,6 +245,42 @@ export interface DossiersRepository {
    * Tables : canon.dossier (initiative 'gouvernement', date_depot), lecture.parcours_dossier.
    */
   deposesParLeGouvernement(depuis: string, limite: number): Promise<{ total: number; dossiers: DossierResume[] }>;
+
+  /**
+   * Où en est chaque texte non abouti de la législature (Où en sont les textes) ; null hors
+   * projection. Non abouti : ni JO (ou promulgation et JO) fait, ni retiré, ni rejeté en 1re
+   * lecture de la chambre de dépôt ou en lecture définitive. Position : la case active (faite ou
+   * en cours) de plus haut rang ; `en_examen` si elle est en cours avec un acte d'examen
+   * (réunion, rapport, débat, décision, saisine du Conseil : un dépôt, un renvoi en commission ou
+   * une nomination de rapporteur seuls ne suffisent pas), depuis son début ; sinon `en_attente`,
+   * depuis son début si elle est en cours, depuis sa fin (à défaut son début) si elle est faite.
+   * Hors Parlement, d'après les cases suivantes
+   * qui ne sont pas `sans_objet` (le Conseil constitutionnel à venir, facultatif, est sauté) :
+   * case `cc` en cours → decision_cc ; suite promulgation ou promulgation_jo → promulgation ;
+   * promulgation faite, suite jo → publication_jo. Un texte sans case active est indéterminé.
+   * Tables : lecture.parcours_dossier, lecture.parcours_dossier_synthese (date_reference, retire_le),
+   * canon.dossier (legislature, initiative).
+   */
+  positions(legislature: string): Promise<{ dateReference: string; indetermines: number; positions: PositionTexte[] } | null>;
+
+  /**
+   * Les textes de ces positions, dans le même ordre : titre, dernier acte publié, prochaine
+   * échéance. Une position dont le dossier est inconnu ou retiré est omise.
+   * Tables : canon.dossier, lecture.parcours_acte, lecture.parcours_dossier_synthese.
+   */
+  textesEnAttente(positions: PositionTexte[]): Promise<TexteEnAttente[]>;
+}
+
+/** Position d'un texte non abouti, telle que la lit le dépôt : le cœur la range en files. */
+export interface PositionTexte {
+  dossier: string;
+  origine: Origine | null;
+  etape: TexteEnAttente['etape'];
+  situation: SituationTexte;
+  depuis: string | null;
+  jours: number | null;
+  /** Ce que le texte attend hors du Parlement, d'après son parcours ; null sinon. */
+  horsParlement: AttenteHorsParlement | null;
 }
 
 // ---------- Discussions ----------

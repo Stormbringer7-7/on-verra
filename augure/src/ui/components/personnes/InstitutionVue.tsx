@@ -81,7 +81,7 @@ function VueChambre({ chambre }: { chambre: Chambre }) {
             .sort((a, b) => a.rang - b.rang)
             .map((g) => (
               <Ligne key={g.groupe.id}>
-                <Pastille couleur={g.groupe.couleur ?? p.lineStrong} />
+                <Pastille couleur={g.groupe.couleur} />
                 <T style={{ flex: 1 }}>{g.groupe.libelle}</T>
                 <T variant="data" ton="inkMuted">
                   {nombre(g.sieges)}
