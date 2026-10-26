@@ -27,11 +27,19 @@ export const lienFictif = (chemin: string) => `https://panoptique.invalid/${chem
 
 // ---------- Groupes ----------
 
-const groupe = (id: string, abrege: string, libelle: string, couleur: string, chambre: 'AN' | 'SENAT'): GroupeRef => ({
+const groupe = (
+  id: string,
+  abrege: string,
+  libelle: string,
+  couleur: string,
+  chambre: 'AN' | 'SENAT',
+  sourceCouleur: GroupeRef['sourceCouleur'] = chambre === 'AN' ? 'officielle' : 'famille',
+): GroupeRef => ({
   id,
   abrege,
   libelle,
   couleur,
+  sourceCouleur,
   chambre,
 });
 
@@ -177,6 +185,24 @@ export const BARRE_BUDGET = barre([
   ['lecture_definitive', 'Lecture définitive AN', 'a_venir'],
   ['cc', 'Conseil constit.', 'a_venir'],
   ['promulgation_jo', 'Promulgation et JO', 'a_venir'],
+]);
+
+/** Procédure accélérée, conclusions de la CMP adoptées le 1er octobre, Conseil non saisi, pas encore promulgué. */
+export const BARRE_EPARGNE = barre([
+  ['depot', 'Dépôt', 'faite'],
+  ['commission_1_o', 'Commission AN', 'faite'],
+  ['seance_1_o', 'Séance AN', 'faite'],
+  ['commission_1_s', 'Commission Sénat', 'faite'],
+  ['seance_1_s', 'Séance Sénat', 'faite'],
+  ['lecture_2_o', '2e lecture AN', 'sans_objet'],
+  ['lecture_2_s', '2e lecture Sénat', 'sans_objet'],
+  ['cmp', 'CMP', 'faite'],
+  ['conclusions_cmp', 'Vote du texte de la CMP', 'faite'],
+  ['nouvelle_lecture', 'Nouvelle lecture', 'sans_objet'],
+  ['lecture_definitive', 'Lecture définitive AN', 'sans_objet'],
+  ['cc', 'Conseil constit.', 'a_venir'],
+  ['promulgation', 'Promulgation', 'a_venir'],
+  ['jo', 'Journal officiel', 'a_venir'],
 ]);
 
 export const BARRE_MEDECINS = barre([

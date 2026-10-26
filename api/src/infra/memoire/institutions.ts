@@ -19,7 +19,7 @@ export class InstitutionsMemoire implements InstitutionsRepository {
   async chambre(chambre: 'an' | 'senat', date: string): Promise<DeType<'an' | 'senat'>> {
     const i = await this.institution(chambre);
     const libelle = chambre === 'an' ? 'Assemblée nationale' : 'Sénat';
-    return i ? { ...i, date } : { type: chambre, libelle, legislature: null, date, sieges: 0, groupes: [], sansGroupe: 0 };
+    return i ? { ...i, date } : { type: chambre, libelle, legislature: null, date, sieges: 0, groupes: [], sansGroupe: 0, membres: [] };
   }
 
   async gouvernement(_date: string) {

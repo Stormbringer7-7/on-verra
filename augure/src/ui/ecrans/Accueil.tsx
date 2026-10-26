@@ -1,12 +1,14 @@
-// Accueil (canevas, « Accueil ») : la semaine au Parlement. Dossiers à suivre, chacun avec sa barre
-// de parcours et sa prochaine échéance datée (ou son dernier acte publié) ; scrutins publics de la
-// semaine dans les deux chambres ; accès aux autres onglets.
+// Onglet Actualité (canevas v4, « Accueil ») : ce qui a bougé au Parlement cette semaine. Dossiers à
+// suivre, chacun avec sa barre de parcours et sa prochaine échéance datée (ou son dernier acte
+// publié) ; scrutins publics de la semaine dans les deux chambres ; « Parcourir » mène aux listes
+// (dossiers, personnes, institutions) et aux chiffres.
 
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ConsulterAccueil, type DossierResume } from '@/core';
 import { useAller } from '../../navigation';
-import { Action, Carte, Label, T, TitreEcran, TitreSection } from '../components/base';
+import { Action, Carte, Label, Puce, T, TitreEcran, TitreSection } from '../components/base';
+import { Puces } from '../components/fondations';
 import { BarreCompacte } from '../components/commun/BarreParcours';
 import { Signaler } from '../components/commun/Signaler';
 import { Chargement, Colonnes, Ecran, Erreur } from '../components/Ecran';
@@ -14,6 +16,7 @@ import { LigneScrutin } from '../components/LigneScrutin';
 import { dateLongue, titreOfficielDistinct } from '../format';
 import { statutDossier, suiteDossier, natureDossier } from '../libelles';
 import { useCommand, useCore } from '../hooks/core';
+import { useSuivis } from '../hooks/reglages';
 import { usePalette } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 
@@ -43,11 +46,55 @@ function CarteDossier({ dossier: d }: { dossier: DossierResume }) {
   );
 }
 
-const EXPLORER = [
-  { onglet: 'Dossiers', titre: 'Dossiers législatifs', aide: 'Suivre une loi du dépôt au Journal officiel' },
-  { onglet: 'Personnes', titre: 'Personnes', aide: 'Députés, sénateurs, ministres : fonctions et choix' },
-  { onglet: 'Institutions', titre: 'Institutions', aide: 'Assemblée, Sénat, Gouvernement, Conseil constitutionnel' },
-] as const;
+/** « Suivis » (et leur nombre) en haut de l'Actualité : le seul accès en portrait, l'en-tête large en a un aussi. */
+function BoutonSuivis() {
+  const p = usePalette();
+  const aller = useAller();
+  const { dossiers, personnes } = useSuivis();
+  const n = dossiers.length + personnes.length;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={n ? `Mes suivis : ${n}` : 'Mes suivis'}
+      onPress={aller.suivis}
+      style={[styles.suivis, { borderColor: p.lineFaint }]}
+    >
+      <Label ton="ink">Suivis</Label>
+      {n > 0 && (
+        <View style={[styles.compte, { backgroundColor: p.signal }]}>
+          <T variant="caption" couleur={p.signalInk}>
+            {n}
+          </T>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+/** « Parcourir » : les listes, empilées au-dessus de l'Actualité. */
+function Parcourir() {
+  const aller = useAller();
+  const entrees = [
+    { cle: 'faits', libelle: '✎ Tous les faits', aller: () => aller.explorer() },
+    { cle: 'lois', libelle: '§ Lois', aller: aller.dossiers },
+    { cle: 'personnes', libelle: '◐ Personnes et groupes', aller: () => aller.personnes() },
+    { cle: 'institutions', libelle: '▥ Institutions', aller: () => aller.institutions() },
+    { cle: 'territoires', libelle: '⌖ Territoires', aller: () => aller.onglet('Carte') },
+  ];
+  return (
+    <View style={styles.parcourir}>
+      <TitreSection>Parcourir</TitreSection>
+      <Puces label="Parcourir">
+        {entrees.map((e) => (
+          <Puce key={e.cle} actif={false} onPress={e.aller}>
+            {e.libelle}
+          </Puce>
+        ))}
+      </Puces>
+      <Action onPress={() => aller.onglet('Chiffres')}>Le Parlement en chiffres →</Action>
+    </View>
+  );
+}
 
 export function Accueil() {
   const aller = useAller();
@@ -57,7 +104,7 @@ export function Accueil() {
   if (accueil.statut === 'erreur') {
     return (
       <Ecran>
-        <TitreEcran>Ce qui avance au Parlement</TitreEcran>
+        <TitreEcran>Actualité</TitreEcran>
         <Erreur message={accueil.message} onReessayer={accueil.recharger} />
       </Ecran>
     );
@@ -66,7 +113,7 @@ export function Accueil() {
   if (!a) {
     return (
       <Ecran>
-        <TitreEcran>Ce qui avance au Parlement</TitreEcran>
+        <TitreEcran>Actualité</TitreEcran>
         <Chargement />
       </Ecran>
     );
@@ -74,11 +121,17 @@ export function Accueil() {
 
   return (
     <Ecran>
-      <TitreEcran surtitre={`Semaine du ${dateLongue(a.semaine.debut)}`}>Ce qui avance au Parlement</TitreEcran>
+      <View style={styles.titreLigne}>
+        <View style={styles.entete}>
+          <TitreEcran surtitre={`Semaine du ${dateLongue(a.semaine.debut)}`}>Actualité</TitreEcran>
+          <T ton="inkSoft">Ce qui a bougé au Parlement cette semaine.</T>
+        </View>
+        <BoutonSuivis />
+      </View>
       <Colonnes
         principale={
           <>
-            <TitreSection action={<Action onPress={() => aller.onglet('Dossiers')}>Tous les dossiers →</Action>}>
+            <TitreSection action={<Action onPress={aller.dossiers}>Tous les dossiers →</Action>}>
               Dossiers à suivre
             </TitreSection>
             {a.dossiers.length ? (
@@ -104,18 +157,8 @@ export function Accueil() {
                 </T>
               )}
             </View>
-            <View style={styles.explorer}>
-              <TitreSection>Explorer</TitreSection>
-              {EXPLORER.map((e) => (
-                <Carte key={e.onglet} contour onPress={() => aller.onglet(e.onglet)}>
-                  <T variant="heading">{e.titre} →</T>
-                  <T variant="small" ton="inkMuted">
-                    {e.aide}
-                  </T>
-                </Carte>
-              ))}
-            </View>
-            <T variant="body" ton="inkMuted">
+            <Parcourir />
+            <T variant="caption" ton="inkMuted">
               {source === 'fixtures'
                 ? 'Données fictives de maquette.'
                 : 'Sources : Assemblée nationale, Sénat, Légifrance, Conseil constitutionnel, HATVP. Chaque fiche cite les siennes.'}
@@ -129,9 +172,13 @@ export function Accueil() {
 }
 
 const styles = StyleSheet.create({
+  titreLigne: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space[4] },
+  suivis: { flexDirection: 'row', alignItems: 'center', gap: space[2], minHeight: 44, paddingHorizontal: 14, borderRadius: 9999, borderWidth: 1 },
+  compte: { minWidth: 20, height: 20, paddingHorizontal: 6, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
   carteEntete: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: space[2] },
   nature: { flexShrink: 1 },
   cartes: { gap: space[3] },
-  explorer: { gap: space[2] },
+  entete: { gap: space[2], flexShrink: 1 },
+  parcourir: { gap: space[3] },
   vide: { paddingVertical: space[3] },
 });

@@ -1,9 +1,18 @@
 // Adaptateur mémoire de RechercheRepository : les réponses des fixtures pour une requête connue ;
 // sinon, recherche sans casse ni accents dans toutes les réponses connues. Une section par type
-// trouvé, paginée.
+// trouvé, paginée. Recherche par familles : le catalogue des fixtures, cherché par les mêmes
+// fonctions que celles qui calculent les exemples.
 
-import type { DemandeRecherche, ResultatRecherche, Trouve, TypeRecherche } from '@contrat/domain/model';
+import type {
+  DeclinaisonRecherche,
+  DemandeRecherche,
+  NumeroOfficiel,
+  ResultatRecherche,
+  Trouve,
+  TypeRecherche,
+} from '@contrat/domain/model';
 import { normaliser } from '@contrat/domain/texte';
+import { candidatsCatalogue, comptesCatalogue, sectionCatalogue } from '@fixtures/familles';
 
 import type { Pagination, RechercheRepository } from '../../ports';
 import { type DonneesMemoire, paginer } from './donnees';
@@ -27,5 +36,17 @@ export class RechercheMemoire implements RechercheRepository {
       .map((type) => ({ type, resultats: paginer(uniques.filter((t) => t.type === type), pagination) }))
       .filter((s) => s.resultats.total > 0);
     return { q: demande.q, type: demande.type ?? null, sections };
+  }
+
+  async compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]) {
+    return comptesCatalogue(q, declinaisons, (await this.donnees).retirees);
+  }
+
+  async chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination) {
+    return sectionCatalogue(q, declinaison, pagination, (await this.donnees).retirees);
+  }
+
+  async candidatsNumero(numero: NumeroOfficiel, limite: number) {
+    return candidatsCatalogue(numero, (await this.donnees).retirees).slice(0, limite);
   }
 }

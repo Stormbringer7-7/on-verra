@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Image, Platform, StyleSheet, View } from 'react-native';
 
 import sieges from '../../../assets/sieges.png';
+import { useReglages } from '../hooks/reglages';
 import { usePalette } from '../theme/ThemeProvider';
 
 /** Même largeur que le logo du splash natif (`imageWidth` d'expo-splash-screen dans app.json). */
@@ -23,14 +24,17 @@ export function Ouverture({ onPret, onTerminee }: { onPret: () => void; onTermin
   const p = usePalette();
   const [ouverture] = useState(() => new Animated.Value(0));
   const [opacite] = useState(() => new Animated.Value(1));
+  // Réglage de l'app (« Réduire les animations ») ; celui du système est lu ci-dessous.
+  const reduitApp = useReglages().reglages.animationsReduites;
 
   useEffect(() => {
     const natif = Platform.OS !== 'web';
     let animation: Animated.CompositeAnimation | undefined;
-    // Animations réduites (réglage d'accessibilité) : l'écran s'efface sans que l'œil s'ouvre.
+    // Animations réduites (réglage de l'app ou du système) : l'écran s'efface sans que l'œil s'ouvre.
     AccessibilityInfo.isReduceMotionEnabled()
       .catch(() => false)
-      .then((reduit) => {
+      .then((systeme) => {
+        const reduit = systeme || reduitApp;
         const effacement = Animated.timing(opacite, { toValue: 0, duration: 300, useNativeDriver: natif });
         animation = reduit
           ? effacement
@@ -43,7 +47,7 @@ export function Ouverture({ onPret, onTerminee }: { onPret: () => void; onTermin
         animation.start(({ finished }) => finished && onTerminee());
       });
     return () => animation?.stop();
-  }, [ouverture, opacite, onTerminee]);
+  }, [ouverture, opacite, onTerminee, reduitApp]);
 
   // La zone de coupe suit la barre ; la pupille y remonte de sa montée plus la descente de la barre.
   const barre = { transform: [{ translateY: ouverture.interpolate({ inputRange: [0, 1], outputRange: [0, DESCENTE_BARRE * k] }) }] };

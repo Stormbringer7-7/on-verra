@@ -114,7 +114,7 @@ def scrutin(doc: Document, actes_du_scrutin: dict[str, tuple[str, str]], cherche
             for v in votants(nominatif.get(cle)):
                 votes[val(v["acteurRef"])] = {"personne_id": an("acteur", val(v["acteurRef"])), "position": position,
                                               "groupe_id": groupe, "par_delegation": val(v.get("parDelegation")) == "true",
-                                              "cause": val(v.get("causePositionVote"))}
+                                              "cause": val(v.get("causePositionVote")), "siege": entier(v.get("numPlace"))}
     for numero, candidats in manques:
         yield amendement_cite(f"amendement_cite:AN:scrutin:{uid}", numero, candidats, [("scrutin", ident)],
                               {"ou": f"scrutin {uid}", "titre": titre})

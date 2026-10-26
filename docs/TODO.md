@@ -8,6 +8,7 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
 ## En cours
 
 - Liste des médias sources (côté utilisateur) : voir « Intervenants et sources médiatiques ».
+- À relire et commiter (25/10/2026, branche `design-v4`) : design v4 (voir « Design v4 » ci-dessous), migrations 0018 à 0020 et projections 11, 12, 60, 61, 65, déjà appliquées à la base locale.
 - À commiter (25/10/2026) : liens des comptes rendus AN (migration 0017), chargement de l'app web
   (polices woff2, page de chargement), retrait de l'ancienne chaîne SQLite, réorganisation de la
   documentation.
@@ -54,6 +55,12 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
 - [ ] Lobbying → dossier (« Vérifié » si l'action cite le texte, sinon « à vérifier »).
 - [ ] RNE : archiver chaque livraison (historique des mandats locaux) ; `ODSEN_MANDAT_LOCAL`.
 - [ ] Avis du rapporteur et du Gouvernement sur les amendements AN (non publiés en données structurées).
+- [ ] 49.3 : publié par l'AN (dossiers L17, vérifié le 25/10/2026) comme acte
+  `DeclarationGouvernement_Type` (`AN21-DGVT`, `ANNLEC-DGVT`, `ANLDEF-DGVT`, `CMP-DGVT`) avec
+  `typeDeclaration.fam_code = "Art.49.3"` (16 actes, 11 dossiers), suivi de `DepotMotionCensure_Type`
+  (`texteAssocie` = la motion) et `DecisionMotionCensure_Type` (`voteRefs` → scrutin, `decision`).
+  L'ETL garde la nature `declaration_gouvernement` mais perd `typeDeclaration` : à garder pour
+  dire « 49.3 » sans deviner. Préalable aux moments institutionnels (voir « Famille Moments »).
 
 ### Corrections d'adaptateurs relevées par les lots
 
@@ -112,6 +119,72 @@ Relevé à l'intégration du 24/10/2026 ([contrat.md](contrat.md)).
 - [ ] Fixtures : incohérences relevées par l'adaptateur mémoire (annuaire `total: 961` pour 9 éléments ; en-têtes de Claire différents selon l'onglet ; votes « de la semaine » hors de la semaine) ; fixtures manquantes (article sans version, filtres d'amendements, onglets dossiers/déclarations de Claire, classements hors AN · écarts).
 - [ ] API : classement par absences (5 à 25 s) et annuaire (1,5 à 5 s) mesurés pendant un chargement : à remesurer (l'annuaire a été accéléré le 25/10/2026), index `(chambre, date)` sur `lecture.participation_scrutin` ou projection sur 12 mois glissants.
 
+## Design v4 « Filtrer ou voir » (relevé le 25/10/2026)
+
+**Source** : même canevas, renommé « Nos politiques ont du talent — navigation par filtres ».
+- Onglets : Actualité · Chiffres · Carte · Recherche · Guide. Suivis et Réglages passent dans l'en-tête en paysage.
+- Le cœur est une vue filtrée unique (Explorer) :
+  - un fil de filtres par famille (Lois, Personnes, Institutions, Territoires, Action législative) ;
+  - une phrase chiffrée, un objet focal avec « Fiche » ;
+  - des onglets de faits : interventions, amendements, votes, contrôle, transparence, personnes ;
+  - « Regrouper par », « Élargir », comparaison de deux groupes.
+- Recherche : 6 familles, déclinaisons, numéros exacts ou ambigus.
+- Remplace la navigation du plan v3 ci-dessous ; tokens, composants et écrans du v3 restent valables.
+
+**Lots**
+- [x] **Où en sont les textes (contrat et API).**
+  - Engorgement par case du parcours et attentes hors du Parlement (Conseil constitutionnel, promulgation, JO).
+  - `ConsulterAvancement`, fixtures, cœur, adaptateurs mémoire et Postgres.
+- [ ] Où en sont les textes, suite :
+  - [x] SQL de `PgDossiers.positions` validé sur la vraie base le 25/10/2026 (2 128 textes non aboutis, 0,3 s). Un renvoi en commission ou une nomination de rapporteur ne vaut pas examen : sans cette règle, 1 533 textes étaient « en examen » en 1re lecture AN, au lieu de 99 ;
+  - [x] carte dans Chiffres, et page Textes par file (`/chiffres/textes`) ;
+  - contrôle opendata qui ouvre un cas de revue pour chaque délai dépassé d'après nos données ;
+  - décrets d'application (lot 4 du plan v3 : échéanciers Légifrance).
+- [x] **Faits filtrés (contrat).** `ExplorerFaits` (`faits/explorer`) : contrat (`domain/faits.ts`, règles partagées dans `domain/explorer.ts`), 12 exemples de fixtures, API mémoire et Postgres. Temps réels : dossier moyen 0,6 s, compteurs par personne 0,75 s, par scrutin 0,13 s.
+  - [ ] Trop lent sans filtre (61 s au premier appel) et par groupe (4,6 s) : `canon.intervention` fait 661 Mo pour 128 Mo de cache. Projection étroite `lecture.fait_intervention` et index (`canon.amendement (etape_id)`, `canon.scrutin (amendement_id)`, `canon.scrutin (etape_id)`, `lecture.parcours_acte (etape_id)`).
+  - [ ] Rapports de commissions d'enquête dans Contrôle (absents de `canon`).
+  - [ ] Filtre département, après le chargement des territoires (aujourd'hui dans `indisponibles`).
+- [x] Relecture d'un compte rendu AN republié (25/10/2026) : interventions absentes marquées retirées (`Ensemble` par séance), unicité (réunion, rang) remplacée par un index (migration 0019) et le contrôle `intervention_ordre_en_double`. Cause : `CRSANR5L17S2027O1N039`, 45 interventions insérées, 440 décalées, 1 retirée.
+- [x] Projections de l'Explorer `lecture.fait_intervention` et `lecture.fait_amendement` (60 et 61), index (migration 0020). Sorties identiques ; sans filtre de 28 s à 0,6 s au premier appel, groupe de 4,7 s à 1,6 s, dossier de 11 s à 0,4 s.
+  - [ ] Encore au-delà de 1 s au premier appel : groupe (1,6 s), amendements d'un groupe (construction des fiches d'amendements, `PgDossiers.resumesAmendements`), cache de Postgres froid (128 Mo).
+- [ ] Commissions AN : identité des interventions par rang (`an/commissions.py`) ; une republication décale le contenu sous la même identité.
+- [x] **Fondations v4** (25/10/2026) : tokens v2, police sans 500, composants v2 (`components/fondations.tsx` : Avertissement, Indicateur à échelle, Puces, Interrupteur, Avant / Après, Pastille de statut), 5 onglets (Actualité, Chiffres, Carte, Recherche, Guide), Dossiers, Personnes et Institutions empilés aux mêmes adresses, pied de page, retour nommé en portrait, fil « / » en paysage. Guide : texte du canevas adapté à nos règles. Carte : avertissement honnête en attendant les données.
+- [x] **Explorer** (25/10/2026) : écran `/explorer` sur `ExplorerFaits`, l'état dans l'adresse. Fil par famille, phrase composée depuis les compteurs, objet focal et Fiche (feuille ou panneau), onglets avec compteurs, transparence au style à part, « Regrouper par », têtes qui filtrent, scrutin filtré et « contre son groupe », main levée, comparaison par appui long, « Élargir », « Rien ici », « Ajouter un filtre » ou « Affiner ». Liens depuis Actualité, Recherche, Dossier et Personne.
+  - [ ] Contrat : libellé lisible des groupes « par date » (une date ISO, mise en forme par l'UI).
+  - [ ] Fiche de l'Explorer : chiffres propres à l'objet (vote uni, présence), quand le contrat les donnera.
+  - [ ] Tester l'appui long sur iOS et Android.
+- [x] **Lot 2 v4** (25/10/2026) : Réglages (taille du texte, thème, contraste renforcé, animations réduites, exporter, tout effacer), Méthode, Bienvenue au premier lancement, Mes suivis gardés sur l'appareil (boutons Suivre), « Ce qui a bougé » (`ConsulterSuivis`, sans état côté serveur), liens Suivis et Réglages dans l'en-tête paysage, bouton Suivis en portrait, pied de page.
+  - [ ] Taille du texte pour les styles qui n'utilisent pas `T`.
+  - [ ] Mes suivis : `derniersEcarts` en une requête pour toutes les personnes (3,8 s au premier appel), actes regroupés par dossier.
+  - [ ] Thèmes et code postal dans Bienvenue et Réglages, une fois les thèmes attribués et `TrouverRepresentants` faits.
+- [x] **Recherche v4** (25/10/2026) : `ChercherParFamilles` (6 familles, 21 déclinaisons comptées, numéros officiels exacts ou ambigus), contrat, fixtures, API mémoire et Postgres, écran. Toucher un résultat ouvre l'Explorer filtré, « Fiche » ouvre l'objet seul. Numéros 0,003 à 0,3 s, une déclinaison 0,3 à 0,7 s, parcourir 2 à 3 s.
+  - [ ] Index plein texte des amendements (colonne `texte_recherche` + GIN), puis remettre le dispositif dans la recherche (aujourd'hui : numéro ou titre du dossier).
+  - [ ] Étapes, personnes auditionnées, circonscriptions, rapports et déports dans la Recherche, quand leurs données existent.
+- [x] **Territoires** (lot 3, 25/10/2026), sans les codes postaux : département de chaque mandat (AN : AMO ; Sénat : `elusen.dptnum` → `dpt.dptcod`) ; projections `lecture.departement`, `elu_departement`, `carte_scrutin` (vue), `presence_elu`, `presence_departement` (année en cours, comparée au groupe) ; `ConsulterCarte`, `ConsulterDepartement` ; écrans Carte (vraie carte, présence AN, présence Sénat ou un vote) et Département.
+  - [ ] Codes postaux → circonscriptions et `TrouverRepresentants` : source officielle à charger ; une commune partagée donne ses candidates.
+  - [ ] Présence sur 12 mois glissants : index `(chambre, date)` sur `lecture.participation_scrutin` d'abord (aujourd'hui 2 min 24 s).
+- [ ] Autres écrans (puis leurs liens dans l'en-tête paysage), autres cartes de Chiffres (chacune avec ses données réelles), mise en page v4 des fiches ; README d'augure à mettre à jour.
+
+**Règles de tous les écrans** (rappelées le 25/10/2026, souvent oubliées)
+- [x] **Tout groupe a une couleur** (25/10/2026) : projection `lecture.couleur_groupe` (officielle, sinon famille d'après une table relue, sinon couleur de secours stable), `GroupeRef.sourceCouleur`, contrôle `groupe_actif_couleur_arbitraire`. En base : les 20 groupes actuels du Sénat en famille, 28 anciens groupes en secours.
+  - Règle (utilisateur, 25/10/2026) : couleur connue et sûre (officielle, ou même parti qu'un groupe AN), sinon couleur selon la position gauche-droite, sinon couleur aléatoire seedée. Plus de rapprochements de « famille » discutables : Union Centriste, RDSE et Les Indépendants sont en couleur seedée en attendant le niveau gauche-droite.
+  - [x] **Niveau gauche-droite** (25/10/2026).
+    - Sièges chargés : AN `numPlace` → `canon.vote.siege` (migration 0018) ; Sénat `sennumsie` → lien `siege`.
+    - Projection `lecture.position_groupe` : AN, 1 − rang du siège médian (l'AN numérote de la droite vers la gauche). Positions réelles : LFI 0,07, GDR 0,10, ECOS 0,21, LIOT 0,29, SOC 0,32, DEM 0,47, EPR 0,54, HOR 0,64, DR 0,71, UDR 0,85, RN 0,89.
+    - Couleur `gauche_droite` (dégradé rouge → bleu) entre `famille` et `arbitraire` ; hémicycle AN ordonné de gauche à droite.
+  - [ ] Sénat : la numérotation des sièges ne suit pas l'ordre gauche-droite, et aucun plan de la salle publié par le Sénat n'a été trouvé. D'ici là : pas de position, couleur seedée pour UC, RDSE et Les Indépendants.
+- [x] **Hémicycle cliquable et zoomable** (molette, pincement, double tap), sur Scrutin et Institution (`components/zoom/ZoomPan.tsx`, `components/hemicycle/HemicycleZoom.tsx`) ; vérifié à la molette et au double clic dans Chrome.
+  - [x] Jusqu'au député (25/10/2026) : `FicheScrutin.votes` (chaque parlementaire en mandat, absents compris, délégation, mise au point, siège publié) et `Institution.membres` (siège : dernier vote AN publié, ou n° de siège Sénat). Un siège touché ouvre la fiche ; liste accessible groupe par groupe. À chaud : fiche scrutin 0,4 à 1 s, composition AN 0,2 à 0,6 s, Sénat 0,1 s.
+  - [x] Sièges AN chargés (relecture d'`an.travaux` le 25/10/2026) : 13 groupes AN placés de gauche à droite.
+  - [ ] Placement selon le plan réel de la salle à étudier.
+  - [ ] Tester le pincement, le glissé et l'inertie sur iOS et Android.
+- [x] **Vraie carte de France** : composant `CarteDepartements` (contours Etalab 2025 dérivés d'ADMIN EXPRESS, généralisés à 1 000 m, Lambert-93, outre-mer en 11 encarts, 159 Ko ; `scripts/carte-departements.mjs` les régénère), zoomable, liste accessible.
+  - [ ] Écran Carte à brancher sur le contrat territoires (lot 3).
+- [x] **Débat et LLM** : le service attend un port. Tant qu'aucun adaptateur n'est branché, aucun élément du débat n'est affiché (ni bouton « Débattre », ni écran « Pas encore disponible »).
+
+**Relevé en passant**
+- [x] `npm run test:pg` sur la vraie base : 99 tests sur 99 le 25/10/2026 (valeurs remises à jour après le rafraîchissement : URL des comptes rendus, sort Sénat, ordre gauche-droite des groupes).
+
 ## Intégration du design v3 (relevé le 25/10/2026)
 
 **Source**
@@ -167,7 +240,7 @@ sont mis à jour dans le même lot.
   - [ ] Projections : `lecture.carte_scrutin` (répartition par département pour un scrutin) et `lecture.presence_departement`.
   - [ ] Contrat : `ConsulterCarte { scrutin | presence }`, `ConsulterDepartement { code, scrutin? }`, `TrouverRepresentants { codePostal }`. Cette dernière route n'est jamais journalisée (« nous ne le gardons pas »).
   - [ ] Écrans :
-    - Carte : une case par département, de même taille, sur une grille fixe dans l'app ; outre-mer et Français de l'étranger en liste ;
+    - Carte : vraie carte des départements, zoomable (voir « Règles de tous les écrans » du v4) ; outre-mer en encarts, Français de l'étranger en liste ;
     - Département ;
     - Qui me représente. Les « résumés locaux IA » restent `Synthese` à null.
 - [ ] **Lot 4. Rendre des comptes.**
@@ -180,7 +253,7 @@ sont mis à jour dans le même lot.
     - query `ConsulterApplicationLois` ;
     - écran, et bilan du ministre sur sa fiche.
 - [ ] **Lot 5. Débat simulé**, selon [debatron/PLAN.md](../debatron/PLAN.md).
-  - Les écrans Préparer, Débat et Synthèse dépendent du port `Modele` : tant que `SansModele` est le seul adaptateur, le bouton « Débattre » mène à un écran « Pas encore disponible ».
+  - Les écrans Préparer, Débat et Synthèse dépendent du port `Modele` : tant que `SansModele` est le seul adaptateur, rien du débat n'est affiché (ni bouton « Débattre », ni écran).
   - Le vrai résultat du vote (synthèse) se branche sur `ConsulterScrutin`.
 
 **Décisions à prendre (mes propositions entre parenthèses)**
@@ -188,6 +261,68 @@ sont mis à jour dans le même lot.
 2. Code postal : recherche côté API sans journal, ou table embarquée dans l'app, environ 39 000 lignes (API sans journal ; la table embarquée seulement si la règle « rien ne passe par nos serveurs » doit être stricte).
 3. Contenus IA (« En clair », « Très simple », « Pourquoi », résumés locaux) : le design les montre relus et marqués ✦ (rester sur « Pas de synthèse disponible » tant qu'aucun LLM n'est branché ; le composant ✦ est prêt).
 4. Critère des « votes importants » (voir le lot 4).
+
+## Famille Moments (décidé le 25/10/2026, non commencé)
+
+Une septième famille, objet de Recherche et filtre de l'Explorer : un moment (date ou période),
+avec ses informations générales, pour explorer les faits qui l'entourent.
+
+- [ ] **Les dates ne relient rien** : les moments se chevauchent (mobilisation, 49.3 et crise en
+  même temps), s'emboîtent (une mobilisation = plusieurs journées, `parent`) et produisent des faits
+  **après** eux (une proposition de loi des mois plus tard, une censure après un 49.3). Aucun fait
+  n'est rattaché à un moment par sa date : ni « pendant X », ni « en réaction à X ».
+- [ ] **Liens sourcés, le cœur de la famille** : fait ↔ moment et moment ↔ moment (mobilisation →
+  49.3 → censure), avant, pendant ou après, chacun avec sa nature (cite, répond à, fait suite à,
+  constaté par) et la source qui l'établit : acte de dossier (49.3, censure), exposé des motifs,
+  exposé sommaire d'amendement, intervention, question, article. Repérage automatique (mention du
+  moment dans ces textes) → candidat en revue humaine, jamais un lien direct.
+- [ ] **Filtre `moment`** : les faits liés au moment (et à ses moments enfants), toutes dates
+  confondues, groupés par nature du lien ; la fiche montre les liens en frise (avant, pendant,
+  après).
+- [ ] **Période, à part** : un outil de dates (du … au …, réglable, « + 6 mois après »), affichée en
+  dates, jamais au nom d'un moment ; elle montre tous les moments qui la recoupent, côte à côte,
+  sans rien leur attribuer.
+- [ ] **Déclinaisons** : mobilisations (manifestations, grèves, blocages), institutionnels,
+  périodes (crise, état d'urgence, campagne).
+- [ ] **Moments institutionnels** (49.3, motion de censure, remaniement, dissolution) : construits
+  depuis le `canon` (scrutin `motion_censure`, actes de dossier, `canon.fonction`), qu'ils citent
+  sans les recopier ; aucune saisie. La fiche du moment mène au scrutin, au dossier, aux personnes.
+- [ ] **Fiche** : nature, libellé, début et fin (avec leur précision), revendications, lieux (codes
+  INSEE : lien avec Territoires et la carte), acteurs (organisations en texte ; personnes du
+  `canon` par lien vérifié seulement), chiffres, sources.
+- [ ] **Chiffres de plusieurs sources, côte à côte** (« 1,28 M selon l'Intérieur · 3,5 M selon
+  la CGT ») : la comparaison est voulue, montrée comme telle, jamais moyennée ni tranchée. Chaque
+  chiffre dit qui l'a publié, où, quand.
+- [ ] **Sources** (vérifiées le 25/10/2026) :
+  - **AN, dossiers** (déjà chargés) : 49.3, motions de censure et leur vote, en données structurées.
+  - **Discours publics DILA / vie-publique.fr** (data.gouv, licence ouverte, `vp_discours.json`,
+    153 840 entrées, mis à jour chaque jour) : métadonnées seulement (titre, date, intervenants,
+    `circonstance`, `descripteurs` dont « Manifestation » : 1 882 entrées depuis 1979), le texte
+    est sur la page. Comptes rendus du Conseil des ministres, déclarations du Gouvernement sur une
+    mobilisation. Les déclarations syndicales s'arrêtent en 2009 ; les partis y sont (21 777),
+    mais restent hors liste (déclaration d'un acteur, pas une source).
+  - **DARES, JINT** (data.gouv) : journées de grève, **annuelles** seulement (pour 1 000 salariés
+    depuis 2005, rupture de série) : contexte d'une année, pas d'une journée.
+  - **Ministère de l'Intérieur, préfectures** : chiffres de manifestants publiés en communiqués
+    (HTML, pas d'open data) ; taux de grévistes de la fonction publique et de l'Éducation nationale
+    de même (aucun jeu de données trouvé sur data.gouv ni data.education.gouv). À lire page par
+    page, avec empreinte.
+  - **Chiffres des organisateurs** : pas de source officielle ; tels que rapportés par un média de
+    la liste fermée.
+  - **Ministère de l'Intérieur sur data.gouv** (733 jeux, parcourus le 25/10/2026) : aucun sur
+    les manifestations, l'ordre public ou les interpellations. Utiles quand même : **résultats
+    électoraux** (29 jeux, structurés : moments « élection » sans saisie) et délinquance
+    enregistrée (SSMSI, par commune et département, mensuelle avant 2022) comme contexte, jamais
+    comme cause.
+  - Rien trouvé : comptage indépendant des manifestants, jeu de données d'événements officiel ;
+    interieur.gouv.fr refuse les robots (403).
+- [ ] Chaque source : URL, date, empreinte de la page ; fiche dans `opendata/docs/sources/` avec
+  un exemple réel.
+- [ ] **Saisie** (proposition) : fichiers relus et versionnés (`opendata/data/moments/`), le
+  commit vaut décision humaine ; l'ETL vérifie les sources et calcule les empreintes ; stockés dans
+  `analytique`, pas dans `canon`. Plus tard, le port `Actualites` propose, un humain valide.
+- [ ] Touche : contrat (`FiltresFaits.moment`, familles, `FicheVisee`), migration et chargeur,
+  dépôts pg et mémoire, fixtures avec des moments réels, écran de fiche.
 
 ## App (augure)
 

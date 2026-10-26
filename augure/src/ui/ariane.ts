@@ -1,6 +1,6 @@
 // Fil d'Ariane et onglet actif, lus dans l'état de la pile de navigation (fonctions pures).
 //
-//   Dossiers › Programmation énergétique › Commission AN › Amendement CE123
+//   Actualité / Programmation énergétique / Commission AN / Amendement CE123
 //
 // Le premier maillon est l'onglet d'où l'on vient ; chaque fiche empilée ajoute le sien, avec le
 // titre que son écran a donné (`<Ecran titre="…">`), sinon le nom générique de la page.
@@ -10,18 +10,28 @@ import type { Onglets, Pages } from '../navigation';
 export type Onglet = keyof Onglets;
 export type Page = Exclude<keyof Pages, 'Onglets'>;
 
+/** Les 5 points d'entrée du design v4 (la route `Accueil` est l'onglet Actualité). */
 export const ONGLETS: { cle: Onglet; libelle: string }[] = [
-  { cle: 'Accueil', libelle: 'Accueil' },
-  { cle: 'Dossiers', libelle: 'Dossiers' },
-  { cle: 'Personnes', libelle: 'Personnes' },
-  { cle: 'Institutions', libelle: 'Institutions' },
+  { cle: 'Accueil', libelle: 'Actualité' },
+  { cle: 'Chiffres', libelle: 'Chiffres' },
+  { cle: 'Carte', libelle: 'Carte' },
   { cle: 'Recherche', libelle: 'Recherche' },
+  { cle: 'Guide', libelle: 'Guide' },
 ];
 
 export const estOnglet = (nom: string): nom is Onglet => ONGLETS.some((o) => o.cle === nom);
 
 /** Nom générique d'une page, tant que son écran n'a pas donné de titre. */
 export const LIBELLES_PAGES: Record<Page, string> = {
+  Dossiers: 'Dossiers législatifs',
+  Personnes: 'Personnes',
+  Institutions: 'Institutions',
+  Textes: 'Où en sont les textes',
+  Explorer: 'Parcourir',
+  Suivis: 'Mes suivis',
+  Reglages: 'Accessibilité et réglages',
+  Methode: 'Méthode et sources',
+  Bienvenue: 'Bienvenue',
   Dossier: 'Dossier',
   Etape: 'Étape',
   Discussions: 'Discussions',
@@ -32,20 +42,31 @@ export const LIBELLES_PAGES: Record<Page, string> = {
   Personne: 'Personne',
   Institution: 'Institution',
   Representant: 'Représentant d’intérêts',
+  Departement: 'Département',
 };
 
 /** Onglet d'une page ouverte sans onglet en dessous (lien profond). */
 const ONGLET_DES_PAGES: Record<Page, Onglet> = {
-  Dossier: 'Dossiers',
-  Etape: 'Dossiers',
-  Discussions: 'Dossiers',
-  Article: 'Dossiers',
-  Amendement: 'Dossiers',
-  Scrutin: 'Dossiers',
-  PourquoiVote: 'Dossiers',
-  Representant: 'Dossiers',
-  Personne: 'Personnes',
-  Institution: 'Institutions',
+  Dossiers: 'Accueil',
+  Dossier: 'Accueil',
+  Etape: 'Accueil',
+  Discussions: 'Accueil',
+  Article: 'Accueil',
+  Amendement: 'Accueil',
+  Scrutin: 'Accueil',
+  PourquoiVote: 'Accueil',
+  Representant: 'Accueil',
+  Textes: 'Chiffres',
+  Explorer: 'Accueil',
+  Suivis: 'Accueil',
+  Reglages: 'Accueil',
+  Methode: 'Guide',
+  Bienvenue: 'Accueil',
+  Departement: 'Carte',
+  Personnes: 'Recherche',
+  Personne: 'Recherche',
+  Institutions: 'Recherche',
+  Institution: 'Recherche',
 };
 
 /** Ce qu'il faut de l'état de navigation (sous-ensemble de `NavigationState`). */

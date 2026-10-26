@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { ConsulterInstitution, type TypeInstitution } from '@/core';
-import type { Onglets } from '@/navigation';
+import type { Pages } from '@/navigation';
 import { OngletsFiche, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
 import { Chargement, Ecran, Erreur } from '@/ui/components/Ecran';
@@ -15,7 +15,7 @@ import { INSTITUTIONS } from '@/ui/components/personnes/regles';
 import { useCommand } from '@/ui/hooks/core';
 
 export function Institutions() {
-  const params = useRoute<RouteProp<Onglets, 'Institutions'>>().params;
+  const params = useRoute<RouteProp<Pages, 'Institutions'>>().params;
   const [institution, setInstitution] = useState<TypeInstitution>(params?.institution ?? 'an');
   const resultat = useCommand(ConsulterInstitution({ institution }));
 

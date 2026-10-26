@@ -5,9 +5,10 @@
 // le sont avec la requête telle que saisie et sans accents.
 // Les interventions (`canon.intervention.texte_recherche`) ne sont pas un type de résultat du contrat.
 
-import type { DemandeRecherche, ResultatRecherche, Trouve, TypeRecherche } from '@contrat/domain/model';
+import type { DeclinaisonRecherche, DemandeRecherche, NumeroOfficiel, ResultatRecherche, Trouve, TypeRecherche } from '@contrat/domain/model';
 import { normaliser } from '@contrat/domain/texte';
 import type { Pagination, RechercheRepository, SqlDatabase, SqlParams } from '../../ports';
+import { PgFamilles } from './familles';
 import { DEBUT_L17, estVivante, sqlGroupe, sqlGroupeALaDate, vivante } from './scrutins';
 
 const TYPES: readonly TypeRecherche[] = ['dossiers', 'personnes', 'amendements', 'scrutins', 'organisations'];
@@ -135,7 +136,23 @@ const REQUETES: Record<TypeRecherche, string> = {
 };
 
 export class PgRecherche implements RechercheRepository {
-  constructor(private readonly db: SqlDatabase) {}
+  private readonly familles: PgFamilles;
+
+  constructor(private readonly db: SqlDatabase) {
+    this.familles = new PgFamilles(db);
+  }
+
+  compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]) {
+    return this.familles.compter(q, declinaisons);
+  }
+
+  chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination) {
+    return this.familles.chercher(q, declinaison, pagination);
+  }
+
+  candidatsNumero(numero: NumeroOfficiel, limite: number) {
+    return this.familles.candidats(numero, limite);
+  }
 
   async rechercher(demande: DemandeRecherche, pagination: Pagination): Promise<ResultatRecherche> {
     const type = demande.type ?? null;

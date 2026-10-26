@@ -271,7 +271,7 @@ export function couleursSieges(
 ): string[] {
   const couleurs: string[] = [];
   for (const g of [...chambre.groupes].sort((a, b) => a.rang - b.rang)) {
-    for (let i = 0; i < g.sieges; i++) couleurs.push(g.groupe.couleur ?? sansCouleur);
+    for (let i = 0; i < g.sieges; i++) couleurs.push(g.groupe.couleur);
   }
   for (let i = 0; i < chambre.sansGroupe; i++) couleurs.push(sansCouleur);
   return couleurs;

@@ -6,13 +6,17 @@ import { CommandBus, type CommandDefinition, type Handler } from '@contrat/comma
 import * as definitions from '@contrat/commands/definitions';
 import { logging, queryCache } from '@contrat/commands/middlewares';
 
+import { lecturesAvancement } from './lectures/avancement';
 import type { Handlers, LecturesDeps } from './lectures/commun';
 import { lecturesDiscussions } from './lectures/discussions';
 import { lecturesDossiers } from './lectures/dossiers';
+import { lecturesFaits } from './lectures/faits';
 import { lecturesInstitutions } from './lectures/institutions';
 import { lecturesPersonnes } from './lectures/personnes';
 import { lecturesRecherche } from './lectures/recherche';
 import { lecturesScrutins } from './lectures/scrutins';
+import { lecturesSuivis } from './lectures/suivis';
+import { lecturesTerritoires } from './lectures/territoires';
 import { lecturesTransparence } from './lectures/transparence';
 import type { Logger } from './ports';
 
@@ -26,12 +30,16 @@ export interface CoreDeps extends LecturesDeps {
 export function handlers(deps: LecturesDeps): Handlers {
   return {
     ...lecturesDossiers(deps),
+    ...lecturesAvancement(deps),
+    ...lecturesFaits(deps),
     ...lecturesDiscussions(deps),
     ...lecturesScrutins(deps),
     ...lecturesPersonnes(deps),
     ...lecturesInstitutions(deps),
+    ...lecturesTerritoires(deps),
     ...lecturesTransparence(deps),
     ...lecturesRecherche(deps),
+    ...lecturesSuivis(deps),
   };
 }
 

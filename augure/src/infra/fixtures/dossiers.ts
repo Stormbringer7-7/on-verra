@@ -35,6 +35,7 @@ import {
   ART,
   BARRE_BUDGET,
   BARRE_ENERGIE,
+  BARRE_EPARGNE,
   BARRE_LOCATION,
   BARRE_MEDECINS,
   D,
@@ -191,7 +192,7 @@ export const RESUMES = {
   ),
   epargne: resume(
     D.epargne, 'Projet de loi créant un compte épargne-temps universel', 'Créer un compte épargne-temps universel',
-    'Projet de loi', 'gouvernement', 'adopte', 'acceleree', [],
+    'Projet de loi', 'gouvernement', 'adopte', 'acceleree', BARRE_EPARGNE,
     { date: '2026-10-01', libelle: 'Adopté définitivement, promulgation en attente' },
   ),
   video: resume(

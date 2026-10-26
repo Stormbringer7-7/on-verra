@@ -47,8 +47,9 @@ refait d'office s'ils manquent ou viennent d'un autre env.
 
 ```bash
 npm run app -- serve --env=staging                # Expo seul (Metro)
-npm run app -- run --env=staging android --device # liste des appareils, choix, installation
-npm run app -- run ios --device="iPhone 17"       # appareil nommé ; Expo déjà lancé : réutilisé
+npm run app -- devices                            # appareils physiques, simulateurs, émulateurs
+npm run app -- run --env=staging android          # choix dans cette liste, puis installation
+npm run app -- run ios --device="iPhone 17"       # appareil nommé (ou UDID, série adb, AVD)
 npm run app -- apply --env=staging version        # devpatch + 1 (minor, major : voir aide)
 npm run app -- build --env=prod aab xcarchive web # → dist/prod/<version>/ (apk : installable direct)
 ```

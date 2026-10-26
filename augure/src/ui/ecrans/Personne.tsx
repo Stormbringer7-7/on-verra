@@ -9,8 +9,8 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { ConsulterPersonne, type EntetePersonne, type FichePersonne, type OngletPersonne } from '@/core';
-import type { Pages } from '@/navigation';
-import { Label, OngletsFiche, T } from '@/ui/components/base';
+import { useAller, type Pages } from '@/navigation';
+import { Action, Label, OngletsFiche, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
 import { Source } from '@/ui/components/commun/Source';
 import { Chargement, Ecran, Erreur, Retour } from '@/ui/components/Ecran';
@@ -19,6 +19,7 @@ import { Frise } from '@/ui/components/personnes/Frise';
 import { OngletChoix, OngletDeclarations, OngletDossiers } from '@/ui/components/personnes/OngletsPersonne';
 import { titrePersonne } from '@/ui/components/personnes/regles';
 import { useCommand } from '@/ui/hooks/core';
+import { SuivrePersonne } from '../components/commun/Suivre';
 
 const ONGLETS: { cle: OngletPersonne; libelle: string }[] = [
   { cle: 'parcours', libelle: 'Parcours' },
@@ -58,18 +59,21 @@ export function Personne() {
 
 function Entete({ entete }: { entete: EntetePersonne }) {
   const t = titrePersonne(entete);
+  const aller = useAller();
   return (
     <View style={{ gap: 8 }}>
       {t.surtitre && <Label>{t.surtitre}</Label>}
       <T variant="display" accessibilityRole="header" style={{ fontSize: 30, lineHeight: 34 }}>
         {t.nom}
       </T>
+      <SuivrePersonne id={entete.id} nom={entete.nom} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {entete.enCours.map((f) => (
           <PuceFonction key={f.libelle} libelle={f.libelle} couleur={f.groupe?.couleur ?? null} />
         ))}
       </View>
       {t.mention && <Avertissement signe="⚠">{t.mention}</Avertissement>}
+      <Action onPress={() => aller.faits('personne', entete.id)}>Tous ses faits →</Action>
       <View style={{ gap: 2 }}>
         {entete.provenance.map((p) => (
           <Source key={`${p.systeme}-${p.idNatif}`} provenance={p} compact />

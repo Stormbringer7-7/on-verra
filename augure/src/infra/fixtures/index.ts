@@ -7,14 +7,32 @@
 
 import type { InputOf, OutputOf } from '../../core/commands/bus';
 import * as definitions from '../../core/commands/definitions';
+import {
+  EXPLORER_ART3_GROUPE_A,
+  EXPLORER_ART3_SEANCE,
+  EXPLORER_CAMILLE,
+  EXPLORER_CAMILLE_VOTES,
+  EXPLORER_CE123,
+  EXPLORER_DEPARTEMENT,
+  EXPLORER_ENERGIE,
+  EXPLORER_ENERGIE_SORT_ADOPTE,
+  EXPLORER_ENERGIE_TRANSPARENCE,
+  EXPLORER_SCRUTIN_GROUPE_A,
+  EXPLORER_TOUT,
+  EXPLORER_VIDE,
+} from './faits';
+import { SUIVIS_CAMILLE_MARS, SUIVIS_OCTOBRE } from './suivis';
+import { AVANCEMENT, AVANCEMENT_HORS_PARLEMENT, AVANCEMENT_NOUVELLE_LECTURE } from './avancement';
 import { ACCUEIL, AMENDEMENT_CE123, AMENDEMENT_COM56, ARTICLE_ENERGIE_3, ARTICLE_LOCATION_2, ETAPES, FICHE_ENERGIE, FICHE_LOCATION, LISTE_DOSSIERS, LISTE_DOSSIERS_PARLEMENTAIRES } from './dossiers';
 import { LISTE_INTERVENTIONS_CE123, LISTE_INTERVENTIONS_SEANCE_AN } from './discussions';
 import { A, ART, D, P } from './entites';
 import { INSTITUTIONS } from './institutions';
 import { FICHE_REPRESENTANT_ENR, R } from './interets';
 import { ANNUAIRE, ANNUAIRE_ELUS_LOCAUX, CLASSEMENT_AN_ECARTS, PERSONNES } from './personnes';
+import { EXEMPLES_FAMILLES, rechercheFixture } from './familles';
 import { ACCUSE_SIGNALEMENT, RECHERCHE_ENERGIE, RECHERCHE_VIDE } from './recherche';
 import { EXPLICATION_CAMILLE_1874, FICHE_SCRUTIN_1874, FICHE_SCRUTIN_SENAT_297, S } from './scrutins';
+import { CARTE_PRESENCE_AN, CARTE_PRESENCE_SENAT, CARTE_SCRUTIN_1874, DEPARTEMENT_GIRONDE, DEPARTEMENT_GIRONDE_1874 } from './territoires';
 
 type Definitions = typeof definitions;
 
@@ -34,6 +52,29 @@ export const fixtures: Fixtures = {
   ListerDossiers: [
     { titre: 'Tous les dossiers', input: {}, output: LISTE_DOSSIERS },
     { titre: 'Proposés par des parlementaires', input: { origine: 'parlementaire' }, output: LISTE_DOSSIERS_PARLEMENTAIRES },
+  ],
+  ConsulterSuivis: [
+    { titre: 'Mes suivis depuis le 1er octobre (trois actes, un identifiant inconnu)', input: SUIVIS_OCTOBRE.demande, output: SUIVIS_OCTOBRE },
+    { titre: 'Camille Exemple depuis le 1er mars (un vote contre son groupe)', input: SUIVIS_CAMILLE_MARS.demande, output: SUIVIS_CAMILLE_MARS },
+  ],
+  ConsulterAvancement: [
+    { titre: 'Où en sont les textes (épargne : promulgation hors délai, à vérifier)', input: {}, output: AVANCEMENT },
+    { titre: 'Attentes hors du Parlement', input: { horsParlement: true }, output: AVANCEMENT_HORS_PARLEMENT },
+    { titre: 'Une file : la nouvelle lecture', input: { etape: 'Nouvelle lecture' }, output: AVANCEMENT_NOUVELLE_LECTURE },
+  ],
+  ExplorerFaits: [
+    { titre: 'Parcourir : tous les faits, sans filtre', input: EXPLORER_TOUT.demande, output: EXPLORER_TOUT },
+    { titre: 'Dossier énergie : interventions par étape', input: EXPLORER_ENERGIE.demande, output: EXPLORER_ENERGIE },
+    { titre: 'Énergie › Séance AN › Art. 3 : par groupe', input: EXPLORER_ART3_SEANCE.demande, output: EXPLORER_ART3_SEANCE },
+    { titre: 'Art. 3 · Groupe A, comparé au Groupe C', input: EXPLORER_ART3_GROUPE_A.demande, output: EXPLORER_ART3_GROUPE_A },
+    { titre: 'Camille Exemple (focal : personne)', input: EXPLORER_CAMILLE.demande, output: EXPLORER_CAMILLE },
+    { titre: 'Les votes de Camille Exemple (contre son groupe)', input: EXPLORER_CAMILLE_VOTES.demande, output: EXPLORER_CAMILLE_VOTES },
+    { titre: 'Scrutin n° 1874 · Groupe A : chaque député', input: EXPLORER_SCRUTIN_GROUPE_A.demande, output: EXPLORER_SCRUTIN_GROUPE_A },
+    { titre: 'Amendement CE123 : vote à main levée', input: EXPLORER_CE123.demande, output: EXPLORER_CE123 },
+    { titre: 'Énergie : transparence (rapprochements à vérifier)', input: EXPLORER_ENERGIE_TRANSPARENCE.demande, output: EXPLORER_ENERGIE_TRANSPARENCE },
+    { titre: 'Énergie : amendements adoptés, dépliés', input: EXPLORER_ENERGIE_SORT_ADOPTE.demande, output: EXPLORER_ENERGIE_SORT_ADOPTE },
+    { titre: 'Rien ici : élargir', input: EXPLORER_VIDE.demande, output: EXPLORER_VIDE },
+    { titre: 'Département (pas encore chargé)', input: EXPLORER_DEPARTEMENT.demande, output: EXPLORER_DEPARTEMENT },
   ],
   ConsulterDossier: [
     { titre: 'Énergie : procédure accélérée, CMP conclusive, Conseil saisi', input: { id: D.energie.id }, output: FICHE_ENERGIE },
@@ -98,7 +139,17 @@ export const fixtures: Fixtures = {
     { titre: 'Gouvernement', input: { institution: 'gouvernement' }, output: INSTITUTIONS.gouvernement },
     { titre: 'Conseil constitutionnel', input: { institution: 'cc' }, output: INSTITUTIONS.cc },
   ],
+  ConsulterCarte: [
+    { titre: 'Scrutin n° 1874, département par département', input: { mesure: 'scrutin', scrutin: S.an1874.id }, output: CARTE_SCRUTIN_1874 },
+    { titre: 'Présence des députés', input: { mesure: 'presence', chambre: 'AN' }, output: CARTE_PRESENCE_AN },
+    { titre: 'Présence des sénateurs', input: { mesure: 'presence', chambre: 'SENAT' }, output: CARTE_PRESENCE_SENAT },
+  ],
+  ConsulterDepartement: [
+    { titre: 'Gironde : ses élus et leur présence', input: { code: '33' }, output: DEPARTEMENT_GIRONDE },
+    { titre: 'Gironde : votes sur le scrutin n° 1874', input: { code: '33', scrutin: S.an1874.id }, output: DEPARTEMENT_GIRONDE_1874 },
+  ],
   ConsulterRepresentant: [{ titre: 'Association fictive des énergies renouvelables', input: { id: R.enr.id }, output: FICHE_REPRESENTANT_ENR }],
+  ChercherParFamilles: EXEMPLES_FAMILLES.map(({ titre, input }) => ({ titre, input, output: rechercheFixture(input) })),
   Rechercher: [
     { titre: 'Recherche « énergie », tous types', input: { q: 'énergie' }, output: RECHERCHE_ENERGIE },
     { titre: 'Aucun résultat', input: { q: 'zzzz', type: 'dossiers' }, output: RECHERCHE_VIDE },

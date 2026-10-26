@@ -13,6 +13,23 @@ import * as definitions from '../core/commands/definitions';
 import { abortable, logging, queryCache } from '../core/commands/middlewares';
 import type { Logger } from '../core/ports';
 
+/**
+ * Échec d'un appel, avec sa raison lisible (`message`) et ce que l'API en dit : `code`
+ * (donnees_en_preparation, base_lente, base_injoignable, erreur_interne, requete ; reseau et
+ * serveur_indisponible côté app), statut HTTP, détail technique.
+ */
+export class ErreurApi extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+    readonly statut: number | null,
+    readonly detail: string | null,
+  ) {
+    super(message);
+    this.name = 'ErreurApi';
+  }
+}
+
 export function creerApiBus(
   url: string,
   logger: Logger,
@@ -36,10 +53,21 @@ export function creerApiBus(
       });
     } catch (e) {
       if (signal?.aborted) throw e;
-      throw new Error(`API injoignable (${racine}) : ${e instanceof Error ? e.message : String(e)}`);
+      throw new ErreurApi(
+        'Impossible de joindre le serveur : vérifiez votre connexion. Si elle marche, le serveur est peut-être arrêté.',
+        'reseau',
+        null,
+        `${racine} : ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
     const corps = await reponse.json().catch(() => null);
-    if (!reponse.ok) throw new Error(corps?.erreur ?? `API : HTTP ${reponse.status}`);
+    if (!reponse.ok) {
+      // L'API dit la raison ({ erreur, code, detail }) ; sans corps, c'est le serveur devant elle.
+      if (typeof corps?.erreur === 'string') throw new ErreurApi(corps.erreur, corps.code ?? null, reponse.status, corps.detail ?? null);
+      if ([502, 503, 504].includes(reponse.status))
+        throw new ErreurApi('Le serveur ne répond pas pour le moment (redémarrage ou mise à jour en cours). Réessayez dans quelques minutes.', 'serveur_indisponible', reponse.status, null);
+      throw new ErreurApi(`Réponse inattendue du serveur (HTTP ${reponse.status}).`, null, reponse.status, null);
+    }
     return corps;
   };
 

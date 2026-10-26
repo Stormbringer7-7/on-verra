@@ -216,6 +216,31 @@ Aucun jugement : la projection ne dit ni « cohérent » ni « contradiction »,
 La présidence de séance (« La parole est à… ») n'est pas une prise de position : exclue. Seuls
 comptent les orateurs identifiés (`orateur_id`) ; les autres attendent la revue humaine.
 
+## Faits de l'Explorer (interventions et amendements)
+
+`lecture.fait_intervention`, `lecture.fait_amendement` — requêtes :
+[`src/projections/60_fait_intervention.sql`](../src/projections/60_fait_intervention.sql),
+[`src/projections/61_fait_amendement.sql`](../src/projections/61_fait_amendement.sql).
+
+Pas d'indicateur : les faits que filtre l'Explorer de l'app (API `ExplorerFaits`), une ligne par
+fait retenu, sans texte, ses dimensions déjà calculées. Mêmes règles que les lectures de `canon` :
+
+| Colonne | Définition |
+|---|---|
+| retenus | entité vivante ; interventions : hors présidence de séance, avec un orateur (personne ou nom publié) |
+| `jour` | date de la réunion, à Paris |
+| `groupe_id` | intervention : appartenance publiée de l'orateur le jour de la réunion, dans la chambre (la plus récente si deux se chevauchent) ; amendement : son groupe auteur publié |
+| `auteur_id` | premier auteur personne de l'amendement, par ordre publié |
+| `article_suivi_id` | intervention : l'article de l'amendement discuté, jamais rapproché du texte |
+| `cle` | case du parcours (réunion citée par un acte du dossier ; étape de l'amendement) |
+
+Au 25/10/2026 sur `civictrace` : 444 456 interventions retenues (dont 242 488 avec un groupe du jour)
+et 171 770 amendements, les mêmes nombres que l'Explorer sans filtre. Sans ces projections, chaque
+lecture large relisait `canon.intervention` (661 Mo avec le texte) : 28 s sans filtre au premier
+appel ; avec elles, 0,6 s au premier appel (jusqu'à 2,6 s quand le cache de Postgres est froid) et
+0,15 s ensuite, mesuré sur une copie des projections. Vérifié par
+[`api/tests/pg/faits.test.ts`](../../api/tests/pg/faits.test.ts) (mêmes faits, mêmes dimensions).
+
 ## À venir
 
 - Comparaison à la distribution de la chambre (médiane, quartiles) plutôt qu'un rang.

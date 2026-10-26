@@ -24,7 +24,7 @@ export function Requete<O>({
   resultat: Resultat<O> & { recharger(): void };
   children: (donnees: O) => ReactNode;
 }) {
-  if (resultat.statut === 'erreur') return <Erreur message={resultat.message} onReessayer={resultat.recharger} />;
+  if (resultat.statut === 'erreur') return <Erreur message={resultat.message} detail={resultat.detail} onReessayer={resultat.recharger} />;
   if (resultat.donnees === undefined) return <Chargement />;
   return <>{children(resultat.donnees)}</>;
 }
@@ -207,8 +207,8 @@ export function Pagination({
     <View style={styles.pagination}>
       <Label>{total !== null ? `Page ${page} · ${debut}–${Math.min(total, page * taille)} sur ${total}` : `Page ${page}`}</Label>
       <View style={{ flexDirection: 'row', gap: space[2] }}>
-        {page > 1 && <BoutonSecondaire onPress={() => onPage(page - 1)}>← PRÉCÉDENTE</BoutonSecondaire>}
-        {suivante !== null && <BoutonSecondaire onPress={() => onPage(suivante)}>SUIVANTE →</BoutonSecondaire>}
+        {page > 1 && <BoutonSecondaire onPress={() => onPage(page - 1)}>← Précédente</BoutonSecondaire>}
+        {suivante !== null && <BoutonSecondaire onPress={() => onPage(suivante)}>Suivante →</BoutonSecondaire>}
       </View>
     </View>
   );

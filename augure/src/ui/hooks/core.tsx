@@ -29,9 +29,14 @@ export function useCore(): CoreContextValue {
 export type Resultat<T> =
   | { statut: 'chargement'; donnees?: T }
   | { statut: 'pret'; donnees: T }
-  | { statut: 'erreur'; message: string };
+  | { statut: 'erreur'; message: string; detail: string | null };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** Détail technique d'une erreur de l'API (table manquante, délai dépassé…), affiché en petit. */
+const detail = (e: unknown) => {
+  const d = (e as { detail?: unknown } | null)?.detail;
+  return typeof d === 'string' && d ? d : null;
+};
 
 /**
  * Exécute une query du bus et suit son état. La query est relancée quand son contenu change
@@ -60,7 +65,7 @@ export function useCommand<O>(command: Command<string, unknown, O> | null): Resu
       .then((donnees) => controleur.signal.aborted || setResultat({ statut: 'pret', donnees }))
       .catch((e: unknown) => {
         if (controleur.signal.aborted) return;
-        setResultat({ statut: 'erreur', message: message(e) });
+        setResultat({ statut: 'erreur', message: message(e), detail: detail(e) });
       });
     return () => controleur.abort();
     // `cle` décrit entièrement la commande.
@@ -78,7 +83,7 @@ export type Envoi<O> =
   | { statut: 'repos' }
   | { statut: 'envoi' }
   | { statut: 'envoye'; reponse: O }
-  | { statut: 'erreur'; message: string };
+  | { statut: 'erreur'; message: string; detail: string | null };
 
 /** Exécute une command à la demande (pas au rendu) : `envoyer(SignalerErreur({...}))`. */
 export function useEnvoi<O>(): { etat: Envoi<O>; envoyer(command: Command<string, unknown, O>): void; reinitialiser(): void } {
@@ -97,7 +102,7 @@ export function useEnvoi<O>(): { etat: Envoi<O>; envoyer(command: Command<string
       bus
         .execute(command)
         .then((reponse) => monte.current && setEtat({ statut: 'envoye', reponse }))
-        .catch((e: unknown) => monte.current && setEtat({ statut: 'erreur', message: message(e) }));
+        .catch((e: unknown) => monte.current && setEtat({ statut: 'erreur', message: message(e), detail: detail(e) }));
     },
     [bus],
   );

@@ -123,6 +123,28 @@ docker compose logs -f donnees              # le cycle suivant applique les nouv
 Une migration de données peut s'appliquer tout de suite, sans attendre le cycle :
 `docker compose run --rm donnees python -m src migrer`.
 
+**Une version qui ajoute des projections** (`opendata/src/projections`) : la nouvelle API les lit
+dès son démarrage, mais elles n'existent qu'à la fin du `projeter` du cycle suivant, après tout le
+chargement (plusieurs minutes). Entre les deux, les écrans concernés reçoivent un 503
+`donnees_en_preparation` (« Les données de cet écran sont en cours de préparation… », avec la table
+manquante en détail), et l'app l'affiche tel quel avec « Réessayer ». Pour l'éviter, construire les
+projections avant de redémarrer l'API :
+
+```bash
+docker compose up -d --build donnees
+docker compose stop donnees
+docker compose run --rm donnees sh -c "python -m src migrer && python -m src projeter"
+docker compose up -d --build api web && docker compose up -d donnees
+```
+
+Une relecture est nécessaire quand une migration ajoute une donnée aux documents déjà chargés
+(ex. 0018, sièges) : `python -m src canon --relire --etapes an.travaux,senat.senateurs` avant
+`projeter`.
+
+Les erreurs de l'API ont toujours un `code` : `donnees_en_preparation`, `base_lente` (requête
+au-delà du délai, souvent pendant un chargement), `base_injoignable` (503, à réessayer),
+`erreur_interne` (500, défaut de l'API, noté dans `docker compose logs api`), `requete` (400, 404).
+
 ### Installer un nouveau serveur sans attendre le premier chargement
 
 On part d'un **dump de la base** et du **cache des fichiers bruts** préparés ailleurs ; `donnees`

@@ -16,7 +16,7 @@ import re
 from xml.etree import ElementTree
 
 from ....chargement import Document, Flux
-from ....domaine.objets import CasRevue, Dependants, Objet
+from ....domaine.objets import CasRevue, Dependants, Ensemble, Objet
 from .cas import amendement_cite, candidats_orateur
 from .commun import LICENCE, Systeme, an, documents, fichier, instant, url_compte_rendu
 
@@ -101,6 +101,7 @@ def seance(doc: Document, ns: str, dossier_du_texte: dict[tuple[str, str], set[s
                        contexte={"libelle": libelle, "compte_rendu": uid})
 
     problemes: dict[str, tuple[list[str], list]] = {}      # numéro -> (candidats, interventions)
+    emises = []
     for ordre, t in enumerate(tours):
         premier = t.paragraphes[0]
         orateur = premier.find(f"{q('orateurs')}/{q('orateur')}")
@@ -114,6 +115,7 @@ def seance(doc: Document, ns: str, dossier_du_texte: dict[tuple[str, str], set[s
         discutes = list(dict.fromkeys(trouves))
         article = next((a for p in t.paragraphes if (a := p.get("art"))), None)
         intervention = an("intervention", f"{uid}#{premier.get('id_syceron')}")
+        emises.append(intervention)
         for numero, candidats in manques:
             problemes.setdefault(numero, (candidats, []))[1].append(("intervention", intervention))
         libelle = (orateur.findtext(q("nom")) if orateur is not None else None) or ""
@@ -140,6 +142,9 @@ def seance(doc: Document, ns: str, dossier_du_texte: dict[tuple[str, str], set[s
     for numero, (candidats, cibles) in problemes.items():
         yield amendement_cite(f"amendement_cite:AN:{reunion_uid}:{numero}", numero, candidats, cibles,
                               {"ou": f"séance {reunion_uid}", "compte_rendu": uid})
+    # Le compte rendu donne toutes les interventions de la séance : republié (provisoire puis
+    # définitif), celles qu'il ne donne plus sont marquées retirées de la source.
+    yield Ensemble("intervention", "reunion_id", reunion, tuple(emises))
 
 
 def flux(chemin, dossier_du_texte: dict[tuple[str, str], set[str]], chercher_amendements, annuaire) -> list[Flux]:

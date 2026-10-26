@@ -17,8 +17,11 @@ import type * as definitions from '@contrat/commands/definitions';
 import type {
   AmendementResume,
   DossierResume,
+  Fait,
+  GroupeFaits,
   Intervention,
   OrigineModification,
+  Page,
   ScrutinResume,
   Synthese,
 } from '@contrat/domain/model';
@@ -52,6 +55,14 @@ export const scrutinResume = async (r: Remplir, s: ScrutinResume): Promise<Scrut
   ...s,
   enClair: await r({ type: 'scrutin', scrutin: s.id }, s.enClair),
 });
+
+/** Un fait de l'Explorer : objet en clair d'un amendement, sens d'un scrutin. */
+export const fait = async (r: Remplir, f: Fait): Promise<Fait> =>
+  f.type === 'amendement'
+    ? { ...f, amendement: await amendementResume(r, f.amendement) }
+    : f.type === 'scrutin'
+      ? { ...f, scrutin: await scrutinResume(r, f.scrutin) }
+      : f;
 
 export const intervention = async (r: Remplir, i: Intervention): Promise<Intervention> => ({
   ...i,
@@ -211,5 +222,29 @@ export const REMPLIR: Remplisseurs = {
 
   ConsulterRepresentant: tel,
   Rechercher: tel,
+  ChercherParFamilles: tel,
   SignalerErreur: tel,
+  ConsulterAvancement: tel,
+  ConsulterSuivis: async (r, s) => ({
+    ...s,
+    dossiers: await chacun(s.dossiers, (d) => dossierResume(r, d)),
+    evenements: await chacun(s.evenements, async (e) => (e.type === 'ecart' ? { ...e, scrutin: await scrutinResume(r, e.scrutin) } : e)),
+  }),
+  ConsulterCarte: async (r, c) => ({ ...c, scrutin: c.scrutin && (await scrutinResume(r, c.scrutin)) }),
+
+  ConsulterDepartement: async (r, f) => ({
+    ...f,
+    scrutin: f.scrutin && { ...f.scrutin, scrutin: await scrutinResume(r, f.scrutin.scrutin) },
+  }),
+
+  ExplorerFaits: async (r, e) => {
+    const groupes = (page: Page<GroupeFaits>) => chacun(page.elements, async (g) => ({ ...g, faits: await chacun(g.faits, (f) => fait(r, f)) }));
+    return {
+      ...e,
+      groupes: { ...e.groupes, elements: await groupes(e.groupes) },
+      deplie: e.deplie && { ...e.deplie, elements: await chacun(e.deplie.elements, (f) => fait(r, f)) },
+      scrutin: e.scrutin && { ...e.scrutin, scrutin: await scrutinResume(r, e.scrutin.scrutin) },
+      comparaison: e.comparaison && { ...e.comparaison, groupes: { ...e.comparaison.groupes, elements: await groupes(e.comparaison.groupes) } },
+    };
+  },
 };

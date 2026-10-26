@@ -23,10 +23,12 @@ import type {
   Provenance,
   ScrutinResume,
   VoteDifferent,
+  VoteNominatif,
   VoteIndividuel,
 } from '@contrat/domain/model';
 import { exprimes, majoritaire } from '@contrat/domain/votes';
 import type { ScrutinsRepository, SqlDatabase, SqlParams } from '../../ports';
+import { type GroupeLu, couleurGroupeSql, gaucheDroite, groupe, ordreHemicycle, positionsDesGroupes } from './personnes';
 
 // ---------- Fragments communs (discussions.ts, recherche.ts) ----------
 
@@ -65,7 +67,7 @@ export const sqlProvenance = (colonne: string, type: string) => `COALESCE(
 /** GroupeRef (JSON) d'une organisation `o` (null si absente) ; abrégé : publié, sinon nom court, sinon nom. */
 export const sqlGroupe = (o: string) =>
   `CASE WHEN ${o}.entite_id IS NULL THEN NULL ELSE json_build_object('id', ${o}.entite_id,
-     'abrege', COALESCE(${o}.abrege, ${o}.nom_court, ${o}.nom), 'libelle', ${o}.nom, 'couleur', ${o}.couleur,
+     'abrege', COALESCE(${o}.abrege, ${o}.nom_court, ${o}.nom), 'libelle', ${o}.nom, ${couleurGroupeSql(o)},
      'chambre', ${o}.chambre) END`;
 
 /**
@@ -125,7 +127,7 @@ export const sqlNumeroArticle = (articleSuivi: string) =>
 // ---------- Scrutins ----------
 
 /** 17e législature : l'AN publie la législature ; le Sénat, non (G6). */
-const EN_L17 = `(s.legislature = '17' OR (s.legislature IS NULL AND s.chambre = 'SENAT' AND s.date >= DATE '${DEBUT_L17}'))`;
+export const EN_L17 = `(s.legislature = '17' OR (s.legislature IS NULL AND s.chambre = 'SENAT' AND s.date >= DATE '${DEBUT_L17}'))`;
 
 /**
  * Participation du jour (`lecture.participation_scrutin`) : une ligne par mandat en cours, donc
@@ -215,12 +217,22 @@ interface LigneVote {
   nom: string;
   position: Exclude<Position, 'absent'>;
   groupe_id: string | null;
+  par_delegation: boolean;
+  siege: number | null;
+  mise_au_point: { position?: string; dysfonctionnement?: boolean } | null;
+}
+
+/** Parlementaire en mandat le jour du scrutin, sans vote publié. */
+interface LigneAbsent {
+  personne_id: string;
+  nom: string;
+  groupe_id: string | null;
 }
 
 /**
- * Ordre « de la gauche vers la droite » : le siège de chaque votant (numPlace) n'est pas chargé dans
- * `canon`, donc le rang suit un ordre stable (abrégé), les non-inscrits en dernier. Ce n'est pas
- * une position politique : la donnée ne la donne pas.
+ * Ordre de base : stable (abrégé), les non-inscrits en dernier. L'ordre « de la gauche vers la
+ * droite » vient ensuite des sièges publiés (`gaucheDroite`, `lecture.position_groupe`) pour les
+ * groupes qui en ont ; les autres (Sénat) gardent cet ordre de base.
  */
 const NON_INSCRITS = /^(NI|NIPOL|AUCUN)$/;
 const rangDeGroupe = (a: GroupeRef, b: GroupeRef) =>
@@ -249,6 +261,13 @@ export class PgScrutins implements ScrutinsRepository {
       this.projections.existe('lecture.parcours_dossier'),
     ]);
     return acte && dossier;
+  }
+
+  /** Résumés de scrutins de la législature (Explorer) ; inconnus ou retirés omis. */
+  async resumes(ids: string[]): Promise<ScrutinResume[]> {
+    const uniques = [...new Set(ids.filter(estUuid))];
+    if (!uniques.length) return [];
+    return this.liste('s.entite_id = ANY($ids::uuid[])', { $ids: uniques }, null);
   }
 
   async entre(debut: string, fin: string, limite: number): Promise<ScrutinResume[]> {
@@ -298,11 +317,13 @@ export class PgScrutins implements ScrutinsRepository {
     if (!ligne) return null;
     const scrutin = resumeScrutin(ligne);
 
-    const [votes, absents, compteRendu] = await Promise.all([
+    const [votes, sansVote, compteRendu] = await Promise.all([
       this.votes(id),
-      this.absentsParGroupe(id),
+      this.absents(id),
       this.compteRendu(ligne.etape_id, ligne.date),
     ]);
+    const absents = new Map<string | null, number>();
+    for (const a of sansVote) absents.set(a.groupe_id, (absents.get(a.groupe_id) ?? 0) + 1);
     const groupes = await this.groupes([...new Set([...votes.map((v) => v.groupe_id), ...absents.keys()])]);
 
     const parGroupe = new Map<string, { decompte: Decompte; nonVotants: number; votes: LigneVote[] }>();
@@ -314,10 +335,11 @@ export class PgScrutins implements ScrutinsRepository {
       g.votes.push(v);
       parGroupe.set(v.groupe_id, g);
     }
-    const ordre = [...new Set([...parGroupe.keys(), ...[...absents.keys()].filter((g): g is string => g !== null)])]
+    const presents = [...new Set([...parGroupe.keys(), ...[...absents.keys()].filter((g): g is string => g !== null)])]
       .filter((g) => groupes.has(g))
       .map((g) => groupes.get(g)!)
       .sort(rangDeGroupe);
+    const ordre = gaucheDroite(presents, (g) => g, await positionsDesGroupes(this.db, presents.map((g) => g.id)));
 
     const positions: PositionDeGroupe[] = ordre.map((groupe, rang) => {
       const g = parGroupe.get(groupe.id) ?? { decompte: { pour: 0, contre: 0, abstention: 0 }, nonVotants: 0, votes: [] };
@@ -348,6 +370,26 @@ export class PgScrutins implements ScrutinsRepository {
       }
     }
 
+    // Chaque parlementaire en mandat, de la gauche vers la droite (groupe, siège, nom).
+    const rangs = new Map(positions.map((p) => [p.groupe.id, p.rang]));
+    const avecGroupe = (g: string | null) => (g ? (groupes.get(g) ?? null) : null);
+    const nominatifs: VoteNominatif[] = [
+      ...votes.map((v) => ({
+        personne: { id: v.personne_id, nom: v.nom, fonction: null, groupe: avecGroupe(v.groupe_id) },
+        position: v.position as Position,
+        parDelegation: v.par_delegation,
+        miseAuPoint: libelleMiseAuPoint(v.mise_au_point),
+        siege: v.siege,
+      })),
+      ...sansVote.map((a) => ({
+        personne: { id: a.personne_id, nom: a.nom, fonction: null, groupe: avecGroupe(a.groupe_id) },
+        position: 'absent' as const,
+        parDelegation: false,
+        miseAuPoint: null,
+        siege: null,
+      })),
+    ].sort(ordreHemicycle(rangs));
+
     return {
       scrutin,
       objet: objetDuScrutin(scrutin.nature, ligne.amendement, ligne.titre),
@@ -356,6 +398,7 @@ export class PgScrutins implements ScrutinsRepository {
       absents: [...absents.values()].reduce((a, b) => a + b, 0),
       groupes: positions,
       votesDifferents: { total: differents.length, personnes: differents },
+      votes: nominatifs,
       compteRendu,
       provenance: ligne.provenance,
     };
@@ -365,8 +408,10 @@ export class PgScrutins implements ScrutinsRepository {
   private async votes(scrutin: string): Promise<LigneVote[]> {
     const participation = await this.projections.existe('lecture.participation_scrutin');
     return this.db.all<LigneVote>(
-      `SELECT v.personne_id, p.nom_affiche AS nom, v.position,
-              COALESCE(v.groupe_id, ${participation ? 'ps.groupe_id' : 'NULL'}) AS groupe_id
+      `SELECT v.personne_id, p.nom_affiche AS nom, v.position, v.par_delegation, v.siege,
+              COALESCE(v.groupe_id, ${participation ? 'ps.groupe_id' : 'NULL'}) AS groupe_id,
+              (SELECT l.attributs FROM canon.lien l
+                WHERE l.de_id = v.scrutin_id AND l.nature = 'mise_au_point' AND l.vers_id = v.personne_id) AS mise_au_point
        FROM canon.vote v
        JOIN canon.personne p ON p.entite_id = v.personne_id ${vivante('v.personne_id', 'xp')}
        ${participation ? participationDe('v.scrutin_id', 'v.personne_id') : ''}
@@ -376,28 +421,27 @@ export class PgScrutins implements ScrutinsRepository {
     );
   }
 
-  /** Parlementaires en mandat ce jour-là sans vote publié, par groupe du jour (null : sans groupe). */
-  private async absentsParGroupe(scrutin: string): Promise<Map<string | null, number>> {
-    if (!(await this.projections.existe('lecture.participation_scrutin'))) return new Map();
-    const lignes = await this.db.all<{ groupe_id: string | null; absents: number }>(
-      `SELECT ps.groupe_id, count(*) AS absents
+  /** Parlementaires en mandat ce jour-là sans vote publié, avec leur groupe du jour (null : sans groupe). */
+  private async absents(scrutin: string): Promise<LigneAbsent[]> {
+    if (!(await this.projections.existe('lecture.participation_scrutin'))) return [];
+    return this.db.all<LigneAbsent>(
+      `SELECT ps.personne_id, p.nom_affiche AS nom, ps.groupe_id
        FROM ${EN_MANDAT} ${vivante('ps.personne_id', 'xp')}
-       WHERE NOT EXISTS (SELECT 1 FROM canon.vote v WHERE v.scrutin_id = ps.scrutin_id AND v.personne_id = ps.personne_id)
-       GROUP BY ps.groupe_id`,
+       JOIN canon.personne p ON p.entite_id = ps.personne_id
+       WHERE NOT EXISTS (SELECT 1 FROM canon.vote v WHERE v.scrutin_id = ps.scrutin_id AND v.personne_id = ps.personne_id)`,
       { $scrutin: scrutin },
     );
-    return new Map(lignes.map((l) => [l.groupe_id, l.absents]));
   }
 
   private async groupes(ids: (string | null)[]): Promise<Map<string, GroupeRef>> {
     const connus = ids.filter((g): g is string => g !== null);
     if (!connus.length) return new Map();
-    const lignes = await this.db.all<{ groupe: GroupeRef }>(
+    const lignes = await this.db.all<{ groupe: GroupeLu }>(
       `SELECT ${sqlGroupe('o')} AS groupe FROM canon.organisation o ${vivante('o.entite_id', 'xo')}
        WHERE o.entite_id = ANY($ids::uuid[])`,
       { $ids: connus },
     );
-    return new Map(lignes.map((l) => [l.groupe.id, l.groupe]));
+    return new Map(lignes.map((l) => [l.groupe.id, groupe(l.groupe)!]));
   }
 
   /**

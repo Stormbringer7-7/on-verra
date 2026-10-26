@@ -6,6 +6,7 @@ import type { Depots, Horloge, Synthetiseur } from '../../ports';
 import { chargerDonnees, type DonneesMemoire } from './donnees';
 import { DiscussionsMemoire } from './discussions';
 import { DossiersMemoire } from './dossiers';
+import { FaitsMemoire } from './faits';
 import { HorlogeFixe } from './horloge';
 import { InstitutionsMemoire } from './institutions';
 import { PersonnesMemoire } from './personnes';
@@ -13,6 +14,7 @@ import { RechercheMemoire } from './recherche';
 import { ScrutinsMemoire } from './scrutins';
 import { SignalementsMemoire } from './signalements';
 import { SynthetiseurMemoire } from './syntheses';
+import { TerritoiresMemoire } from './territoires';
 import { TransparenceMemoire } from './transparence';
 
 export interface OptionsMemoire {
@@ -35,6 +37,8 @@ export function memoire(options: OptionsMemoire = {}): Memoire {
   return {
     depots: {
       dossiers: new DossiersMemoire(donnees),
+      territoires: new TerritoiresMemoire(donnees),
+      faits: new FaitsMemoire(options.retirees),
       discussions: new DiscussionsMemoire(donnees),
       personnes: new PersonnesMemoire(donnees),
       scrutins: new ScrutinsMemoire(donnees),

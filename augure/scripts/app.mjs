@@ -7,7 +7,9 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,9 +31,11 @@ const ALIAS_BUILDS = { android: 'aab', ios: 'xcarchive' };
 const AIDE = `Usage : npm run app -- <commande> [--env=<env>] …
 
   serve   --env=<env>                         lance seulement Expo (Metro)
-  run     --env=<env> <ios|android|web> [--device[=<nom>]]
+  devices [ios|android] [--all]               appareils physiques, simulateurs et émulateurs
+                                              (--all : simulateurs de toutes les versions d'iOS)
+  run     --env=<env> <ios|android|web> [--device=<nom|id>] [--all]
                                               lance l'app sur la cible (Expo démarré si besoin) ;
-                                              --device seul : liste des appareils et choix
+                                              sans --device : choix dans la liste des appareils
   prebuild --env=<env> [ios|android]          régénère ios/ et android/
   apply   --env=<env> version                 devpatch + 1, écrit la version (version.json, ios/, android/)
   apply   --env=<env> minor                   mineure + 1, devpatch à 0
@@ -109,6 +113,111 @@ async function metroActif() {
 function trouver(dossier, filtre) {
   const noms = fs.existsSync(dossier) ? fs.readdirSync(dossier).filter(filtre) : [];
   return noms.length === 1 ? path.join(dossier, noms[0]) : undefined;
+}
+
+// ── Appareils ────────────────────────────────────────────────────────────────────────────────
+
+const SDK_ANDROID = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? path.join(os.homedir(), 'Library', 'Android', 'sdk');
+const outilAndroid = (dossier, nom) => {
+  const chemin = path.join(SDK_ANDROID, dossier, nom);
+  return fs.existsSync(chemin) ? chemin : nom;
+};
+
+/** Sortie d'une commande, ou '' si elle manque ou échoue (outil absent : aucun appareil de ce type). */
+function lire(commande, args) {
+  const r = spawnSync(commande, args, { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout : '';
+}
+
+/**
+ * Appareils iOS : physiques (devicectl, Xcode 15+), simulateurs démarrés, puis éteints : ceux de
+ * l'iOS le plus récent seulement, sauf `tous`. `id` est l'UDID, accepté par `expo run:ios --device`.
+ */
+function appareilsIos(tous) {
+  const physiques = [];
+  const fichier = path.join(os.tmpdir(), `augure-devicectl-${process.pid}.json`);
+  if (spawnSync('xcrun', ['devicectl', 'list', 'devices', '--json-output', fichier], { stdio: 'ignore' }).status === 0) {
+    for (const d of JSON.parse(fs.readFileSync(fichier, 'utf8')).result?.devices ?? []) {
+      if (d.hardwareProperties?.platform !== 'iOS' || !d.hardwareProperties?.udid) continue;
+      const c = d.connectionProperties ?? {};
+      const etat = c.tunnelState === 'connected' ? (c.transportType === 'wired' ? 'branché' : 'réseau') : 'non connecté';
+      physiques.push({ id: d.hardwareProperties.udid, nom: d.deviceProperties?.name ?? d.hardwareProperties.udid, type: 'appareil', etat });
+    }
+    fs.rmSync(fichier, { force: true });
+  }
+  const simulateurs = [];
+  const liste = lire('xcrun', ['simctl', 'list', 'devices', 'available', '-j']);
+  for (const [runtime, ds] of Object.entries(liste ? JSON.parse(liste).devices : {})) {
+    const version = /iOS-(\d+)-(\d+)/.exec(runtime);
+    if (!version) continue;
+    const ordre = Number(version[1]) * 100 + Number(version[2]);
+    for (const d of ds) {
+      simulateurs.push({ id: d.udid, nom: `${d.name} (iOS ${version[1]}.${version[2]})`, type: 'simulateur', etat: d.state === 'Booted' ? 'démarré' : 'éteint', ordre });
+    }
+  }
+  const recent = Math.max(0, ...simulateurs.map((s) => s.ordre));
+  const demarres = simulateurs.filter((s) => s.etat === 'démarré');
+  const eteints = simulateurs.filter((s) => s.etat !== 'démarré' && (tous || s.ordre === recent));
+  return [...physiques, ...demarres, ...eteints];
+}
+
+/**
+ * Appareils Android : branchés et émulateurs démarrés (adb), puis AVD éteints (Expo les démarre).
+ * `id` est le numéro de série adb, ou le nom de l'AVD : les deux acceptés par `expo run:android --device`.
+ */
+function appareilsAndroid() {
+  const adb = outilAndroid('platform-tools', 'adb');
+  const branches = [];
+  const demarres = new Set();
+  for (const ligne of lire(adb, ['devices', '-l']).split('\n').slice(1)) {
+    const [serie, etat] = ligne.trim().split(/\s+/);
+    if (!serie) continue;
+    if (serie.startsWith('emulator-')) {
+      const avd = lire(adb, ['-s', serie, 'emu', 'avd', 'name']).split('\n')[0].trim();
+      demarres.add(avd);
+      branches.push({ id: serie, nom: avd || serie, type: 'émulateur', etat: etat === 'device' ? 'démarré' : etat });
+    } else {
+      const modele = /model:(\S+)/.exec(ligne)?.[1]?.replaceAll('_', ' ') ?? serie;
+      branches.push({ id: serie, nom: modele, type: 'appareil', etat: etat === 'device' ? 'branché' : etat });
+    }
+  }
+  const eteints = lire(outilAndroid('emulator', 'emulator'), ['-list-avds'])
+    .split('\n').map((l) => l.trim()).filter((avd) => avd && !demarres.has(avd) && !avd.startsWith('INFO'))
+    .map((avd) => ({ id: avd, nom: avd, type: 'émulateur', etat: 'éteint' }));
+  // Appareils physiques d'abord, puis émulateurs démarrés, puis éteints.
+  branches.sort((a, b) => (a.type === 'appareil' ? 0 : 1) - (b.type === 'appareil' ? 0 : 1));
+  return [...branches, ...eteints];
+}
+
+const appareils = (cible, tous) => (cible === 'ios' ? appareilsIos(tous) : appareilsAndroid());
+const ligneAppareil = (a, i) => `  ${String(i + 1).padStart(2)}. ${a.nom.padEnd(42)} ${a.type}, ${a.etat}`;
+
+function devices(cibles, tous) {
+  for (const cible of cibles) {
+    const liste = appareils(cible, tous);
+    console.log(`${cible} :`);
+    console.log(liste.length ? liste.map(ligneAppareil).join('\n') : '  (aucun)');
+  }
+}
+
+/** Appareil de `run` : celui de --device=<nom|id>, le seul disponible, ou celui choisi dans la liste. */
+async function choisirAppareil(cible, device, tous) {
+  if (typeof device === 'string') return device;
+  const liste = appareils(cible, tous);
+  if (!liste.length) echec(`aucun appareil ${cible} : brancher un appareil, ou créer un simulateur / émulateur`);
+  if (liste.length === 1) return liste[0].id;
+  console.log(`Appareils ${cible} :\n${liste.map(ligneAppareil).join('\n')}`);
+  if (!process.stdin.isTTY) echec('plusieurs appareils : préciser --device=<nom ou identifiant>');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    for (;;) {
+      const reponse = (await rl.question(`Numéro [1] : `)).trim() || '1';
+      const choisi = liste[Number(reponse) - 1];
+      if (choisi) return choisi.id;
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 // ── Prebuild et version ──────────────────────────────────────────────────────────────────────
@@ -195,7 +304,7 @@ function serve(env, variables, extra = []) {
   }
 }
 
-async function run(cible, env, variables, device) {
+async function run(cible, env, variables, device, tous) {
   if (!CIBLES.includes(cible)) echec(`run : cible « ${cible ?? ''} » inconnue (${CIBLES.join(', ')})`);
   const actif = await metroActif();
   if (actif) {
@@ -209,9 +318,9 @@ async function run(cible, env, variables, device) {
     else serve(env, variables, ['--web']);
     return;
   }
+  const appareil = await choisirAppareil(cible, device, tous);
   assurerPrebuild(cible, env, variables);
-  // --device sans nom : Expo liste les simulateurs, émulateurs et appareils branchés.
-  const args = ['expo', `run:${cible}`, '--port', String(PORT), ...(device === true ? ['--device'] : device ? ['--device', device] : [])];
+  const args = ['expo', `run:${cible}`, '--port', String(PORT), '--device', appareil];
   if (actif) args.push('--no-bundler');
   else ecrireEtat({ serve: env ?? '' });
   try {
@@ -244,12 +353,17 @@ function build(demandes, env, variables) {
       const espace = trouver(path.join(RACINE, 'ios'), (n) => n.endsWith('.xcworkspace'));
       if (!espace) echec('ios/*.xcworkspace introuvable : relancer `prebuild --env=… ios`');
       const equipe = variables.APPLE_TEAM_ID ? [`DEVELOPMENT_TEAM=${variables.APPLE_TEAM_ID}`, '-allowProvisioningUpdates'] : [];
+      const archive = path.join(sortie, `augure-${nom}.xcarchive`);
       lancer(
         'xcodebuild',
         ['-workspace', espace, '-scheme', path.basename(espace, '.xcworkspace'), '-configuration', 'Release',
-          '-destination', 'generic/platform=iOS', '-archivePath', path.join(sortie, `augure-${nom}.xcarchive`), 'archive', ...equipe],
+          '-destination', 'generic/platform=iOS', '-archivePath', archive, 'archive', ...equipe],
         { env: variables },
       );
+      // L'organiseur de Xcode (Window › Organizer : valider, distribuer) ne lit que ce dossier.
+      const organiseur = path.join(os.homedir(), 'Library', 'Developer', 'Xcode', 'Archives', new Date().toISOString().slice(0, 10));
+      fs.mkdirSync(organiseur, { recursive: true });
+      lancer('ditto', [archive, path.join(organiseur, path.basename(archive))]);
     }
   }
   console.log(`✔ ${builds.join(', ')} → ${path.relative(RACINE, sortie)}`);
@@ -270,7 +384,10 @@ switch (commande) {
     serve(env, variables);
     break;
   case 'run':
-    await run(positions[0], env, variables, options.device);
+    await run(positions[0], env, variables, options.device, Boolean(options.all));
+    break;
+  case 'devices':
+    devices(positions.length ? positions : ['ios', 'android'], Boolean(options.all));
     break;
   case 'prebuild':
     prebuild(positions.length ? positions : ['ios', 'android'], env, variables);

@@ -29,10 +29,12 @@ import type {
   Indicateur,
   LigneClassement,
   Page,
+  PersonneRef,
   Provenance,
   QuestionResume,
   RoleDansLesDossiers,
   RolePersonne,
+  SourceCouleur,
   Systeme,
   TypeFonction,
 } from '@contrat/domain/model';
@@ -70,7 +72,58 @@ export const provenanceSql = (colonne: string) => `(
 /** Référence de groupe (GroupeRef) depuis une ligne de canon.organisation. */
 export const groupeSql = (alias: string) =>
   `json_build_object('id', ${alias}.entite_id, 'abrege', COALESCE(${alias}.abrege, ${alias}.nom_court, ${alias}.nom),
-     'libelle', ${alias}.nom, 'couleur', ${alias}.couleur, 'chambre', ${alias}.chambre)`;
+     'libelle', ${alias}.nom, ${couleurGroupeSql(alias)}, 'chambre', ${alias}.chambre)`;
+
+/**
+ * Couleur d'un groupe (projection `lecture.couleur_groupe` : officielle, de famille ou de secours),
+ * en deux clés de json_build_object : 'couleur' et 'sourceCouleur'.
+ */
+export const couleurGroupeSql = (alias: string) =>
+  `'couleur', COALESCE((SELECT cg.couleur FROM lecture.couleur_groupe cg WHERE cg.groupe_id = ${alias}.entite_id), ${alias}.couleur),
+   'sourceCouleur', COALESCE((SELECT cg.source FROM lecture.couleur_groupe cg WHERE cg.groupe_id = ${alias}.entite_id),
+                             CASE WHEN ${alias}.couleur IS NOT NULL THEN 'officielle' END)`;
+
+/** Couleur de secours quand la projection ne connaît pas le groupe (jamais vide : règle de l'app). */
+export const COULEUR_INCONNUE = '#8D949A';
+
+/**
+ * Position gauche-droite des groupes (0 = gauche, 1 = droite), d'après les sièges publiés
+ * (`lecture.position_groupe`) : vide pour un groupe sans siège publié (Sénat) ou hors projection.
+ */
+export async function positionsDesGroupes(db: SqlDatabase, ids: string[]): Promise<Map<string, number>> {
+  const uniques = [...new Set(ids)];
+  if (!uniques.length) return new Map();
+  const projetee = await db.first<{ ok: boolean }>(`SELECT to_regclass('lecture.position_groupe') IS NOT NULL AS ok`);
+  if (!projetee?.ok) return new Map();
+  const lignes = await db.all<{ id: string; position: number }>(
+    `SELECT groupe_id::text AS id, position::float8 AS position FROM lecture.position_groupe
+     WHERE groupe_id = ANY($ids::uuid[]) AND position IS NOT NULL`,
+    { ids: uniques },
+  );
+  return new Map(lignes.map((l) => [l.id, l.position]));
+}
+
+/** Non-inscrits : pas une position politique, toujours en dernier. */
+const NON_INSCRITS = /^(NI|NIPOL|AUCUN)$/;
+
+/**
+ * De la gauche vers la droite : les groupes dont la position est connue, par position ; les autres
+ * ensuite, dans l'ordre reçu ; les non-inscrits en dernier. Tri stable.
+ */
+export function gaucheDroite<T>(elements: T[], groupeDe: (e: T) => GroupeRef, positions: Map<string, number>): T[] {
+  const cle = (e: T) => {
+    const g = groupeDe(e);
+    return [Number(NON_INSCRITS.test(g.abrege)), positions.has(g.id) ? 0 : 1, positions.get(g.id) ?? 0];
+  };
+  return elements
+    .map((e, i) => ({ e, i, k: cle(e) }))
+    .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.i - b.i)
+    .map((x) => x.e);
+}
+
+/** Source de couleur lue, ou « arbitraire » (secours). */
+export const sourceCouleur = (valeur: string | null | undefined): SourceCouleur =>
+  valeur === 'officielle' || valeur === 'famille' || valeur === 'gauche_droite' ? valeur : 'arbitraire';
 
 /**
  * Groupe politique d'une personne dans une chambre à une date (fonction membre_groupe en cours).
@@ -99,9 +152,23 @@ export function provenance(lue: Provenance | null | undefined, type: string, id:
 
 export const chambre = (valeur: string | null | undefined): Chambre => (valeur === 'SENAT' ? 'SENAT' : 'AN');
 
-export function groupe(lu: (Omit<GroupeRef, 'chambre'> & { chambre: string | null }) | null | undefined): GroupeRef | null {
+/** GroupeRef tel que le lit groupeSql (couleur et source pouvant manquer). */
+export type GroupeLu = Omit<GroupeRef, 'chambre' | 'couleur' | 'sourceCouleur'> & {
+  couleur: string | null;
+  sourceCouleur?: string | null;
+  chambre: string | null;
+};
+
+export function groupe(lu: GroupeLu | null | undefined): GroupeRef | null {
   if (!lu) return null;
-  return { id: lu.id, abrege: lu.abrege, libelle: lu.libelle, couleur: lu.couleur ?? null, chambre: chambre(lu.chambre) };
+  return {
+    id: lu.id,
+    abrege: lu.abrege,
+    libelle: lu.libelle,
+    couleur: lu.couleur ?? COULEUR_INCONNUE,
+    sourceCouleur: lu.couleur ? sourceCouleur(lu.sourceCouleur) : 'arbitraire',
+    chambre: chambre(lu.chambre),
+  };
 }
 
 /** Titres des dossiers : `titre_court` est un identifiant technique (« fin_de_vie_17e »), d'où le titre. */
@@ -145,7 +212,19 @@ export function titrePublie(titre: string): string {
 const enFrancais = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 
 /** Accord au féminin des libellés de fonction, d'après la civilité publiée (Mme) ou le sexe RNE (F). */
-const feminin = (civilite: string | null | undefined) => civilite === 'Mme' || civilite === 'F';
+export const feminin = (civilite: string | null | undefined) => civilite === 'Mme' || civilite === 'F';
+
+/**
+ * Ordre de l'hémicycle, de la gauche vers la droite : rang du groupe (sans groupe : à la fin), puis
+ * siège décroissant (l'AN numérote de la droite vers la gauche ; sans siège : après), à défaut nom
+ * (ordre alphabétique, nombres compris).
+ */
+export const ordreHemicycle =
+  (rangs: Map<string, number>) =>
+  (a: { personne: PersonneRef; siege: number | null }, b: { personne: PersonneRef; siege: number | null }) => {
+    const rang = (x: { personne: PersonneRef }) => (x.personne.groupe ? (rangs.get(x.personne.groupe.id) ?? 1e6) : 1e6);
+    return rang(a) - rang(b) || (b.siege ?? -1) - (a.siege ?? -1) || a.personne.nom.localeCompare(b.personne.nom, 'fr', { numeric: true });
+  };
 
 const libelleMandat = (type: string, civilite: string | null) => {
   const f = feminin(civilite);

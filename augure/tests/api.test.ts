@@ -54,6 +54,30 @@ describe("bus de l'app : commandes exécutées par l'API", () => {
     await expect(bus.execute(ConsulterInstitution({ institution: 'cc' }))).rejects.toThrow('Institution inconnue');
   });
 
+  it('donne la raison quand les données manquent ou que le serveur ne répond pas', async () => {
+    const preparation = faux(() =>
+      Response.json({ code: 'donnees_en_preparation', erreur: 'Les données de cet écran sont en cours de préparation.', detail: 'Table pas encore construite : lecture.couleur_groupe' }, { status: 503 }),
+    );
+    await expect(creerApiBus('https://exemple.fr/api', silencieux, preparation.fetcher).execute(ConsulterInstitution({ institution: 'an' }))).rejects.toMatchObject({
+      name: 'ErreurApi',
+      code: 'donnees_en_preparation',
+      statut: 503,
+      detail: 'Table pas encore construite : lecture.couleur_groupe',
+    });
+    const proxy = faux(() => new Response('Bad Gateway', { status: 502 }));
+    await expect(creerApiBus('https://exemple.fr/api', silencieux, proxy.fetcher).execute(ConsulterInstitution({ institution: 'an' }))).rejects.toMatchObject({
+      code: 'serveur_indisponible',
+      message: expect.stringContaining('ne répond pas'),
+    });
+    const reseau = faux(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(creerApiBus('https://exemple.fr/api', silencieux, reseau.fetcher).execute(ConsulterInstitution({ institution: 'an' }))).rejects.toMatchObject({
+      code: 'reseau',
+      message: expect.stringContaining('vérifiez votre connexion'),
+    });
+  });
+
   it('refuse une adresse en HTTP hors de la machine', () => {
     expect(() => creerApiBus('http://exemple.fr/api', silencieux)).toThrow('HTTPS');
     expect(() => creerApiBus('http://192.168.1.10.exemple.fr/api', silencieux)).toThrow('HTTPS');

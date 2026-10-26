@@ -35,6 +35,8 @@ export interface DonneesMemoire {
   exemples: Exemples;
   syntheses: Map<string, Synthese>;
   conflits: ConflitSynthese[];
+  /** Entités simulées comme retirées de la source (G2). */
+  retirees: ReadonlySet<string>;
 }
 
 /** Clé stable d'un sujet (ordre des champs indifférent). */
@@ -88,7 +90,7 @@ export async function chargerDonnees(retirees: readonly string[] = []): Promise<
       exemples[nom].push({ titre: exemple.titre, input: exemple.input, output: sansRetirees(output, masquees) } as ExempleMemoire<NomCommande>);
     }
   }
-  return { exemples: exemples as unknown as Exemples, syntheses, conflits };
+  return { exemples: exemples as unknown as Exemples, syntheses, conflits, retirees: masquees };
 }
 
 /** Une page d'une liste connue ; `total` : celui que publie la fixture s'il dépasse la liste. */

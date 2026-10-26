@@ -11,10 +11,10 @@ déjà créées, la décision « même personne » s'applique par une fusion d'e
 
 from ....chargement import Document, Flux, charger
 from ....domaine import IdentiteNative
-from ....domaine.objets import Candidat, CasRevue, Objet
+from ....domaine.objets import Candidat, CasRevue, Dependants, Objet
 from ....etl import Etape, Fichier
 from ....noms import normaliser
-from .commun import DONNEES, LICENCE, Systeme, document_ligne, jour, lignes_csv, senat
+from .commun import DONNEES, LICENCE, Systeme, document_ligne, jour, lignes_csv, senat, table_dump
 
 GENERAL = Fichier("senateurs.csv", f"{DONNEES}/senateurs/ODSEN_GENERAL.csv")
 MANDATS = Fichier("elusen.csv", f"{DONNEES}/senateurs/ODSEN_ELUSEN.csv")
@@ -169,10 +169,65 @@ def executer(ctx):
             # après les sénateurs : le sujet du cas (le matricule) est alors identifié
             Flux(Systeme.SENAT, LICENCE, lambda: (document_ligne(ANCIENS_DEPUTES, "eludep", s["Matricule"], s)
                                                   for s in anciens_deputes(deputes)),
-                 lambda d: ancien_depute(d, annuaire, fiches)))
+                 lambda d: ancien_depute(d, annuaire, fiches)),
+            Flux(Systeme.SENAT, LICENCE, lambda: documents_sieges(ctx.fichier(EXPORT.nom)), siege),
+            # après les mandats : le mandat cité est alors identifié
+            Flux(Systeme.SENAT, LICENCE, lambda: documents_territoires(ctx.fichier(EXPORT.nom)), territoire))
 
 
 ETAPE = Etape("senat.senateurs", executer, apres=("an.acteurs",),
-              sources=lambda p: [GENERAL, MANDATS, GROUPES, ANCIENS_DEPUTES],
+              sources=lambda p: [GENERAL, MANDATS, GROUPES, ANCIENS_DEPUTES, EXPORT],
               description="sénateurs, mandats sénatoriaux et appartenances aux groupes (ODSEN) ; "
-                          "anciens députés en revue")
+                          "anciens députés en revue ; sièges dans l'hémicycle ; département de chaque mandat")
+
+
+# Sièges : export complet de la base des sénateurs (table `sen`), colonne `sennumsie` (« N° de siège
+# Hémicycle »). Un lien `siege` sénateur → Sénat porte le numéro ; un sénateur qui n'est plus en
+# fonction, ou sans numéro publié, n'en a pas (le lien est retiré). La numérotation du Sénat ne suit
+# pas l'ordre gauche-droite et aucun plan de la salle (numéro → place) n'est publié : le numéro est
+# gardé tel quel, sans position déduite.
+EXPORT = Fichier("export_sens.zip", f"{DONNEES}/senateurs/export_sens.zip")
+
+
+def documents_sieges(chemin):
+    for ligne in table_dump(chemin, "export_sens.sql", "sen"):
+        utile = {k: ligne.get(k) for k in ("senmat", "etasencod", "sennumsie")}
+        yield document_ligne(EXPORT, "sen", ligne["senmat"], utile)
+
+
+def siege(doc: Document):
+    ligne = doc.donnees
+    numero = ligne["sennumsie"]
+    lignes = ([{"vers_id": SENAT, "ordre": 0, "attributs": {"numero": int(numero)}}]
+              if ligne["etasencod"] == "ACTIF" and numero and numero.isdigit() else [])
+    yield Dependants("lien", {"de_id": senat("senateur", ligne["senmat"]), "nature": "siege"}, lignes, "/sen",
+                     ("vers_id",))
+
+
+# Département d'élection de chaque mandat : table `elusen` (mandats ; `eluid` = « Identifiant mandat »
+# d'ODSEN_ELUSEN) et son `dptnum` → table `dpt` (`dptcod` : code du COG, « 2A », « 971 »…). Référence
+# explicite publiée par le Sénat : lien `territoire` mandat → département ou collectivité d'outre-mer
+# de l'INSEE, comme pour les députés. Français établis hors de France (997, 998) : aucun territoire
+# du COG, pas de lien.
+OUTRE_MER = {"975", "977", "978", "984", "986", "987", "988", "989"}     # codes COMER de l'INSEE
+HORS_DE_FRANCE = {"997", "998"}
+
+
+def documents_territoires(chemin):
+    codes = {l["dptnum"]: l["dptcod"] for l in table_dump(chemin, "export_sens.sql", "dpt")}
+    for ligne in table_dump(chemin, "export_sens.sql", "elusen"):
+        if ligne.get("typmancod") not in (None, "SENAT"):
+            continue
+        utile = {"eluid": ligne["eluid"], "senmat": ligne["senmat"], "dptcod": codes.get(ligne["dptnum"])}
+        yield document_ligne(EXPORT, "elusen", ligne["eluid"], utile)
+
+
+def territoire(doc: Document):
+    ligne = doc.donnees
+    code = ligne["dptcod"]
+    lignes = []
+    if code and code not in HORS_DE_FRANCE:
+        nature = "collectivite_outre_mer" if code in OUTRE_MER else "departement"
+        lignes = [{"vers_id": IdentiteNative(Systeme.INSEE, nature, code), "ordre": 0, "attributs": {}}]
+    yield Dependants("lien", {"de_id": senat("mandat_senateur", ligne["eluid"]), "nature": "territoire"}, lignes,
+                     "/elusen", ("vers_id",))
