@@ -15,7 +15,7 @@ import { SyntheseVue } from '../components/commun/SyntheseVue';
 import { BarreDossierVue } from '../components/dossiers/BarreDossier';
 import { Carte, Colonnes, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { DiffTexte, OrigineVue } from '../components/dossiers/elements';
-import { CHAMBRE_COURTE, entreeArticle, titreOrigine } from '../components/dossiers/presentation';
+import { CHAMBRE_COURTE, entreeArticle, texteDuHtml, titreOrigine } from '../components/dossiers/presentation';
 import { Ecran, Retour } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
@@ -98,7 +98,7 @@ function ContenuArticle({
                   {a.pourquoi.expose && (
                     <View style={[styles.citation, { borderLeftColor: p.lineStrong }]}>
                       <Label>Exposé des motifs · extrait officiel</Label>
-                      <T>{`« ${a.pourquoi.expose} »`}</T>
+                      <T>{`« ${texteDuHtml(a.pourquoi.expose)} »`}</T>
                     </View>
                   )}
                   <SyntheseVue synthese={a.pourquoi.synthese} titre="En clair" />

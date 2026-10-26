@@ -330,6 +330,16 @@ describe('Article', () => {
 // ---------- Amendement ----------
 
 describe('Amendement', () => {
+  it('texteDuHtml : exposé tel que publié par l’AN (balises, styles, entités numériques)', () => {
+    const html =
+      '<p style="text-align: justify;">Par cet amendement de repli, le moratoire sur les m&#x00E9;ga&#x2011;bassines ' +
+      'dure &#233;tendu&nbsp;:</p><p style="text-align: justify;">L&#x2019;eau &amp; la ressource.</p>';
+    expect(texteDuHtml(html)).toBe(
+      'Par cet amendement de repli, le moratoire sur les méga\u2011bassines dure étendu :\nL’eau & la ressource.',
+    );
+    expect(texteDuHtml('a &inconnue; b &#0; c')).toBe('a &inconnue; b &#0; c');
+  });
+
   it('CE123 (AN) : avis non publiés, main levée, ce qui a été dit, intérêts à vérifier', async () => {
     const f = await executer(definitions.ConsulterAmendement({ id: 'amdt-ce123' }));
     expect(f.amendement.numero).toBe('CE123');

@@ -301,14 +301,29 @@ export function faitsDuVote(e: ExplicationVote) {
 
 // ---------- Divers ----------
 
-/** Dispositif publié en HTML → texte lisible (balises retirées, espaces resserrés). */
+const ENTITES: Record<string, string> = {
+  nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: '’', rsquo: '’', lsquo: '‘',
+  laquo: '«', raquo: '»', hellip: '…', ndash: '–', mdash: '—', oelig: 'œ', OElig: 'Œ',
+};
+
+/** Entité HTML → caractère : numérique (« &#x00E9; », « &#233; ») ou nommée ; inconnue : laissée telle quelle. */
+const entite = (brute: string, nom: string) => {
+  const code = /^#x([0-9a-f]+)$/i.exec(nom)?.[1];
+  const point = code ? parseInt(code, 16) : /^#(\d+)$/.exec(nom) ? Number(nom.slice(1)) : NaN;
+  if (Number.isInteger(point)) return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : brute;
+  return ENTITES[nom] ?? brute;
+};
+
+/** Dispositif ou exposé publié en HTML → texte lisible (balises retirées, entités décodées, espaces resserrés). */
 export const texteDuHtml = (html: string) =>
   html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/[ \t]+/g, ' ')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, entite)
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
 /** Adresse du passage d'un compte rendu (document + ancre). */

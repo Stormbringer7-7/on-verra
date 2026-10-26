@@ -80,7 +80,7 @@ function ContenuAmendement({ fiche: f }: { fiche: FicheAmendement }) {
               </Carte>
               <View style={[styles.citation, { borderLeftColor: p.lineStrong }]}>
                 <Label>Exposé des motifs · extrait officiel</Label>
-                <T>{f.expose ? `« ${f.expose} »` : 'Exposé des motifs non publié.'}</T>
+                <T>{f.expose ? `« ${texteDuHtml(f.expose)} »` : 'Exposé des motifs non publié.'}</T>
                 <Source provenance={f.provenance} />
               </View>
             </Section>
