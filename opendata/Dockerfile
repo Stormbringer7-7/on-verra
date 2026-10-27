@@ -6,6 +6,7 @@ FROM python:3.12-slim
 WORKDIR /app
 RUN pip install --no-cache-dir "psycopg[binary]==3.2.10"
 COPY src ./src
+COPY parcours ./parcours
 COPY docker/canon.sh /usr/local/bin/canon-en-boucle
 
 # data/ : fichiers bruts (cache, data/brut) et rapports de contrôle — gardé entre les cycles.
