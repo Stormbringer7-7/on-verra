@@ -4,7 +4,7 @@
 // (577), comme l'Assemblée ; Sénat : sans siège (placement par groupe).
 
 import type { GroupeRef, PersonneRef, Position, Siegeant, VoteNominatif } from '../../core/domain/model';
-import { G, P } from './entites';
+import { DEPARTEMENT_DE, G, P } from './entites';
 
 /** Personnes du canevas, par groupe. */
 const CONNUS: Record<string, PersonneRef[]> = {
@@ -40,7 +40,8 @@ export function siegeants(groupes: [GroupeRef, number][]): Siegeant[] {
 
 /**
  * Votes d'un scrutin : par groupe, les positions imposées (personnes du canevas) puis le reste du
- * décompte, dans l'ordre pour, contre, abstention, non-votant, absent. Sièges : ceux de `sieges`.
+ * décompte, dans l'ordre pour, contre, abstention, non-votant, absent. Sièges : ceux de `sieges` ;
+ * département : celui des élus localisés (`DEPARTEMENT_DE`), null pour les parlementaires fictifs.
  */
 export function votesNominatifs(
   lignes: { groupe: GroupeRef; pour: number; contre: number; abstention: number; nonVotants: number; absents: number }[],
@@ -55,7 +56,14 @@ export function votesNominatifs(
     return membres.map((personne) => {
       const position = imposees[personne.id] ?? suivante();
       if (!imposees[personne.id]) reste[position]--;
-      return { personne, position, parDelegation: false, miseAuPoint: null, siege: sieges.get(personne.id) ?? null };
+      return {
+        personne,
+        position,
+        parDelegation: false,
+        miseAuPoint: null,
+        siege: sieges.get(personne.id) ?? null,
+        departement: DEPARTEMENT_DE[personne.id] ?? null,
+      };
     });
   });
 }

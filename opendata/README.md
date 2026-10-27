@@ -19,9 +19,10 @@ export DATABASE_URL=postgres://big-brother:big-brother@127.0.0.1:5433/civictrace
 
 .venv/bin/python -m src migrer       # schéma (src/schema_pg/NNNN_*.sql), idempotent
 .venv/bin/python -m src canon        # télécharge et charge ce qui a changé (complet ≈ 40 min, incrémental ≈ 6 min)
-.venv/bin/python -m src projeter     # reconstruit le schéma lecture (barre de parcours, indicateurs)
+.venv/bin/python -m src projeter     # recharge les modèles de parcours, reconstruit le schéma lecture (parcours, indicateurs)
 .venv/bin/python -m src controles    # vérifie les invariants « 100 % fiable » ; échoue sinon
 .venv/bin/python -m src revue rapport  # écrit docs/revue/rapport.md et un CSV par type de cas
+.venv/bin/python -m src echantillons  # échantillons 17e en SQLite, tous les champs et leur profil (data/echantillons/)
 ```
 
 Options de `canon` :
@@ -62,7 +63,8 @@ src/
   adaptateurs/sources/     an/, senat/, constit/, hatvp/, rne/, insee/ : lecture des fichiers bruts
   adaptateurs/stockage/    memoire.py (tests) et postgres/ : même contrat
   adaptateurs/synthese.py  SansSynthese : aucun LLM branché, « Pas de synthèse disponible »
-  textes.py, diffs.py      découpage par article, suivi d'article, diff mot à mot
+  textes.py, diffs.py      texte propre (HTML, entités, encodage), découpage par article, diff mot à mot
+  parcours.py              modèles de parcours (../parcours/*.toml) → canon.parcours_*, à chaque projection
   schema_pg/               migrations versionnées (brut, canon, analytique, lecture)
   projections/             requêtes du schéma lecture, rejouées par `projeter`
   revue.py, controles.py   cas de revue humaine, invariants
@@ -75,7 +77,8 @@ src/
 | [uml.md](docs/uml.md) | diagrammes : du fichier source à la colonne (`python -m src uml` les régénère) |
 | [rapprochements.md](docs/rapprochements.md) | ce qui est relié automatiquement, ce qui ne l'est jamais, revue |
 | [modifications.md](docs/modifications.md) | changements article par article et amendement à l'origine |
-| [indicateurs.md](docs/indicateurs.md) | projections `lecture` : barre de parcours, indicateurs et leurs limites |
+| [indicateurs.md](docs/indicateurs.md) | projections `lecture` : parcours des dossiers, indicateurs et leurs limites |
+| [parcours/](parcours/) | un modèle de parcours par type de dossier, écrit d'après le droit, et `correspondances.toml` (codes d'actes → phases) |
 | [TODO.md](../docs/TODO.md) | en cours, à faire et idées (tout le dépôt) |
 
 **Ajouter une source** : un module sous `src/adaptateurs/sources/<source>/` qui produit des

@@ -7,6 +7,7 @@ import type {
   ArticleRef,
   CaseCompacte,
   CleCase,
+  DepartementRef,
   DossierRef,
   EtatCase,
   GroupeRef,
@@ -91,6 +92,27 @@ export const comme = (p: PersonneRef, fonction: string): PersonneRef => ({ ...p,
 
 export const orateur = (p: PersonneRef, qualite: string | null = null): Orateur => ({ type: 'personne', personne: p, qualite });
 
+// ---------- Départements ----------
+
+/** Départements des élus que connaît la maquette (codes du COG). */
+export const DEP = {
+  '33': { code: '33', nom: 'Gironde' },
+  '44': { code: '44', nom: 'Loire-Atlantique' },
+  '59': { code: '59', nom: 'Nord' },
+  '69': { code: '69', nom: 'Rhône' },
+  '91': { code: '91', nom: 'Essonne' },
+} satisfies Record<string, DepartementRef>;
+
+/** Département du mandat de chaque élu localisé (cf. fixtures Territoires) ; les autres : null. */
+export const DEPARTEMENT_DE: Record<string, DepartementRef> = {
+  'hugo-fictif': DEP['33'],
+  'paul-fictif': DEP['33'],
+  'ines-modele': DEP['59'],
+  'louis-prototype': DEP['69'],
+  'camille-exemple': DEP['91'],
+  'pierre-modele': DEP['44'],
+};
+
 // ---------- Dossiers ----------
 
 export const D = {
@@ -138,10 +160,12 @@ export const ART = {
 
 type Ligne = [CleCase, string, EtatCase, boolean?];
 const barre = (lignes: Ligne[]): CaseCompacte[] =>
-  lignes.map(([cle, libelle, etat, courante]) => ({ cle, libelle, etat, courante: courante ?? false }));
+  lignes.map(([cle, libelle, etat, courante]) => ({ cle, libelle, etat, courante: courante ?? false, attendue: false, deviation: false }));
+/** Barre dont l'étape `cle` porte une déviation. */
+const avecDeviation = (cle: CleCase, lignes: Ligne[]) => barre(lignes).map((c) => (c.cle === cle ? { ...c, deviation: true } : c));
 
-/** Procédure accélérée, CMP conclusive, Conseil constitutionnel saisi (en cours). */
-export const BARRE_ENERGIE = barre([
+/** Procédure accélérée (déviation au dépôt), CMP conclusive, Conseil constitutionnel saisi (en cours). */
+export const BARRE_ENERGIE = avecDeviation('depot', [
   ['depot', 'Dépôt', 'faite'],
   ['commission_1_o', 'Commission AN', 'faite'],
   ['seance_1_o', 'Séance AN', 'faite'],

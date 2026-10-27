@@ -9,11 +9,14 @@
 //     de la législature ; une personne qui en a eu deux paraît dans les deux déclinaisons.
 //   - Chambres : les deux assemblées, fixes (pas de requête).
 //   - Interventions : l'index plein texte `texte_recherche` ; sans requête, les plus récentes.
-//   - Amendements : par numéro ou par le titre du dossier, tant que leur texte n'a pas d'index
-//     plein texte (proposé : colonne `texte_recherche` tsvector + GIN, comme canon.intervention).
+//   - Amendements : par numéro ou par le titre du dossier (requête) ; leur texte (index
+//     `texte_recherche`, 0022) sert aux expressions.
 //   - Comptes : plafonnés (PLAFOND_COMPTE) en comptant au plus PLAFOND_COMPTE + 1 lignes.
+//   - Expressions et personne (`FiltresRecherche`) : sous-requêtes des résultats retenus
+//     (`RESTRICTIONS`), cumulées avec la requête ; une expression est cherchée comme expression
+//     exacte dans le texte publié (sinon dans le titre du résultat), la personne par un lien publié.
 
-import { PLAFOND_COMPTE, numeroComparable } from '@contrat/domain/familles';
+import { LIEN_PERSONNE, PLAFOND_COMPTE, SANS_FILTRE, numeroComparable, type FiltresRecherche } from '@contrat/domain/familles';
 import type { CompteRecherche, DeclinaisonRecherche, NumeroOfficiel, Page, ResultatFamille } from '@contrat/domain/model';
 import { famillesDe } from '@contrat/domain/familles';
 import { normaliser } from '@contrat/domain/texte';
@@ -214,6 +217,42 @@ const REQUETES_FAMILLES: Partial<Record<DeclinaisonRecherche, (avecQ: boolean) =
     WHERE ${correspond(avecQ, "concat_ws(' ', p.nom_affiche, dc.declarant_libelle, dc.type_libelle)")}`,
 };
 
+/** Les `n` expressions ($texte0…) cherchées dans un vecteur plein texte, chacune comme expression exacte. */
+const expressionsDans = (n: number, vecteur: string) =>
+  Array.from({ length: n }, (_, i) => `${vecteur} @@ phraseto_tsquery('french', $texte${i})`).join(' AND ');
+
+/**
+ * Ce qui restreint une déclinaison sous les filtres : sous-requête des `cle` dont le texte publié
+ * contient les expressions (`texte` ; sans : le titre du résultat), et des `cle` liées à
+ * `$personne` par le lien publié de `LIEN_PERSONNE` (`personne`).
+ */
+const RESTRICTIONS: Partial<Record<DeclinaisonRecherche, { texte?: (n: number) => string; personne?: string }>> = {
+  dossiers: { personne: `SELECT de_id FROM canon.lien WHERE vers_id = $personne::uuid AND nature = 'initiateur'` },
+  deputes: { personne: 'SELECT $personne::uuid' },
+  senateurs: { personne: 'SELECT $personne::uuid' },
+  ministres: { personne: 'SELECT $personne::uuid' },
+  votes: {
+    texte: (n) => `SELECT entite_id FROM canon.scrutin WHERE ${expressionsDans(n, "to_tsvector('french', titre)")}`,
+    personne: 'SELECT scrutin_id FROM canon.vote WHERE personne_id = $personne::uuid',
+  },
+  amendements: {
+    texte: (n) => `SELECT entite_id FROM canon.amendement WHERE ${expressionsDans(n, 'texte_recherche')}`,
+    personne: `SELECT de_id FROM canon.lien WHERE vers_id = $personne::uuid AND nature = 'auteur'`,
+  },
+  interventions: {
+    texte: (n) => `SELECT entite_id FROM canon.intervention WHERE ${expressionsDans(n, 'texte_recherche')}`,
+    personne: 'SELECT entite_id FROM canon.intervention WHERE orateur_id = $personne::uuid',
+  },
+  questions: {
+    texte: (n) => `SELECT entite_id FROM canon.question WHERE ${expressionsDans(n, 'texte_recherche')}`,
+    personne: 'SELECT entite_id FROM canon.question WHERE auteur_id = $personne::uuid',
+  },
+  lobbying: { texte: (n) => `SELECT representant_id FROM canon.action_representation WHERE ${expressionsDans(n, 'objet_recherche')}` },
+  interets: { personne: 'SELECT entite_id FROM canon.declaration WHERE personne_id = $personne::uuid' },
+};
+
+const filtre = (f: FiltresRecherche) => f.textes.length > 0 || f.personne !== null;
+
 /**
  * Sans requête, l'ordre de parcours des grandes tables, écrit pour suivre un index de date (la
  * requête générale trierait toute la table) : identifiants seulement, `$limite` et `$decalage`.
@@ -249,8 +288,27 @@ interface Ligne {
 export class PgFamilles {
   constructor(private readonly db: SqlDatabase) {}
 
-  /** Paramètres et requête d'une déclinaison ; null si elle n'est pas cherchable ici. */
-  private requete(q: string | null, declinaison: DeclinaisonRecherche): { sql: string; params: SqlParams } | null {
+  /** Paramètres et requête d'une déclinaison ; null si elle n'est pas cherchable ici (ou sous ces filtres). */
+  private requete(q: string | null, declinaison: DeclinaisonRecherche, filtres: FiltresRecherche): { sql: string; params: SqlParams } | null {
+    const base = this.base(q, declinaison);
+    if (!base || !filtre(filtres)) return base;
+    const r = RESTRICTIONS[declinaison] ?? {};
+    const conditions: string[] = [];
+    const params: SqlParams = { ...base.params };
+    if (filtres.textes.length) {
+      filtres.textes.forEach((t, i) => (params[`$texte${i}`] = t));
+      conditions.push(r.texte ? `t.cle IN (${r.texte(filtres.textes.length)})` : expressionsDans(filtres.textes.length, "to_tsvector('french', t.titre)"));
+    }
+    if (filtres.personne) {
+      // Pas de lien publié avec une personne, ou un identifiant qui n'en est pas un : rien (G5).
+      if (LIEN_PERSONNE[declinaison] === null || !r.personne || !UUID.test(filtres.personne)) return null;
+      params.$personne = filtres.personne;
+      conditions.push(`t.cle IN (${r.personne})`);
+    }
+    return { sql: `SELECT t.* FROM (${base.sql}) t WHERE ${conditions.join(' AND ')}`, params };
+  }
+
+  private base(q: string | null, declinaison: DeclinaisonRecherche): { sql: string; params: SqlParams } | null {
     const f = REQUETES_FAMILLES[declinaison];
     if (!f) return null;
     if (!q) return { sql: f(false), params: { $brut: '' } };
@@ -260,10 +318,28 @@ export class PgFamilles {
     return { sql: f(true), params: { $brut: q, $q: tq, $qa: qa } };
   }
 
-  async compter(q: string | null, declinaisons: DeclinaisonRecherche[]): Promise<Partial<Record<DeclinaisonRecherche, CompteRecherche>>> {
+  /** La personne d'un filtre : nom affiché et groupe actuel (Assemblée, sinon Sénat). */
+  async personne(id: string): Promise<{ id: string; nom: string; groupe: ReturnType<typeof groupe> } | null> {
+    if (!UUID.test(id)) return null;
+    const l = await this.db.first<{ id: string; nom: string; groupe: GroupeLu | null }>(
+      `SELECT p.entite_id::text AS id, p.nom_affiche AS nom, ${sqlGroupe('g')} AS groupe
+       FROM canon.personne p ${vivanteParLigne('p.entite_id', 'xp')}
+       LEFT JOIN canon.organisation g ON g.entite_id = COALESCE(${sqlGroupeALaDate('p.entite_id', "'AN'", 'CURRENT_DATE')},
+                                                               ${sqlGroupeALaDate('p.entite_id', "'SENAT'", 'CURRENT_DATE')})
+       WHERE p.entite_id = $id::uuid`,
+      { $id: id },
+    );
+    return l ? { id: l.id, nom: l.nom, groupe: groupe(l.groupe) } : null;
+  }
+
+  async compter(
+    q: string | null,
+    declinaisons: DeclinaisonRecherche[],
+    filtres: FiltresRecherche = SANS_FILTRE,
+  ): Promise<Partial<Record<DeclinaisonRecherche, CompteRecherche>>> {
     const comptes = await Promise.all(
       declinaisons.map(async (d) => {
-        const r = this.requete(q, d);
+        const r = this.requete(q, d, filtres);
         if (!r) return [d, { nombre: 0, plafonne: false }] as const;
         const l = await this.db.first<{ n: number }>(`SELECT count(*)::int AS n FROM (${r.sql} LIMIT ${PLAFOND_COMPTE + 1}) t`, r.params);
         const n = l?.n ?? 0;
@@ -278,12 +354,20 @@ export class PgFamilles {
    * seuls identifiants (par l'uuid, pour l'index). Avec requête, `total` est compté dans la même
    * lecture (exact) ; sans requête, null : le cœur le compte à part.
    */
-  async chercher(q: string | null, declinaison: DeclinaisonRecherche, { page, taille }: Pagination): Promise<Page<ResultatFamille>> {
-    const r = this.requete(q, declinaison);
+  async chercher(
+    q: string | null,
+    declinaison: DeclinaisonRecherche,
+    { page, taille }: Pagination,
+    filtres: FiltresRecherche = SANS_FILTRE,
+  ): Promise<Page<ResultatFamille>> {
+    const r = this.requete(q, declinaison, filtres);
     if (!r) return { elements: [], page, taille, total: 0, suivante: null };
     const pagination = { $limite: taille + 1, $decalage: (page - 1) * taille };
+    // Avec une requête ou un filtre, peu de lignes : comptées dans la même lecture. Sinon, le
+    // parcours des grandes tables suit l'index de date.
+    const cherche = q !== null || filtre(filtres);
     const ids = await this.db.all<{ id: string; n?: number }>(
-      q
+      cherche
         ? `SELECT t.id, count(*) OVER ()::int AS n FROM (${r.sql}) t ORDER BY t.pertinence DESC, t.date DESC NULLS LAST, t.id LIMIT $limite OFFSET $decalage`
         : (PARCOURIR[declinaison] ?? `SELECT t.id FROM (${r.sql}) t ORDER BY t.date DESC NULLS LAST, t.id LIMIT $limite OFFSET $decalage`),
       { ...r.params, ...pagination },
@@ -302,7 +386,7 @@ export class PgFamilles {
       elements: montres.flatMap((id) => (parId.has(id) ? [this.resultat(declinaison, parId.get(id)!)] : [])),
       page,
       taille,
-      total: q ? (ids[0]?.n ?? (page === 1 ? 0 : null)) : null,
+      total: cherche ? (ids[0]?.n ?? (page === 1 ? 0 : null)) : null,
       suivante: ids.length > taille ? page + 1 : null,
     };
   }

@@ -23,6 +23,7 @@ from .domaine.objets import Candidat, CasRevue, Dependants, Ensemble, Objet, Rap
 from .etl import Etape, Fichier, ordonner
 from .identites import RegistreIdentites
 from .ports import Entrepot
+from .textes import texte_html
 
 Analyse = Iterable[Objet | Dependants | Rapprochement | CasRevue | Ensemble]
 
@@ -229,8 +230,10 @@ def inconnue(ctx: ContexteCanon, sujet, champ: str, cible: IdentiteNative, sourc
 
 
 def resoudre(ctx: ContexteCanon, valeurs: dict) -> dict:
-    """Remplace chaque IdentiteNative par l'UUID de l'entité reliée de façon certaine, ou None."""
-    return {cle: ctx.registre.resoudre(v) if isinstance(v, IdentiteNative) else v for cle, v in valeurs.items()}
+    """Remplace chaque IdentiteNative par l'UUID de l'entité reliée de façon certaine, ou None ;
+    chaque texte par son texte propre (HTML, entités, encodage : `textes.texte_html`)."""
+    return {cle: ctx.registre.resoudre(v) if isinstance(v, IdentiteNative) else texte_html(v) if isinstance(v, str) else v
+            for cle, v in valeurs.items()}
 
 
 def charger_decisions(entrepot, registre: RegistreIdentites | None = None) -> dict[tuple[str, str], Any]:

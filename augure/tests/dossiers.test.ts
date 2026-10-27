@@ -8,29 +8,27 @@ import { describe, expect, it } from 'vitest';
 
 import { CommandBus, type Command, type CommandDefinition } from '../src/core/commands/bus';
 import * as definitions from '../src/core/commands/definitions';
-import type { ExplicationVote, FicheEtape, OrigineModification } from '../src/core/domain/model';
+import type { CaseCompacte, ExplicationVote, FicheEtape, OrigineModification } from '../src/core/domain/model';
 import { fixtures, type Fixtures } from '../src/infra/fixtures';
 import {
   amendementEtabli,
   AVERTISSEMENT_POURQUOI,
   CAUSALITE,
   adresseAncre,
-  casesVisibles,
   entreeArticle,
   entreeDiscussions,
   entreeDossier,
   entreeDossiers,
   faitsArticle,
   faitsDuVote,
-  legendeReperes,
   nomOrateur,
   partLigne,
   personneOrateur,
-  reperesBarre,
   siegesScrutin,
   texteDuHtml,
   titreOrigine,
 } from '../src/ui/components/dossiers/presentation';
+import { casesVisibles, legendeBarre } from '../src/ui/components/commun/statuts';
 
 // ---------- Bus de test : répond par l'exemple dont l'entrée est égale ----------
 
@@ -111,23 +109,19 @@ describe('Dossiers', () => {
 // ---------- Dossier ----------
 
 describe('Barre du dossier', () => {
-  it('étape actuelle si elle existe ; état final pour un dossier terminé ; « non établie » sinon', () => {
-    const enCours = [
-      { cle: 'depot' as const, libelle: 'Dépôt', etat: 'faite' as const, courante: false },
-      { cle: 'cmp' as const, libelle: 'CMP', etat: 'en_cours' as const, courante: true },
-    ];
-    expect(legendeReperes(reperesBarre(enCours, 'depot'))).toBe('Étape actuelle : CMP · vous êtes : Dépôt');
-    const promulgue = [
-      { cle: 'depot' as const, libelle: 'Dépôt', etat: 'faite' as const, courante: false },
-      { cle: 'promulgation' as const, libelle: 'Promulgation', etat: 'faite' as const, courante: false },
-      { cle: 'jo' as const, libelle: 'Journal officiel', etat: 'faite' as const, courante: false },
-    ];
-    expect(legendeReperes(reperesBarre(promulgue, 'depot'))).toBe('Promulgué · vous êtes : Dépôt');
-    const sansCourante = [
-      { cle: 'depot' as const, libelle: 'Dépôt', etat: 'faite' as const, courante: false },
-      { cle: 'cmp' as const, libelle: 'CMP', etat: 'inconnu' as const, courante: false },
-    ];
-    expect(legendeReperes(reperesBarre(sansCourante, null))).toBe('Étape actuelle : non établie');
+  const cas = (cle: string, libelle: string, etat: CaseCompacte['etat'], plus: Partial<CaseCompacte> = {}): CaseCompacte => ({
+    cle, libelle, etat, courante: false, attendue: false, deviation: false, ...plus,
+  });
+
+  it('étape actuelle si elle existe ; étape attendue sinon ; état final pour un dossier terminé ; rien de supposé', () => {
+    const enCours = [cas('depot', 'Dépôt', 'faite'), cas('cmp', 'CMP', 'en_cours', { courante: true })];
+    expect(legendeBarre(enCours, 'depot')).toBe('Étape actuelle : CMP · vous êtes : Dépôt');
+    const attendue = [cas('depot', 'Dépôt', 'faite'), cas('lecture_definitive', 'Lecture définitive AN', 'a_venir', { attendue: true })];
+    expect(legendeBarre(attendue, null)).toBe('Étape attendue : Lecture définitive AN');
+    const promulgue = [cas('depot', 'Dépôt', 'faite'), cas('promulgation', 'Promulgation', 'faite'), cas('jo', 'Journal officiel', 'faite')];
+    expect(legendeBarre(promulgue, 'depot')).toBe('Promulgué · vous êtes : Dépôt');
+    // Ni étape actuelle, ni attendue, ni état final : la barre ne conclut rien.
+    expect(legendeBarre([cas('depot', 'Dépôt', 'faite'), cas('cmp', 'CMP', 'inconnu')], null)).toBeNull();
   });
 });
 
@@ -194,7 +188,10 @@ describe('Étape', () => {
       const f = await executer(definitions.ConsulterEtape({ dossier, cle }));
       expect(f.case.cle).toBe(cle);
       expect(f.barre.ici).toBe(cle);
-      expect(reperesBarre(f.barre.cases, f.barre.ici).ici).toBe(f.case.libelle);
+      // « vous êtes : … » nomme l'étape de l'écran quand ce n'est pas l'étape actuelle
+      if (!f.case.courante) expect(legendeBarre(f.barre.cases, f.barre.ici)).toContain(`vous êtes : ${f.case.libelle}`);
+      expect(f.deviations.every((d) => d.etape === cle)).toBe(true);
+      expect(f.enfants.every((e) => e.etape === cle)).toBe(true);
       expect(f.numero).toBeGreaterThan(0);
       expect(f.numero).toBeLessThanOrEqual(casesVisibles(f.barre.cases).length);
       for (const d of f.documents) expect(d.provenance.idNatif).toBeTruthy();

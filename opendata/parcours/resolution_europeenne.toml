@@ -1,0 +1,12 @@
+# Résolution européenne (Sénat, typloi « pac ») : commission des affaires européennes, commission
+# au fond ; « devenue résolution du Sénat » sans séance faute de demande dans le délai.
+
+cle = "resolution_europeenne"
+version = 1
+herite = "resolution"
+libelle = "Résolution européenne"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 1992-06-25
+fondement = "Constitution, art. 88-4 (révision du 25 juin 1992) et 88-6 ; règlement du Sénat, art. 73 quater et suivants"
+types = ["résolution européenne"]

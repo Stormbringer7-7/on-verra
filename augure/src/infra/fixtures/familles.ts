@@ -3,7 +3,8 @@
 // les règles du contrat (`planRecherche`, `assemblerRecherche`) sur ce catalogue ; l'adaptateur
 // mémoire de l'API y cherche de la même façon, si bien que ses réponses redonnent les exemples.
 // Recherche sans casse ni accents : chaque mot de la requête doit apparaître dans le titre, le
-// contexte ou les mots-clés.
+// contexte ou les mots-clés ; chaque expression, mot pour mot (`occurrences`) ; une personne, par
+// les liens publiés que l'entrée déclare (`personnes`).
 
 import type {
   CompteRecherche,
@@ -14,8 +15,18 @@ import type {
   ResultatFamille,
   ResultatFamilles,
 } from '../../core/domain/model';
-import { PLAFOND_COMPTE, assemblerRecherche, famillesDe, numeroComparable, planRecherche } from '../../core/domain/familles';
-import { normaliser } from '../../core/domain/texte';
+import {
+  LIEN_PERSONNE,
+  PLAFOND_COMPTE,
+  SANS_FILTRE,
+  assemblerRecherche,
+  cherchables,
+  famillesDe,
+  numeroComparable,
+  planRecherche,
+  type FiltresRecherche,
+} from '../../core/domain/familles';
+import { normaliser, occurrences } from '../../core/domain/texte';
 import { A, ART, D, G, P } from './entites';
 import { R } from './interets';
 import { S } from './scrutins';
@@ -25,6 +36,8 @@ interface Entree {
   motsCles: string;
   /** Numéros officiels (forme comparable) et ce qu'ils désignent. */
   numero?: { valeur: string; cible: 'amendements' | 'votes' | 'questions' };
+  /** Personnes liées par un lien publié (`LIEN_PERSONNE` de sa déclinaison) : auteur, orateur, votant… */
+  personnes?: string[];
 }
 
 const e = (
@@ -87,9 +100,15 @@ export const CATALOGUE: Entree[] = [
 
 const mots = (q: string) => normaliser(q).match(/[\p{L}\p{N}]+/gu) ?? [];
 
-const correspond = (x: Entree, q: string | null) => {
+/** Personnes liées : déclarées, sinon celle que le résultat filtre (fiche d'une personne, auteur, orateur). */
+const liees = (x: Entree) => x.personnes ?? (x.r.filtres?.personne ? [x.r.filtres.personne] : []);
+
+const correspond = (x: Entree, q: string | null, f: FiltresRecherche = SANS_FILTRE) => {
+  const brut = `${x.r.titre} ${x.r.contexte} ${x.motsCles}`;
+  if (!f.textes.every((t) => occurrences(brut, t).length > 0)) return false;
+  if (f.personne && (LIEN_PERSONNE[x.r.declinaison] === null || !liees(x).includes(f.personne))) return false;
   if (!q) return true;
-  const texte = normaliser(`${x.r.titre} ${x.r.contexte} ${x.motsCles}`);
+  const texte = normaliser(brut);
   return mots(q).every((m) => texte.includes(m));
 };
 
@@ -101,10 +120,11 @@ export function comptesCatalogue(
   q: string | null,
   declinaisons: DeclinaisonRecherche[],
   exclus: ReadonlySet<string> = new Set(),
+  filtres: FiltresRecherche = SANS_FILTRE,
 ): Partial<Record<DeclinaisonRecherche, CompteRecherche>> {
   return Object.fromEntries(
     declinaisons.map((d) => {
-      const n = visibles(exclus).filter((x) => x.r.declinaison === d && correspond(x, q)).length;
+      const n = visibles(exclus).filter((x) => x.r.declinaison === d && correspond(x, q, filtres)).length;
       return [d, { nombre: Math.min(n, PLAFOND_COMPTE), plafonne: n > PLAFOND_COMPTE }];
     }),
   );
@@ -115,8 +135,9 @@ export function sectionCatalogue(
   d: DeclinaisonRecherche,
   { page, taille }: { page: number; taille: number },
   exclus: ReadonlySet<string> = new Set(),
+  filtres: FiltresRecherche = SANS_FILTRE,
 ): Page<ResultatFamille> {
-  const tous = visibles(exclus).filter((x) => x.r.declinaison === d && correspond(x, q)).map((x) => x.r);
+  const tous = visibles(exclus).filter((x) => x.r.declinaison === d && correspond(x, q, filtres)).map((x) => x.r);
   return { elements: tous.slice((page - 1) * taille, page * taille), page, taille, total: tous.length, suivante: page * taille < tous.length ? page + 1 : null };
 }
 
@@ -124,15 +145,21 @@ export function candidatsCatalogue(numero: NumeroOfficiel, exclus: ReadonlySet<s
   return visibles(exclus).filter((x) => x.numero && numeroComparable(x.numero.valeur) === numero.numero && (numero.cibles as string[]).includes(x.numero.cible)).map((x) => x.r);
 }
 
-const DECLINAISONS = [...famillesDe.keys()];
+/** La personne d'un filtre, nommée pour sa puce (personnes des fixtures). */
+export const personneCatalogue = (id: string) => {
+  const p = Object.values(P).find((x) => x.id === id);
+  return p ? { id: p.id, nom: p.nom, groupe: p.groupe } : null;
+};
 
 /** Ce que l'API rend pour cette demande (page 1, taille 20 par défaut, comme `borner`). */
 export function rechercheFixture(demande: DemandeFamilles, page = 1, taille = 20): ResultatFamilles {
   const plan = planRecherche(demande, { page, taille });
+  const filtres = { textes: plan.textes, personne: plan.personne };
   return assemblerRecherche(demande, plan, {
-    comptes: comptesCatalogue(plan.q, DECLINAISONS),
-    sections: Object.fromEntries(plan.declinaisons.map((d) => [d, sectionCatalogue(plan.q, d, plan)])),
+    comptes: comptesCatalogue(plan.q, cherchables(plan.personne), new Set(), filtres),
+    sections: Object.fromEntries(plan.declinaisons.map((d) => [d, sectionCatalogue(plan.q, d, plan, new Set(), filtres)])),
     candidats: plan.numero ? candidatsCatalogue(plan.numero) : null,
+    personne: plan.personne ? personneCatalogue(plan.personne) : null,
   });
 }
 
@@ -144,4 +171,5 @@ export const EXEMPLES_FAMILLES: { titre: string; input: DemandeFamilles }[] = [
   { titre: 'Un numéro ambigu : deux amendements n° 655', input: { q: '655' } },
   { titre: 'Une commission d’enquête', input: { q: 'commission d’enquête' } },
   { titre: 'Aucun résultat', input: { q: 'zzzz' } },
+  { titre: 'Une expression et une personne : « plan de financement » · Camille Exemple', input: { textes: ['plan de financement'], personne: P.camille.id } },
 ];

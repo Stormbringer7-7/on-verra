@@ -1,0 +1,16 @@
+# Modification du règlement d'une assemblée : contrôle du Conseil constitutionnel obligatoire.
+
+cle = "resolution_reglement"
+version = 1
+herite = "resolution"
+libelle = "Modification du règlement"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 61, al. 1 (contrôle obligatoire des règlements des assemblées)"
+types = ["modification réglement Sénat"]
+retire = ["commission_ae"]
+
+[[etape]]
+cle = "cc"
+nature = "obligatoire"

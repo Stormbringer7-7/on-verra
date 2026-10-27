@@ -1,10 +1,19 @@
 // Handlers transverses : recherche plein texte et signalement d'une erreur ou d'une source
 // manquante (seule écriture de l'API, commande `SignalerErreur`).
 
-import { DISPONIBLES, FAMILLES_RECHERCHE, PLAFOND_COMPTE, assemblerRecherche, famillesDe, planRecherche } from '@contrat/domain/familles';
+import {
+  FAMILLES_RECHERCHE,
+  PLAFOND_COMPTE,
+  assemblerRecherche,
+  cherchables,
+  expressions,
+  expressionsInvalides,
+  famillesDe,
+  planRecherche,
+} from '@contrat/domain/familles';
 import type { DeclinaisonRecherche, FamilleRecherche, Signalement, TypeCible, TypeRecherche } from '@contrat/domain/model';
 
-import { type Handlers, type LecturesDeps, RequeteInvalide, borner, parmi, parmiFacultatif, texte, texteFacultatif } from './commun';
+import { type Handlers, Introuvable, type LecturesDeps, RequeteInvalide, borner, parmi, parmiFacultatif, texte, texteFacultatif } from './commun';
 
 /** Sans type, une section par type et ses premières réponses seulement. */
 export const TAILLE_PAR_SECTION = 5;
@@ -52,17 +61,26 @@ export function lecturesRecherche({ depots }: LecturesDeps): Pick<Handlers, 'Rec
         parmi(d, DECLINAISONS, 'Déclinaison');
         if (famille && famillesDe.get(d) !== famille) throw new RequeteInvalide(`Déclinaison hors de la famille : ${d}`);
       }
+      if (demande.textes !== undefined && (!Array.isArray(demande.textes) || demande.textes.some((t) => typeof t !== 'string')))
+        throw new RequeteInvalide('Expressions attendues : une liste de textes');
+      const invalides = expressionsInvalides(expressions(demande.textes ?? []));
+      if (invalides) throw new RequeteInvalide(invalides);
+      const personneId = texteFacultatif(demande.personne, 'Personne');
       const plan = planRecherche(demande, borner(demande));
       const { recherche } = depots;
+      // La personne filtrée, nommée pour sa puce : inconnue, la demande est introuvable.
+      const personne = personneId ? await recherche.nommerPersonne(personneId) : null;
+      if (personneId && !personne) throw new Introuvable('Personne introuvable');
+      const filtres = { textes: plan.textes, personne: plan.personne };
       // Un numéro officiel trouvé remplace la recherche : ni comptes ni sections.
       const candidats = plan.numero ? await recherche.candidatsNumero(plan.numero, LIMITE_CANDIDATS) : null;
-      if (candidats?.length) return assemblerRecherche(demande, plan, { comptes: {}, sections: {}, candidats });
+      if (candidats?.length) return assemblerRecherche(demande, plan, { comptes: {}, sections: {}, candidats, personne });
       // Les pages et, à part, les comptes des déclinaisons non montrées ; une page sans total
       // (parcourir) est comptée ensuite. Le total d'une page est le compte de sa déclinaison.
-      const autres = DISPONIBLES.filter((d) => !plan.declinaisons.includes(d));
+      const autres = cherchables(plan.personne).filter((d) => !plan.declinaisons.includes(d));
       const [pages, comptesAutres] = await Promise.all([
-        Promise.all(plan.declinaisons.map(async (d) => [d, await recherche.chercherDeclinaison(plan.q, d, plan)] as const)),
-        recherche.compterFamilles(plan.q, autres),
+        Promise.all(plan.declinaisons.map(async (d) => [d, await recherche.chercherDeclinaison(plan.q, d, plan, filtres)] as const)),
+        recherche.compterFamilles(plan.q, autres, filtres),
       ]);
       const sansTotal = pages.filter(([, p]) => p.total === null).map(([d]) => d);
       const comptes = {
@@ -70,13 +88,13 @@ export function lecturesRecherche({ depots }: LecturesDeps): Pick<Handlers, 'Rec
         ...Object.fromEntries(
           pages.flatMap(([d, p]) => (p.total === null ? [] : [[d, { nombre: Math.min(p.total, PLAFOND_COMPTE), plafonne: p.total > PLAFOND_COMPTE }] as const])),
         ),
-        ...(sansTotal.length ? await recherche.compterFamilles(plan.q, sansTotal) : {}),
+        ...(sansTotal.length ? await recherche.compterFamilles(plan.q, sansTotal, filtres) : {}),
       };
       const avecTotal = pages.map(([d, p]) => {
         const c = comptes[d];
         return [d, { ...p, total: c && !c.plafonne ? c.nombre : null }] as const;
       });
-      return assemblerRecherche(demande, plan, { comptes, sections: Object.fromEntries(avecTotal), candidats });
+      return assemblerRecherche(demande, plan, { comptes, sections: Object.fromEntries(avecTotal), candidats, personne });
     },
 
     Rechercher: async (demande) => {

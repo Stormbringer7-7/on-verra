@@ -13,7 +13,33 @@ export interface DepartementRef {
   nom: string;
 }
 
-export type DemandeCarte = { mesure: 'scrutin'; scrutin: string } | { mesure: 'presence'; chambre: Chambre };
+/**
+ * Maille de la carte d'un scrutin : département (défaut, les deux chambres) ou circonscription
+ * (Assemblée seulement : un député par circonscription ; les sénateurs sont élus par département).
+ */
+export type NiveauCarte = 'departement' | 'circonscription';
+
+export type DemandeCarte = { mesure: 'scrutin'; scrutin: string; niveau?: NiveauCarte } | { mesure: 'presence'; chambre: Chambre };
+
+/**
+ * Circonscription législative : département du COG et numéro publiés par l'AN (AMO, mandat →
+ * `numDepartement`, `numCirco`). `code` : « 33-02 », « 971-01 » (département, tiret, numéro sur deux
+ * chiffres), la clé des contours de la carte.
+ */
+export interface CirconscriptionRef {
+  code: string;
+  departement: DepartementRef;
+  numero: number;
+}
+
+/** Une circonscription sur un scrutin : son député ce jour-là et sa position. */
+export interface ValeurCirconscription {
+  circonscription: CirconscriptionRef;
+  /** null : aucun député en mandat ce jour-là (siège vacant). */
+  depute: PersonneRef | null;
+  /** null si vacant ; « absent » : en mandat, sans vote publié. */
+  position: Position | null;
+}
 
 /** Votes des élus d'un département sur un scrutin (en mandat ce jour-là). */
 export interface VotesDepartement {
@@ -42,6 +68,8 @@ export interface ValeurDepartement {
 
 export interface Carte {
   demande: DemandeCarte;
+  /** Maille rendue : « circonscription » seulement pour un scrutin de l'Assemblée qui la demande. */
+  niveau: NiveauCarte;
   chambre: Chambre;
   /** Le scrutin montré (mesure « scrutin »), null sinon. */
   scrutin: ScrutinResume | null;
@@ -49,6 +77,12 @@ export interface Carte {
   libelleValeur: string;
   /** Départements qui ont au moins un élu de la chambre, par code. */
   departements: ValeurDepartement[];
+  /**
+   * Niveau « circonscription » : chaque circonscription d'un département du COG connue sous la
+   * législature, par code croissant (vide sinon). Les départements restent remplis : la carte les
+   * dessine par-dessus pour se repérer.
+   */
+  circonscriptions: ValeurCirconscription[];
   /** Élus de la chambre sans département (Français établis hors de France), comptés à part. */
   horsDepartement: number;
   /** Ce que la carte ne dit pas, à afficher tel quel. */

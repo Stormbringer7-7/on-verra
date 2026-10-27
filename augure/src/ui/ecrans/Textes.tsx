@@ -12,6 +12,7 @@ import { demandeTextes, situationTexte } from '../avancement';
 import { Ligne, Puce, T, TitreEcran } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
 import { Pagination, Requete } from '../components/dossiers/blocs';
+import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { Puces } from '../components/fondations';
 import { dateLongue, pluriel } from '../format';
@@ -58,7 +59,7 @@ export function Textes() {
   };
 
   return (
-    <Ecran titre={titre}>
+    <Ecran titre={titre} parents={[RACINES.chiffres]}>
       <View style={styles.entete}>
         <TitreEcran surtitre="Où en sont les textes">{titre}</TitreEcran>
         <T ton="inkSoft">Du plus ancien au plus récent. Un texte « en examen » a commencé cette étape ; sinon il attend la suite.</T>

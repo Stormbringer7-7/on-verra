@@ -9,6 +9,7 @@ import { ConsulterInstitution, type TypeInstitution } from '@/core';
 import type { Pages } from '@/navigation';
 import { OngletsFiche, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
+import { RACINES } from '../ariane';
 import { Chargement, Ecran, Erreur } from '@/ui/components/Ecran';
 import { InstitutionVue } from '@/ui/components/personnes/InstitutionVue';
 import { INSTITUTIONS } from '@/ui/components/personnes/regles';
@@ -20,7 +21,7 @@ export function Institutions() {
   const resultat = useCommand(ConsulterInstitution({ institution }));
 
   return (
-    <Ecran largeur="pleine">
+    <Ecran largeur="pleine" titre="Institutions" parents={[RACINES.elus]}>
       <View style={{ gap: 4 }}>
         <T variant="display" accessibilityRole="header" style={{ fontSize: 30, lineHeight: 34 }}>
           Institutions

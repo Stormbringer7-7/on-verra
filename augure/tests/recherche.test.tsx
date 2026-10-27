@@ -4,10 +4,21 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DISPONIBLES, FAMILLES_RECHERCHE, analyserNumero, planRecherche } from '../src/core/domain/familles';
+import {
+  DISPONIBLES,
+  FAMILLES_RECHERCHE,
+  LIEN_PERSONNE,
+  TEXTE_LONGUEUR_MAX,
+  TEXTES_MAX,
+  analyserNumero,
+  expressions,
+  expressionsInvalides,
+  planRecherche,
+} from '../src/core/domain/familles';
+import { occurrences } from '../src/core/domain/texte';
 import { fixtures } from '../src/infra/fixtures';
 import { CATALOGUE } from '../src/infra/fixtures/familles';
-import { demandeFamilles, libelleCompte, ficheDe, ouverture } from '../src/ui/recherche';
+import { ajouterExpression, demandeFamilles, libelleCompte, ficheDe, ouverture, surligner } from '../src/ui/recherche';
 import { Section } from '../src/ui/components/recherche/Resultats';
 
 vi.mock('../src/navigation', () => ({
@@ -62,6 +73,66 @@ describe('plan et assemblage', () => {
   it('six familles, dans l’ordre du design ; le catalogue des fixtures couvre chaque déclinaison cherchable', () => {
     expect(FAMILLES_RECHERCHE.map((f) => f.famille)).toEqual(['lois', 'personnes', 'institutions', 'territoires', 'action', 'transparence']);
     for (const d of DISPONIBLES) expect(CATALOGUE.some((x) => x.r.declinaison === d), d).toBe(true);
+  });
+});
+
+describe('expressions et personne', () => {
+  it('expressions nettoyées (espaces, doublons sans casse ni accents), bornées', () => {
+    expect(expressions(['  Silence   pour la France ', 'silence pour la france', '', 'Défense'])).toEqual(['Silence pour la France', 'Défense']);
+    expect(expressionsInvalides(['a', 'b', 'c', 'd', 'e', 'f'])).toBe(`Au plus ${TEXTES_MAX} expressions`);
+    expect(expressionsInvalides(['x'.repeat(TEXTE_LONGUEUR_MAX + 1)])).toMatch(/^Expression trop longue/);
+    expect(expressionsInvalides(['Silence pour la France'])).toBeNull();
+  });
+
+  it('mot pour mot : casse, accents et ponctuation ignorés, jamais une autre forme', () => {
+    expect(occurrences('« Silence, pour la France ! »', 'silence pour la france')).toEqual([[2, 25]]);
+    expect(occurrences('Les silences pour la France', 'Silence pour la France')).toEqual([]);
+    expect(surligner('Il dit : silence pour la France.', ['Silence pour la France'])).toEqual([
+      { texte: 'Il dit : ', surligne: false },
+      { texte: 'silence pour la France', surligne: true },
+      { texte: '.', surligne: false },
+    ]);
+    expect(surligner('Rien ici', ['absent'])).toEqual([{ texte: 'Rien ici', surligne: false }]);
+  });
+
+  it('plan : sous le filtre personne, seules les déclinaisons liées par un lien publié ; pas de numéro avec un filtre', () => {
+    const plan = planRecherche({ q: '655', textes: [' plan  de financement '], personne: 'p1' }, { page: 1, taille: 20 });
+    expect(plan).toMatchObject({ textes: ['plan de financement'], personne: 'p1', numero: null, taille: 3 });
+    expect(plan.declinaisons).toEqual(DISPONIBLES.filter((d) => LIEN_PERSONNE[d] !== null));
+    expect(plan.declinaisons).not.toContain('commissions');
+    expect(planRecherche({ q: '655' }, { page: 1, taille: 20 }).numero).not.toBeNull();
+  });
+
+  it('exemple : une expression et une personne ; les déclinaisons sans lien publié le disent, sans compte', () => {
+    const r = exemple('Une expression et une personne : « plan de financement » · Camille Exemple');
+    expect(r.textes).toEqual(['plan de financement']);
+    expect(r.personne?.nom).toBe('Camille Exemple');
+    expect(r.sections.map((s) => [s.declinaison, s.resultats.elements.map((e) => e.id)])).toEqual([['interventions', ['intervention-camille-art5']]]);
+    const hors = r.familles.flatMap((f) => f.declinaisons).filter((d) => d.horsPersonne !== null);
+    expect(hors.map((d) => d.declinaison)).toEqual(['articles', 'groupes', 'chambres', 'commissions', 'enquetes', 'departements', 'lobbying']);
+    for (const d of hors) expect(d.compte).toBeNull();
+  });
+
+  it('écran : expressions et personne dans la demande, sans clé inutile', () => {
+    expect(demandeFamilles('', null, [], 1, { textes: ['Silence pour la France', ' '], personne: 'p1' })).toEqual({
+      textes: ['Silence pour la France'],
+      personne: 'p1',
+    });
+    expect(demandeFamilles('budget', null, [], 1, { textes: [], personne: null })).toEqual({ q: 'budget' });
+    expect(ajouterExpression(['a b'], ' A  B ')).toEqual(['a b']);
+    expect(ajouterExpression(['un', 'deux', 'trois', 'quatre', 'cinq'], 'six')).toHaveLength(TEXTES_MAX);
+  });
+
+  it('une section surligne l’expression dans l’extrait et propose « Filtrer » sur une personne', () => {
+    const r = exemple('« énergie », toutes les familles');
+    const deputes = r.sections.find((s) => s.declinaison === 'deputes')!;
+    const html = renderToStaticMarkup(<Section s={deputes} detail={false} voirTout={() => {}} page={() => {}} filtrerPersonne={() => {}} />);
+    expect(texte(html)).toContain('Filtrer');
+    const interventions = exemple('Une expression et une personne : « plan de financement » · Camille Exemple').sections[0];
+    const surligne = renderToStaticMarkup(
+      <Section s={interventions} detail={false} voirTout={() => {}} page={() => {}} textes={['plan de financement']} />,
+    );
+    expect(surligne).toMatch(/background-color[^"]*"[^>]*>plan de financement</);
   });
 });
 

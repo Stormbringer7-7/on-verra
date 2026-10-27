@@ -14,7 +14,9 @@ import { Action, BoutonSecondaire, Label, T } from '@/ui/components/base';
 import { LienStatut } from '@/ui/components/commun/LienStatut';
 import { Signaler } from '@/ui/components/commun/Signaler';
 import { Source } from '@/ui/components/commun/Source';
-import { Chargement, Ecran, Erreur, Retour } from '@/ui/components/Ecran';
+import type { Parent } from '../ariane';
+import { paramsExplorer } from '../explorer';
+import { Chargement, Ecran, Erreur } from '@/ui/components/Ecran';
 import { Avertissement, Badge, Carte, Colonnes, TitreSection } from '@/ui/components/personnes/elements';
 import { jour, libellePeriode, nombre, statutLien, titreCible } from '@/ui/components/personnes/regles';
 import { useCommand } from '@/ui/hooks/core';
@@ -25,11 +27,13 @@ export function Representant() {
   const { id } = useRoute<RouteProp<Pages, 'Representant'>>().params;
   const [page, setPage] = useState(1);
   const fiche = useCommand(ConsulterRepresentant(page > 1 ? { id, page } : { id }));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
+  // Famille Transparence : l'Explorer sur l'onglet des déclarations et du lobbying.
+  const transparence: Parent = { libelle: 'Transparence', cible: { page: 'Explorer', params: paramsExplorer({ onglet: 'transparence' }) } };
   const donnees = fiche.statut === 'erreur' ? undefined : fiche.donnees;
 
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f?.denomination} parents={[transparence]}>
       {fiche.statut === 'erreur' ? (
         <Erreur message={fiche.message} onReessayer={fiche.recharger} />
       ) : !donnees ? (

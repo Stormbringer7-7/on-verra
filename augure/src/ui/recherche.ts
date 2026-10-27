@@ -11,7 +11,8 @@ import type {
   ResultatFamille,
   TypeRecherche,
 } from '@/core';
-import { analyserNumero } from '@/core/domain/familles';
+import { TEXTES_MAX, analyserNumero, expressions } from '@/core/domain/familles';
+import { occurrences } from '@/core/domain/texte';
 
 /** « Tout » ou un type. */
 export type Filtre = TypeRecherche | 'tout';
@@ -28,17 +29,59 @@ export function demandeRecherche(q: string, type: Filtre, page: number): Demande
 
 /**
  * Recherche par familles : parcourir sans mot (ou sous LONGUEUR_MIN lettres, sauf un numéro
- * officiel), la famille et les déclinaisons cochées, la page. Sans clé inutile.
+ * officiel), la famille et les déclinaisons cochées, la page, les expressions et la personne
+ * filtrées. Sans clé inutile.
  */
-export function demandeFamilles(q: string, famille: FamilleRecherche | null, declinaisons: DeclinaisonRecherche[], page = 1): DemandeFamilles {
+export function demandeFamilles(
+  q: string,
+  famille: FamilleRecherche | null,
+  declinaisons: DeclinaisonRecherche[],
+  page = 1,
+  filtres: { textes?: string[]; personne?: string | null } = {},
+): DemandeFamilles {
   const mot = q.trim();
   const cherche = mot.length >= LONGUEUR_MIN || analyserNumero(mot) !== null;
+  const textes = expressions(filtres.textes ?? []);
   return {
     ...(cherche ? { q: mot } : {}),
     ...(famille ? { famille } : {}),
     ...(famille && declinaisons.length ? { declinaisons } : {}),
+    ...(textes.length ? { textes } : {}),
+    ...(filtres.personne ? { personne: filtres.personne } : {}),
     ...(page > 1 ? { page } : {}),
   };
+}
+
+/** Ajouter une expression aux filtres : nettoyée, sans doublon, au plus TEXTES_MAX ; vide, rien ne change. */
+export const ajouterExpression = (textes: string[], texte: string) => expressions([...textes, texte]).slice(0, TEXTES_MAX);
+
+/** Déclinaisons dont un résultat est une personne qu'on peut filtrer. */
+export const DECLINAISONS_PERSONNES: DeclinaisonRecherche[] = ['deputes', 'senateurs', 'ministres'];
+
+/**
+ * Les segments d'un extrait : où chaque expression figure mot pour mot (surlignée), le reste tel
+ * quel. Une expression trouvée par la base sous une autre forme (accord, conjugaison) n'est pas
+ * surlignée : rien n'est deviné.
+ */
+export function surligner(texte: string, textes: readonly string[]): { texte: string; surligne: boolean }[] {
+  const zones = textes
+    .flatMap((t) => occurrences(texte, t))
+    .sort((a, b) => a[0] - b[0])
+    .reduce<[number, number][]>((acc, z) => {
+      const der = acc[acc.length - 1];
+      if (der && z[0] <= der[1]) der[1] = Math.max(der[1], z[1]);
+      else acc.push([...z]);
+      return acc;
+    }, []);
+  const segments: { texte: string; surligne: boolean }[] = [];
+  let i = 0;
+  for (const [debut, fin] of zones) {
+    if (debut > i) segments.push({ texte: texte.slice(i, debut), surligne: false });
+    segments.push({ texte: texte.slice(debut, fin), surligne: true });
+    i = fin;
+  }
+  if (i < texte.length) segments.push({ texte: texte.slice(i), surligne: false });
+  return segments;
 }
 
 /** Un compte affiché : « 12 », « 1 000+ » au-delà du plafond. */

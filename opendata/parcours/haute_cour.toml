@@ -1,0 +1,62 @@
+# Réunion du Parlement en Haute Cour (destitution du Président de la République) : proposition de
+# résolution signée par un dixième des membres, recevabilité par le bureau, commission des lois,
+# adoption aux deux tiers par chaque chambre, puis Haute Cour (décision aux deux tiers dans le mois).
+
+cle = "haute_cour"
+version = 1
+libelle = "Haute Cour"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 2007-02-23
+fondement = "Constitution, art. 68 (révision du 23 février 2007) ; loi organique du 24 novembre 2014"
+types = ["Responsabilité pénale du président de la république"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt {o}"
+phases = ["depot"]
+lecture = "*"
+cote = "o"
+nature = "obligatoire"
+
+[[etape]]
+cle = "commission_o"
+libelle = "Commission des lois {o}"
+phases = ["commission"]
+lecture = "*"
+cote = "o"
+nature = "obligatoire"
+
+[[etape]]
+cle = "seance_o"
+libelle = "Séance {o} (deux tiers)"
+phases = ["seance"]
+lecture = "*"
+cote = "o"
+nature = "obligatoire"
+issue = "en_cours"
+
+[[etape]]
+cle = "seance_s"
+libelle = "Séance {s} (deux tiers, sous 15 jours)"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "*"
+cote = "s"
+nature = "obligatoire"
+issue = "en_cours"
+
+[[etape]]
+cle = "haute_cour"
+libelle = "Haute Cour"
+phases = ["haute_cour"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "adopte"
+
+[[transition]]
+de = "seance_o"
+vers = "fin"
+condition = "rejet"
+libelle = "Rejetée : pas de Haute Cour"

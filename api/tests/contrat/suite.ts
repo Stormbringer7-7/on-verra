@@ -397,7 +397,7 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
       const bus = coreDeTest(depots, { horloge });
       const mauvaises: Command[] = [
         commande('ConsulterDossier', {} as never),
-        commande('ConsulterEtape', { dossier: INCONNU, cle: 'nulle_part' as never }),
+        commande('ConsulterEtape', { dossier: INCONNU, cle: 'Nulle part !' as never }),
         commande('ListerDossiers', { etat: 'oublie' as never }),
         commande('ConsulterInstitution', { institution: 'elysee' as never }),
         commande('ListerInterventions', { cible: { type: 'rumeur' } as never }),

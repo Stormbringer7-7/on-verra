@@ -12,11 +12,12 @@ import { Action, Label, Pastille, T } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
 import { Source } from '../components/commun/Source';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Avertissement, Carte, Colonnes, Ligne, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { DiffTexte, ExtraitVue, LigneScrutin, ListeInterets } from '../components/dossiers/elements';
 import { nomAuteur, personneAuteur, sortAmendement, texteDuHtml } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { sousLeDossier } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
 import { usePalette } from '../theme/ThemeProvider';
@@ -27,9 +28,9 @@ const EMETTEUR = { rapporteur: 'Rapporteur', commission: 'Commission', gouvernem
 export function Amendement() {
   const { id } = useRoute<RouteProp<Pages, 'Amendement'>>().params;
   const fiche = useCommand(ConsulterAmendement({ id }));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f ? `Amendement ${f.amendement.numero}` : undefined} parents={sousLeDossier(f?.barre.dossier, f?.amendement.etape)}>
       <Requete resultat={fiche}>{(f) => <ContenuAmendement fiche={f} />}</Requete>
     </Ecran>
   );

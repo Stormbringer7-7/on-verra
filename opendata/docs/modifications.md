@@ -69,7 +69,7 @@ et publie son propre `content` *après* eux. Le diff lit les seuls `content`, le
 enfants ([corps_akn()](../src/adaptateurs/sources/modifications.py#L375)) — le corps stocké par
 `senat.textes` répète le texte des enfants (cf. limites).
 
-Code : [diff_mots()](../src/diffs.py#L84), [jetons()](../src/diffs.py#L41) ·
+Code : [diff_mots()](../src/diffs.py#L83), [jetons()](../src/diffs.py#L40) ·
 Tests : [test_diff_mot_a_mot_exemple_reel](../tests/test_diffs.py#L31),
 [test_typographie_et_mentions_ne_sont_pas_des_changements](../tests/test_diffs.py#L39),
 [test_corps_akn_sans_doublon_dans_l_ordre](../tests/test_modifications.py#L121)
@@ -111,7 +111,7 @@ cet article. » et l'article est supprimé, ou « Supprimer les mots : « … »
 n'y est plus, rien d'ajouté. Un mot, une ressemblance de texte ne suffisent jamais seuls : la preuve
 ne vaut que pour l'**unique** amendement adopté de l'étape visant cet article.
 
-Code : [attribuer()](../src/diffs.py#L278), [preuve()](../src/diffs.py#L223), [vise()](../src/diffs.py#L131),
+Code : [attribuer()](../src/diffs.py#L275), [preuve()](../src/diffs.py#L220), [vise()](../src/diffs.py#L130),
 [amendements_an()](../src/adaptateurs/sources/modifications.py#L214), [amendements_senat()](../src/adaptateurs/sources/modifications.py#L229) ·
 Tests : [test_seul_amendement_adopte_dispositif_retrouve](../tests/test_diffs.py#L110),
 [test_plusieurs_candidats_en_revue](../tests/test_diffs.py#L114),

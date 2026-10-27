@@ -1,0 +1,68 @@
+# Commission d'enquête : créée par une résolution adoptée (dépôt, commission, séance : Sénat) ou
+# par le droit de tirage d'un groupe d'opposition ou minoritaire (AN : la création seule), puis
+# nomination des membres, auditions, rapport dans les six mois, publication.
+
+cle = "commission_enquete"
+version = 1
+libelle = "Commission d'enquête"
+famille = "controle"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 51-2 ; ordonnance n° 58-1100 du 17 novembre 1958, art. 6 ; règlements des assemblées"
+types = ["Commission d'enquête", "commission d'enquête"]
+
+[[etape]]
+cle = "depot"
+libelle = "Proposition de résolution"
+phases = ["depot"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "commission"
+libelle = "Commission"
+phases = ["commission"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "seance"
+libelle = "Séance"
+phases = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+issue = "en_cours"
+
+[[etape]]
+cle = "creation"
+libelle = "Création"
+phases = ["creation"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "nomination"
+libelle = "Nomination des membres"
+phases = ["nomination"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "rapport"
+libelle = "Rapport (six mois au plus)"
+phases = ["rapport"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "rapport_publie"
+
+[[transition]]
+de = "seance"
+vers = "fin"
+condition = "rejet"
+libelle = "Création rejetée"

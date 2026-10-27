@@ -222,10 +222,10 @@ export function Action({ children, onPress, accessibilityLabel }: { children: Re
 }
 
 /** Bouton secondaire bordé `line-strong`. */
-export function BoutonSecondaire({ children, onPress }: { children: ReactNode; onPress(): void }) {
+export function BoutonSecondaire({ children, onPress, accessibilityLabel }: { children: ReactNode; onPress(): void; accessibilityLabel?: string }) {
   const p = usePalette();
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.secondaire, { borderColor: p.lineStrong }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={[styles.secondaire, { borderColor: p.lineStrong }]}>
       <Label ton="ink">{children}</Label>
     </Pressable>
   );
@@ -316,6 +316,49 @@ export function IconeRecherche({ couleur, taille = 18 }: { couleur: string; tail
   );
 }
 
+/**
+ * Déviation du parcours : un trait vertical (le droit commun) dont se détache une boucle latérale
+ * (le détour). Linéaire 1,5 px, même iconographie que la loupe ; jamais un caractère emoji.
+ */
+export function IconeDeviation({ couleur, taille = 16 }: { couleur: string; taille?: number }) {
+  return (
+    <Svg width={taille} height={taille} viewBox="0 0 16 16" fill="none" stroke={couleur} strokeWidth={1.5} aria-hidden>
+      <Path d="M4 1.5v13" />
+      <Path d="M4 4c5 0 8 1.5 8 4s-3 4-8 4" />
+      <Circle cx={12} cy={8} r={1.25} fill={couleur} />
+    </Svg>
+  );
+}
+
+/** Retirer : une croix linéaire 1,5 px, même iconographie que la loupe. */
+export function IconeRetirer({ couleur, taille = 12 }: { couleur: string; taille?: number }) {
+  return (
+    <Svg width={taille} height={taille} viewBox="0 0 16 16" fill="none" stroke={couleur} strokeWidth={1.5} aria-hidden>
+      <Path d="m3.5 3.5 9 9M12.5 3.5l-9 9" />
+    </Svg>
+  );
+}
+
+/**
+ * Filtre posé, retirable : son libellé et une croix ; toucher la puce le retire. Pastille de
+ * couleur facultative (le groupe d'une personne).
+ */
+export function PuceRetirable({ libelle, onRetirer, couleur }: { libelle: string; onRetirer(): void; couleur?: string | null }) {
+  const p = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Retirer le filtre ${libelle}`}
+      onPress={onRetirer}
+      style={[styles.puce, styles.retirable, { backgroundColor: p.surfaceRaised, borderColor: p.ink }]}
+    >
+      {couleur ? <Pastille couleur={couleur} /> : null}
+      <Label couleur={p.ink}>{libelle}</Label>
+      <IconeRetirer couleur={p.inkMuted} />
+    </Pressable>
+  );
+}
+
 export function Separateur() {
   const p = usePalette();
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.line }} />;
@@ -335,5 +378,6 @@ const styles = StyleSheet.create({
   secondaire: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.full, paddingHorizontal: space[4] },
   panneau: { borderRadius: radius.lg, padding: space[5], gap: space[3] },
   puce: { flexShrink: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: space[4], borderWidth: 1, borderRadius: radius.full },
+  retirable: { flexDirection: 'row', alignItems: 'center', gap: space[2], flexShrink: 1, maxWidth: '100%' },
   ongletFiche: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2 },
 });

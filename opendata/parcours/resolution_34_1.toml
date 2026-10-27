@@ -1,0 +1,29 @@
+# Résolution de l'article 34-1 : ni commission ni amendement ; le Gouvernement peut la déclarer
+# irrecevable (responsabilité mise en cause, injonction) avant son inscription.
+
+cle = "resolution_34_1"
+version = 1
+libelle = "Résolution (art. 34-1)"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 2009-03-01
+fondement = "Constitution, art. 34-1 (révision du 23 juillet 2008) ; loi organique du 15 avril 2009"
+types = ["Résolution Article 34-1", "résolution en application de l'article 34-1"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt"
+phases = ["depot"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "seance"
+libelle = "Séance"
+phases = ["commission", "seance"]
+conclut = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "adopte"

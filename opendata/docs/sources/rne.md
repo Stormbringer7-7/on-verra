@@ -124,7 +124,7 @@ Code : [mandat()](../../src/adaptateurs/sources/rne/__init__.py#L163), [cle()](.
 [valeurs()](../../src/adaptateurs/sources/rne/__init__.py#L112), [lignes()](../../src/adaptateurs/sources/rne/__init__.py#L77),
 [Annuaire](../../src/adaptateurs/sources/rne/__init__.py#L136), [sieges_an()](../../src/adaptateurs/sources/rne/__init__.py#L215),
 [epci()](../../src/adaptateurs/sources/rne/__init__.py#L186), [appliquer()](../../src/revue.py#L110) (« aucun » avec création),
-[charger_decisions()](../../src/chargement.py#L236) ·
+[charger_decisions()](../../src/chargement.py#L239) ·
 Tests : [test_cles_locales_stables](../../tests/test_sources_rne.py#L61),
 [test_date_de_naissance_jamais_lue](../../tests/test_sources_rne.py#L67),
 [test_fiche_seule_sans_homonyme](../../tests/test_sources_rne.py#L77),

@@ -50,18 +50,18 @@
 - Le dump DOSLEG stocke des octets Windows-1252 comme caractères de contrôle C1 : « à l\x92article »
   dans l'intitulé du scrutin 2025-325. [table_dump()](../../src/adaptateurs/sources/senat/commun.py#L73)
   restitue l'apostrophe (« à l’article ») ; c'est une correction d'encodage, pas de contenu.
-  Test : [test_apostrophe_windows_1252_restituee](../../tests/test_sources_senat.py#L63).
+  Test : [test_apostrophe_windows_1252_restituee](../../tests/test_sources_senat.py#L64).
 - Les valeurs des dumps sont au format texte de `COPY` : retour chariot, saut de ligne, tabulation
   et barre oblique y sont échappés (`\r`, `\n`, `\t`, `\\`). Brut de l'amendement COM-154 (`amd.id`
   1324544, pjl25-689) : `Alin&#233;as 21 et 22</p>\r\n<p style="text-align: justify;">Supprimer…` ;
   aucun `\\` dans les dumps, donc aucun « \r » publié tel quel. [valeur_copy()](../../src/adaptateurs/sources/senat/commun.py#L62)
   décode tout en un seul passage (avant le 25/10/2026, `\r` restait littéral dans 21 297 amendements).
-  Test : [test_dispositif_ameli_retour_chariot](../../tests/test_sources_senat.py#L166).
+  Test : [test_dispositif_ameli_retour_chariot](../../tests/test_sources_senat.py#L189).
 
 ## Exemples réels : de la source au canon
 
 Relevés le 24/10/2026 sur le dossier prototype (côté Sénat : **pjl25-689**). Liens vers le code
-vérifiés par `tests/test_docs.py`. Les dumps sont lus par [table()](../../src/adaptateurs/sources/senat/travaux.py#L55) ;
+vérifiés par `tests/test_docs.py`. Les dumps sont lus par [table()](../../src/adaptateurs/sources/senat/travaux.py#L54) ;
 chaque ligne devient un document brut dont l'empreinte suit les valeurs
 ([document_ligne()](../../src/adaptateurs/sources/senat/commun.py#L91)).
 
@@ -83,8 +83,8 @@ Brut : `dosleg.zip` › `dosleg.sql`, table `loi` :
 Canon : **aucune nouvelle entité**. L'AN cite `pjl25-689` (`senatChemin`), donc
 `SENAT:dossier:pjl25-689` est une seconde identité du dossier `AN:dossier:DLR5L17N54085`
 (EXPLICIT_REFERENCE). Seuls les dossiers DOSLEG **non cités par l'AN** créent un dossier, titré
-`loient` : [dossier()](../../src/adaptateurs/sources/senat/dossiers.py#L15) ·
-Test : [test_titre](../../tests/test_sources_senat.py#L98).
+`loient` : [dossier()](../../src/adaptateurs/sources/senat/dossiers.py#L143) ·
+Test : [test_titre](../../tests/test_sources_senat.py#L111).
 
 ### Sénateur, mandat, groupe — `SENAT:senateur:14038Y`
 
@@ -120,8 +120,8 @@ prototype. Les avis de la commission et du Gouvernement (`avcid`, `avgid`) vont 
 `canon.avis_amendement`, une ligne par émetteur (ici aucune : amendement non soutenu ; sur un
 amendement examiné : `{"emetteur": "gouvernement", "avis": "favorable", "avis_source": "F"}`).
 
-Code : [amendement()](../../src/adaptateurs/sources/senat/travaux.py#L146), [Referentiel](../../src/adaptateurs/sources/senat/travaux.py#L59) ·
-Tests : [test_amendement_avis_auteurs](../../tests/test_sources_senat.py#L128), [test_numero_ambigu_en_revue](../../tests/test_sources_senat.py#L152)
+Code : [amendement()](../../src/adaptateurs/sources/senat/travaux.py#L140), [Referentiel](../../src/adaptateurs/sources/senat/travaux.py#L58) ·
+Tests : [test_amendement_avis_auteurs](../../tests/test_sources_senat.py#L150), [test_numero_ambigu_en_revue](../../tests/test_sources_senat.py#L175)
 
 #### Article suivi et étape de l'amendement
 
@@ -161,8 +161,8 @@ une annexe), 9 178 additionnels, 2 004 sans article (intitulé, division, pas de
 730 ; signet cité par deux dossiers AN : 36 ; numéro du texte non cité par le dossier AN : 642 ; pas
 encore d'étape publiée ou délégation au fond : le reste).
 
-Code : [article_vise()](../../src/adaptateurs/sources/senat/travaux.py#L111), [etapes()](../../src/adaptateurs/sources/senat/travaux.py#L127),
-[Examens](../../src/adaptateurs/sources/an/dossiers.py#L232) ·
+Code : [article_vise()](../../src/adaptateurs/sources/senat/travaux.py#L105), [etapes()](../../src/adaptateurs/sources/senat/travaux.py#L121),
+[Examens](../../src/adaptateurs/sources/an/dossiers.py#L233) ·
 Tests : [test_seance](../../tests/test_amendements_articles.py#L217), [test_commission_et_delegation](../../tests/test_amendements_articles.py#L224),
 [test_lecture_discordante](../../tests/test_amendements_articles.py#L232), [test_divisions](../../tests/test_amendements_articles.py#L238)
 
@@ -181,8 +181,8 @@ trouvé par chaîne explicite `code` → `date_seance` → `lecass` → `lecture
 `amendement_id` reste **vide** : trois amendements identiques sont visés, on ne choisit pas. Votes
 nominatifs : table `votsen` (matricule → `SENAT:senateur:<mat>`).
 
-Code : [scrutin()](../../src/adaptateurs/sources/senat/travaux.py#L185) ·
-Test : [test_scrutin_dossier_amendement_votes](../../tests/test_sources_senat.py#L141)
+Code : [scrutin()](../../src/adaptateurs/sources/senat/travaux.py#L179) ·
+Test : [test_scrutin_dossier_amendement_votes](../../tests/test_sources_senat.py#L164)
 
 ### Sort d'un scrutin — `SENAT:scrutin:2025-340`
 
@@ -204,7 +204,7 @@ phrase non reconnue ou annonces discordantes : cas `resultat_scrutin_illisible`.
 nommé après sa date dans l'archive (`cri/d20261204.xml`, daté du 06/01/2026) est écarté.
 
 Code : [annonces()](../../src/adaptateurs/sources/senat/resultats.py#L51), [sort()](../../src/adaptateurs/sources/senat/resultats.py#L42) ·
-Test : [test_sort_du_scrutin_340](../../tests/test_sources_senat.py#L265)
+Test : [test_sort_du_scrutin_340](../../tests/test_sources_senat.py#L288)
 
 ### Intervention en séance — `SENAT:intervention:d20260629#int_333`
 
@@ -225,7 +225,7 @@ revue (`identite_membre_gouvernement`).
 
 Code : [seance()](../../src/adaptateurs/sources/senat/debats.py#L115),
 [membre_du_gouvernement()](../../src/adaptateurs/sources/senat/debats.py#L177) ·
-Tests : [test_interventions](../../tests/test_sources_senat.py#L35), [test_membre_du_gouvernement_en_revue](../../tests/test_sources_senat.py#L47)
+Tests : [test_interventions](../../tests/test_sources_senat.py#L36), [test_membre_du_gouvernement_en_revue](../../tests/test_sources_senat.py#L48)
 
 #### Amendements discutés
 
@@ -336,7 +336,7 @@ enfants ([corps_articles()](../../src/adaptateurs/sources/senat/textes.py#L69),
 session 2024 et lignes sans session (40 textes anciens) ignorés.
 
 Code : [references()](../../src/adaptateurs/sources/senat/textes.py#L50), [version()](../../src/adaptateurs/sources/senat/textes.py#L84) ·
-Tests : [test_version](../../tests/test_textes.py#L60), [test_textes_sans_session_ignores](../../tests/test_sources_senat.py#L78)
+Tests : [test_version](../../tests/test_textes.py#L60), [test_textes_sans_session_ignores](../../tests/test_sources_senat.py#L79)
 
 ### Sénateur ancien député — `SENAT:senateur:20684B` et `AN:acteur:PA794906`
 

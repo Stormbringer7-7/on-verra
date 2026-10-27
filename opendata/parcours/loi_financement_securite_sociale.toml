@@ -1,0 +1,19 @@
+# Lois de financement de la sécurité sociale (de l'année, rectificative, d'approbation des
+# comptes) : parcours de la loi ordinaire, dépôt à l'AN d'abord, délais fixes (art. 47-1).
+
+cle = "loi_financement_securite_sociale"
+version = 1
+herite = "loi_ordinaire"
+libelle = "Loi de financement de la sécurité sociale"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1996-02-22
+fondement = "Constitution, art. 47-1 (20 jours à l'AN, 15 au Sénat, 50 au total, sinon ordonnance), issu de la révision du 22 février 1996"
+types = [
+    "Projet de loi de financement de la sécurité sociale",
+    "projet de loi de financement sécurité sociale", "projet de loi de financement rectificative de la sécurité sociale",
+]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt AN"

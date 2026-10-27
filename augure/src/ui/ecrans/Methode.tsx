@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Carte, T, TitreEcran } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
+import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { PastilleStatut } from '../components/fondations';
 import { useLarge } from '../hooks/miseEnPage';
@@ -61,7 +62,7 @@ export const RUBRIQUES_METHODE: { titre: string; paragraphes: string[] }[] = [
 export function Methode() {
   const large = useLarge();
   return (
-    <Ecran titre="Méthode et sources" largeur="lecture">
+    <Ecran titre="Méthode et sources" largeur="lecture" parents={[RACINES.actualite]}>
       <View style={styles.entete}>
         <TitreEcran>Méthode et sources</TitreEcran>
         <T ton="inkSoft">Ce que nous montrons, d’où ça vient, et ce que nous ne pouvons pas savoir.</T>

@@ -27,6 +27,24 @@ describe.skipIf(!DATABASE_URL_LECTURE)('PgFamilles (DATABASE_URL_LECTURE)', () =
     expect(new Set(c.map((x) => x.contexte)).size).toBeGreaterThan(1);
   });
 
+  it('« Silence pour la France » + Jean-Philippe Tanguy : expression exacte et liens publiés seulement', async () => {
+    const personne = (await db.first<{ id: string }>(
+      `SELECT entite_id::text AS id FROM canon.personne WHERE nom = 'Tanguy' AND prenom = 'Jean-Philippe'`,
+    ))?.id;
+    expect(personne).toBeDefined();
+    expect((await f.personne(personne!))?.nom).toBe('Jean-Philippe Tanguy');
+    const filtres = { textes: ['Silence pour la France'], personne: personne! };
+    const comptes = await f.compter(null, ['interventions', 'questions', 'amendements', 'commissions'], filtres);
+    // Pas de lien publié entre une personne et une commission : rien, jamais par le texte.
+    expect(comptes.commissions).toEqual({ nombre: 0, plafonne: false });
+    const questions = await f.chercher(null, 'questions', { page: 1, taille: 20 }, filtres);
+    expect(questions.total).toBe(comptes.questions!.nombre);
+    for (const q of questions.elements) expect(q.filtres).toEqual({ personne });
+    // Sans la personne, l'expression seule trouve plus d'interventions qu'avec elle.
+    const seule = await f.compter(null, ['interventions'], { textes: filtres.textes, personne: null });
+    expect(seule.interventions!.nombre).toBeGreaterThanOrEqual(comptes.interventions!.nombre);
+  });
+
   it('parcourir : chaque déclinaison cherchable se compte et rend des résultats titrés', async () => {
     const comptes = await f.compter(null, DISPONIBLES);
     for (const d of DISPONIBLES) {

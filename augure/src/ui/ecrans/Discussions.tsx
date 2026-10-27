@@ -16,7 +16,8 @@ import { SyntheseVue } from '../components/commun/SyntheseVue';
 import { LienExterne, Ligne, Pagination, Requete, TitreEcran } from '../components/dossiers/blocs';
 import { OrateurVue } from '../components/dossiers/elements';
 import { adresseAncre, decalage, entreeDiscussions } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { parentPersonne, RACINES } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
 import { space } from '../theme/tokens';
@@ -27,9 +28,18 @@ export function Discussions() {
   const params = useRoute<RouteProp<Pages, 'Discussions'>>().params;
   const [page, setPage] = useState(1);
   const liste = useCommand(ListerInterventions(entreeDiscussions(params, page)));
+  const libelle = liste.statut === 'erreur' ? undefined : liste.donnees?.libelle;
+  // Ce qui a été dit, sous l'objet dont on parle (son libellé vient de l'API).
+  const parents =
+    params.type === 'personne'
+      ? [RACINES.elus, ...(libelle ? [parentPersonne(params.id, libelle)] : [])]
+      : params.type === 'etape'
+        ? [RACINES.lois, ...(libelle ? [{ libelle, cible: { page: 'Etape' as const, params: { dossier: params.dossier, cle: params.cle } } }] : [])]
+        : params.type === 'amendement'
+          ? [RACINES.lois, ...(libelle ? [{ libelle, cible: { page: 'Amendement' as const, params: { id: params.id } } }] : [])]
+          : [RACINES.lois];
   return (
-    <Ecran>
-      <Retour />
+    <Ecran titre="Ce qui a été dit" parents={parents}>
       <Requete resultat={liste}>
         {(l) => (
           <>

@@ -1,0 +1,45 @@
+# Motion tendant à soumettre un projet de loi au référendum : adoptée par une chambre, transmise
+# à l'autre ; adoptée par les deux, elle est une proposition au Président de la République.
+
+cle = "motion_referendaire"
+version = 1
+libelle = "Motion référendaire"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 11, al. 1 ; règlement du Sénat, art. 67 ; règlement de l'AN, art. 122 et 123"
+types = ["motion référendaire"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt {o}"
+phases = ["depot"]
+lecture = "*"
+cote = "o"
+nature = "obligatoire"
+
+[[etape]]
+cle = "seance_o"
+libelle = "Séance {o}"
+phases = ["commission", "seance"]
+conclut = ["seance"]
+lecture = "*"
+cote = "o"
+nature = "obligatoire"
+issue = "en_cours"
+
+[[etape]]
+cle = "seance_s"
+libelle = "Séance {s}"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "*"
+cote = "s"
+nature = "obligatoire"
+issue = "adopte"
+
+[[transition]]
+de = "seance_o"
+vers = "fin"
+condition = "rejet"
+libelle = "Rejetée"

@@ -1,0 +1,19 @@
+# Allocution du président de l'Assemblée nationale (installation, président d'âge) : un seul acte.
+
+cle = "allocution"
+version = 1
+libelle = "Allocution"
+famille = "autre"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Règlement de l'AN, art. 1er"
+types = ["Allocution du Président de l'Assemblée nationale"]
+
+[[etape]]
+cle = "allocution"
+libelle = "Allocution"
+phases = ["allocution"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "adopte"

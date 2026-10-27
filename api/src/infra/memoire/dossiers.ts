@@ -72,7 +72,9 @@ export class DossiersMemoire implements DossiersRepository {
     if (!fiche?.parcours) return null;
     return {
       dossier: { id, titre: fiche.entete.titre },
-      cases: fiche.parcours.cases.map(({ cle, libelle, etat, courante }) => ({ cle, libelle, etat, courante })),
+      cases: fiche.parcours.cases.map(({ cle, libelle, etat, courante, attendue, deviation }) => ({
+        cle, libelle, etat, courante, attendue, deviation,
+      })),
     };
   }
 

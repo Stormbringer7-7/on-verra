@@ -234,7 +234,7 @@ dans une réunion ; toutes les interventions qui citent un numéro dans une séa
   L'adaptateur déclare ce que le document publie au complet (`Ensemble`) ; les entités qu'il ne
   donne plus sont marquées retirées (`canon.entite.retiree_de_la_source_le`), **jamais supprimées**,
   et la couche de lecture doit les ignorer.
-  Code : [Ensemble](../src/domaine/objets.py#L73), [ecrire()](../src/chargement.py#L115) ·
+  Code : [Ensemble](../src/domaine/objets.py#L73), [ecrire()](../src/chargement.py#L116) ·
   Tests : [test_relecture_retire_les_absents_sans_supprimer](../tests/test_identites.py#L157),
   [test_cas_sans_objet_caduc_puis_revu_s_il_revient](../tests/test_revue.py#L85) (rejoués sur Postgres).
 
@@ -255,7 +255,7 @@ cite et le document source (`reference`, `cite_par`, `source_id`) ; l'identité 
 `EXPLICIT_REFERENCE`. Une identité déjà reliée par une *autre* référence (deux acteurs citant le même
 matricule, deux dossiers AN citant le même signet) n'est pas l'identité propre d'une fiche : elle
 reste en revue (`correspondance_a_revoir`), jamais de fusion en chaîne.
-Code : [fusionner_par_reference()](../src/chargement.py#L192) ·
+Code : [fusionner_par_reference()](../src/chargement.py#L193) ·
 Tests : [test_amo_cite_la_fiche_senat_fusion_sans_revue](../tests/test_fusion.py#L92),
 [test_dossier_senat_cite_ensuite_par_l_an](../tests/test_fusion.py#L57).
 

@@ -14,6 +14,7 @@ import type {
   Indicateur,
   PersonneRef,
   Position,
+  ValeurCirconscription,
   VotesDepartement,
 } from '@contrat/domain/model';
 
@@ -106,6 +107,55 @@ export class PgTerritoires implements TerritoiresRepository {
     }));
     const localises = lignes.reduce((n, l) => n + l.membres, 0);
     return { scrutin: resume, departements, horsDepartement: Math.max(0, (total?.n ?? 0) - localises) };
+  }
+
+  async circonscriptionsScrutin(scrutin: string): Promise<ValeurCirconscription[] | null> {
+    if (!estUuid(scrutin)) return null;
+    const [resume] = await this.scrutins.resumes([scrutin]);
+    if (!resume) return null;
+    if (resume.chambre !== 'AN' || !(await this.charge())) return [];
+    // Circonscriptions du découpage de 2010 (en vigueur depuis juin 2012) : celles des mandats qui
+    // finissent après le 20/06/2012 ; le député du jour, le plus récent si deux mandats se chevauchent.
+    const lignes = await this.db.all<{
+      code: string;
+      departement: string;
+      numero: number;
+      id: string | null;
+      nom: string | null;
+      civilite: string | null;
+      position: string | null;
+      groupe: GroupeLu | null;
+    }>(
+      `WITH s AS (SELECT entite_id, date FROM canon.scrutin WHERE entite_id = $scrutin::uuid),
+       circos AS (
+         SELECT DISTINCT e.code, e.circonscription::int AS numero FROM lecture.elu_departement e
+         WHERE e.chambre = 'AN' AND e.fin >= DATE '2012-06-20' AND e.circonscription ~ '^[0-9]+$'
+       ), depute AS (
+         SELECT DISTINCT ON (e.code, e.circonscription::int) e.code, e.circonscription::int AS numero, e.personne_id
+         FROM lecture.elu_departement e JOIN s ON s.date BETWEEN e.debut AND e.fin
+         WHERE e.chambre = 'AN' AND e.circonscription ~ '^[0-9]+$'
+         ORDER BY e.code, e.circonscription::int, e.debut DESC
+       )
+       SELECT c.code, d.nom AS departement, c.numero, p.entite_id AS id, p.nom_affiche AS nom, p.civilite, v.position,
+              CASE WHEN p.entite_id IS NOT NULL THEN (${groupeALaDateSql('p.entite_id', "'AN'", 's.date')})::jsonb END AS groupe
+       FROM circos c CROSS JOIN s
+       JOIN lecture.departement d ON d.code = c.code
+       LEFT JOIN depute dp ON dp.code = c.code AND dp.numero = c.numero
+       LEFT JOIN canon.personne p ON p.entite_id = dp.personne_id
+       LEFT JOIN canon.vote v ON v.scrutin_id = s.entite_id AND v.personne_id = dp.personne_id
+       ORDER BY c.code, c.numero`,
+      { scrutin },
+    );
+    const positions: Position[] = ['pour', 'contre', 'abstention', 'non_votant'];
+    return lignes.map((l) => {
+      const circonscription = { code: `${l.code}-${String(l.numero).padStart(2, '0')}`, departement: { code: l.code, nom: l.departement }, numero: l.numero };
+      if (!l.id || !l.nom) return { circonscription, depute: null, position: null };
+      return {
+        circonscription,
+        depute: { id: l.id, nom: l.nom, fonction: fonctionTerritoriale('AN', l.civilite, l.departement, String(l.numero)), groupe: groupe(l.groupe) },
+        position: (positions.includes(l.position as Position) ? l.position : 'absent') as Position,
+      };
+    });
   }
 
   async cartePresence(chambre: Chambre) {

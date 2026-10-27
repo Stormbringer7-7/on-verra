@@ -9,7 +9,9 @@ import { ConsulterSuivis, type EvenementSuivi, type Suivis as SuivisDonnees } fr
 import { useAller } from '../../navigation';
 import { Action, Carte, Label, Ligne, Pastille, T, TitreEcran, TitreSection } from '../components/base';
 import { BarreCompacte } from '../components/commun/BarreParcours';
+import { evenementDe } from '../components/commun/statuts';
 import { Requete } from '../components/dossiers/blocs';
+import { RACINES } from '../ariane';
 import { Colonnes, Ecran } from '../components/Ecran';
 import { dateLongue } from '../format';
 import { useCommand } from '../hooks/core';
@@ -52,7 +54,7 @@ export function Suivis() {
   const n = (k: number, un: string, plusieurs: string) => `${k} ${k > 1 ? plusieurs : un}`;
 
   return (
-    <Ecran titre="Mes suivis">
+    <Ecran titre="Mes suivis" parents={[RACINES.actualite]}>
       <View style={styles.entete}>
         <TitreEcran>Mes suivis</TitreEcran>
         <T ton="inkSoft">
@@ -145,6 +147,7 @@ export function ContenuSuivis({ suivis, vuAvant }: { suivis: SuivisDonnees; vuAv
         </T>
         {suivis.dossiers.map((d) => (
           <Pressable key={d.id} accessibilityRole="link" onPress={() => aller.dossier(d.id)} style={[styles.loi, { backgroundColor: p.surfaceRaised }]}>
+            {d.parent && <T variant="caption" couleur={p.inkQuote}>{evenementDe(d.parent)}</T>}
             <T variant="heading">{d.titre}</T>
             {d.barre.length > 0 && <BarreCompacte cases={d.barre} />}
             <T variant="small" ton="inkSoft">

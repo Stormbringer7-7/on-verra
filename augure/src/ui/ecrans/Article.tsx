@@ -12,11 +12,12 @@ import type { Pages } from '../../navigation';
 import { Label, Segmente, T } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Carte, Colonnes, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { DiffTexte, OrigineVue } from '../components/dossiers/elements';
 import { CHAMBRE_COURTE, entreeArticle, texteDuHtml, titreOrigine } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { parentDossier, RACINES, sousLeDossier } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
 import { usePalette } from '../theme/ThemeProvider';
@@ -29,9 +30,9 @@ export function Article() {
   const [version, setVersion] = useState(params.version);
   const [comparaison, setComparaison] = useState<Comparaison>(params.comparaison ?? 'precedente');
   const fiche = useCommand(ConsulterArticle(entreeArticle(params.article, version, comparaison)));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f ? `Art. ${f.article.numero}` : undefined} parents={f ? [...sousLeDossier(f.barre.dossier), { ...parentDossier(f.barre.dossier), libelle: 'Le texte' }] : [RACINES.lois]}>
       <Requete resultat={fiche}>
         {(f) => <ContenuArticle fiche={f} comparaison={comparaison} onVersion={setVersion} onComparaison={setComparaison} />}
       </Requete>

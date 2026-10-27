@@ -125,6 +125,18 @@ export interface DemandeFamilles extends DemandePage {
   famille?: FamilleRecherche;
   /** Déclinaisons cochées (de la famille choisie). Une seule : sa liste paginée. */
   declinaisons?: DeclinaisonRecherche[];
+  /**
+   * Expressions, chacune cherchée comme expression exacte (mots dans l'ordre) dans le texte publié
+   * du résultat (texte d'une intervention, dispositif et exposé d'un amendement, question et
+   * réponse, titre d'un scrutin, objet d'une action de lobbying ; nom ou titre d'un objet), toutes
+   * cumulées. Au plus `TEXTES_MAX`, de `TEXTE_LONGUEUR_MAX` caractères chacune.
+   */
+  textes?: string[];
+  /**
+   * Une personne (`PersonneRef.id`) : seulement ce qui la concerne par un lien publié
+   * (`LIEN_PERSONNE`) ; les déclinaisons sans tel lien sont écartées, et le disent.
+   */
+  personne?: string;
 }
 
 /** Un résultat, avec ce qu'il ouvre. */
@@ -154,9 +166,11 @@ export const PLAFOND_COMPTE = 1000;
 export interface DeclinaisonComptee {
   declinaison: DeclinaisonRecherche;
   libelle: string;
-  /** null quand elle n'est pas cherchable (`indisponible`). */
+  /** null quand elle n'est pas cherchable (`indisponible`) ou écartée par le filtre personne (`horsPersonne`). */
   compte: CompteRecherche | null;
   indisponible: string | null;
+  /** Filtre personne posé et aucun lien publié entre une personne et cette déclinaison : pourquoi elle est écartée. */
+  horsPersonne: string | null;
 }
 
 export interface FamilleComptee {
@@ -177,6 +191,10 @@ export interface ResultatFamilles {
   demande: DemandeFamilles;
   /** Requête nettoyée ; null : on parcourt. */
   q: string | null;
+  /** Expressions nettoyées (espaces resserrés, sans doublon), dans l'ordre de la demande. */
+  textes: string[];
+  /** La personne filtrée, nommée pour sa puce ; null sans filtre personne. */
+  personne: { id: string; nom: string; groupe: GroupeRef | null } | null;
   /**
    * Numéro officiel reconnu dans la requête : ses candidats (un seul : exact ; plusieurs : ambigu,
    * chacun avec son dossier et sa chambre dans `contexte`). Trouvé, il remplace les sections.
@@ -222,8 +240,69 @@ export function analyserNumero(q: string): NumeroOfficiel | null {
 /** Un numéro tel que publié, sous sa forme comparable. */
 export const numeroComparable = (numero: string) => numero.toUpperCase().replace(/\s+/g, '').replace(/^N[°O]/, '');
 
+/** Expressions au plus, et leur longueur maximale (caractères). */
+export const TEXTES_MAX = 5;
+export const TEXTE_LONGUEUR_MAX = 100;
+
+/** Expressions nettoyées : espaces resserrés, sans vide ni doublon (casse et accents ignorés), dans l'ordre. */
+export function expressions(liste: readonly string[]): string[] {
+  const vues = new Set<string>();
+  return liste
+    .map((t) => t.replace(/\s+/g, ' ').trim())
+    .filter((t) => t && !vues.has(normaliser(t)) && vues.add(normaliser(t)));
+}
+
+/** Pourquoi des expressions sont refusées ; null : acceptées. */
+export function expressionsInvalides(liste: readonly string[]): string | null {
+  if (liste.length > TEXTES_MAX) return `Au plus ${TEXTES_MAX} expressions`;
+  const longue = liste.find((t) => t.length > TEXTE_LONGUEUR_MAX);
+  return longue ? `Expression trop longue (au plus ${TEXTE_LONGUEUR_MAX} caractères) : ${longue.slice(0, 30)}…` : null;
+}
+
+/**
+ * Le lien publié qui rattache un résultat d'une déclinaison à une personne, pour le filtre
+ * personne ; null : aucun lien publié, la déclinaison est écartée sous ce filtre (jamais de lien
+ * supposé : un député n'« est » pas dans une commission parce qu'il en parle).
+ */
+export const LIEN_PERSONNE: Record<DeclinaisonRecherche, string | null> = {
+  dossiers: 'initiateur du dossier',
+  etapes: null,
+  articles: null,
+  groupes: null,
+  deputes: 'la personne elle-même',
+  senateurs: 'la personne elle-même',
+  ministres: 'la personne elle-même',
+  auditionnes: null,
+  chambres: null,
+  commissions: null,
+  enquetes: null,
+  departements: null,
+  circonscriptions: null,
+  votes: 'son vote nominatif publié',
+  amendements: 'auteur de l’amendement',
+  interventions: 'orateur',
+  rapports: null,
+  questions: 'auteur de la question',
+  lobbying: null,
+  interets: 'déclarant',
+  deports: null,
+};
+
+export const HORS_PERSONNE = 'Aucun lien publié avec une personne : pas de résultat sous ce filtre.';
+
+/** Les filtres d'une recherche, tels que les dépôts les appliquent (expressions nettoyées). */
+export interface FiltresRecherche {
+  textes: string[];
+  personne: string | null;
+}
+
+export const SANS_FILTRE: FiltresRecherche = { textes: [], personne: null };
+
 export interface PlanRecherche {
   q: string | null;
+  /** Expressions nettoyées. */
+  textes: string[];
+  personne: string | null;
   numero: NumeroOfficiel | null;
   /** Déclinaisons dont on montre les résultats. */
   declinaisons: DeclinaisonRecherche[];
@@ -237,20 +316,33 @@ export interface PlanRecherche {
 export const APERCU_PARCOURIR = 2;
 export const APERCU_RECHERCHE = 3;
 
-/** Les déclinaisons demandées (cochées, sinon celles de la famille, sinon toutes), cherchables seulement. */
+/** Déclinaisons cherchables sous ces filtres : sous le filtre personne, celles qui ont un lien publié. */
+export const cherchables = (personne: string | null): DeclinaisonRecherche[] =>
+  DISPONIBLES.filter((d) => !personne || LIEN_PERSONNE[d] !== null);
+
+/**
+ * Les déclinaisons demandées (cochées, sinon celles de la famille, sinon toutes), cherchables
+ * seulement. Un numéro officiel n'est reconnu que sans expression ni personne (il désigne un objet
+ * exact, que ces filtres ne restreignent pas).
+ */
 export function planRecherche(demande: DemandeFamilles, pagination: { page: number; taille: number }): PlanRecherche {
   const q = demande.q?.trim() ? demande.q.trim() : null;
+  const textes = expressions(demande.textes ?? []);
+  const personne = demande.personne?.trim() || null;
   const cochees = demande.declinaisons?.length ? demande.declinaisons : null;
-  const declinaisons = DISPONIBLES.filter(
+  const declinaisons = cherchables(personne).filter(
     (d) => (cochees ? cochees.includes(d) : true) && (!demande.famille || famillesDe.get(d) === demande.famille),
   );
   const detail = declinaisons.length === 1;
+  const cherche = q !== null || textes.length > 0 || personne !== null;
   return {
     q,
-    numero: q ? analyserNumero(q) : null,
+    textes,
+    personne,
+    numero: q && !textes.length && !personne ? analyserNumero(q) : null,
     declinaisons,
     page: detail ? pagination.page : 1,
-    taille: detail ? pagination.taille : q ? APERCU_RECHERCHE : APERCU_PARCOURIR,
+    taille: detail ? pagination.taille : cherche ? APERCU_RECHERCHE : APERCU_PARCOURIR,
     detail,
   };
 }
@@ -263,18 +355,24 @@ export function assemblerRecherche(
     comptes: Partial<Record<DeclinaisonRecherche, CompteRecherche>>;
     sections: Partial<Record<DeclinaisonRecherche, Page<ResultatFamille>>>;
     candidats: ResultatFamille[] | null;
+    /** La personne filtrée, nommée (le dépôt la lit) ; null sans filtre personne. */
+    personne?: ResultatFamilles['personne'];
   },
 ): ResultatFamilles {
   const exact = plan.numero && lu.candidats?.length ? lu.candidats : null;
   const compte = (d: DeclinaisonRecherche): CompteRecherche =>
     exact ? { nombre: exact.filter((c) => c.declinaison === d).length, plafonne: false } : (lu.comptes[d] ?? { nombre: 0, plafonne: false });
   const familles: FamilleComptee[] = FAMILLES_RECHERCHE.map((f) => {
-    const declinaisons = f.declinaisons.map((d) => ({
-      declinaison: d.declinaison,
-      libelle: d.libelle,
-      compte: d.indisponible === null ? compte(d.declinaison) : null,
-      indisponible: d.indisponible,
-    }));
+    const declinaisons = f.declinaisons.map((d) => {
+      const horsPersonne = plan.personne && d.indisponible === null && LIEN_PERSONNE[d.declinaison] === null ? HORS_PERSONNE : null;
+      return {
+        declinaison: d.declinaison,
+        libelle: d.libelle,
+        compte: d.indisponible === null && !horsPersonne ? compte(d.declinaison) : null,
+        indisponible: d.indisponible,
+        horsPersonne,
+      };
+    });
     const comptees = declinaisons.flatMap((d) => (d.compte ? [d.compte] : []));
     return {
       famille: f.famille,
@@ -293,6 +391,8 @@ export function assemblerRecherche(
   return {
     demande,
     q: plan.q,
+    textes: plan.textes,
+    personne: plan.personne ? (lu.personne ?? null) : null,
     numero: plan.numero ? { saisi: plan.numero.saisi, candidats: lu.candidats ?? [] } : null,
     familles,
     sections,

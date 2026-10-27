@@ -1,0 +1,12 @@
+# Autorisation de ratifier ou d'approuver un traité ou un accord : projet de loi d'un seul
+# article, parcours de la loi ordinaire ; le traité lui-même n'est pas amendable.
+
+cle = "traite"
+version = 1
+herite = "loi_ordinaire"
+libelle = "Ratification d'un traité"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 52 à 55 (art. 54 : contrôle préalable, révision nécessaire si clause contraire)"
+types = ["Projet de ratification des traités et conventions", "convention"]

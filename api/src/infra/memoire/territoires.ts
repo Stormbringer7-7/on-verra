@@ -20,6 +20,13 @@ export class TerritoiresMemoire implements TerritoiresRepository {
     };
   }
 
+  async circonscriptionsScrutin(scrutin: string) {
+    const { exemples } = await this.donnees;
+    if (!premier(exemples.ConsulterCarte, (e) => e.input.mesure === 'scrutin' && e.input.scrutin === scrutin)) return null;
+    const c = premier(exemples.ConsulterCarte, (e) => e.input.mesure === 'scrutin' && e.input.scrutin === scrutin && e.output.niveau === 'circonscription')?.output;
+    return c?.circonscriptions ?? [];
+  }
+
   async cartePresence(chambre: Chambre) {
     const { exemples } = await this.donnees;
     const c = premier(exemples.ConsulterCarte, (e) => e.input.mesure === 'presence' && e.input.chambre === chambre)?.output;

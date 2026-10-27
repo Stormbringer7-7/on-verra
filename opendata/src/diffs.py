@@ -12,12 +12,11 @@ Fonctions pures (stdlib seulement), sans source ni stockage :
 """
 
 import difflib
-import html
 import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from .textes import numero_article
+from .textes import numero_article, texte_html
 
 FORMAT = "mots"
 # Un mot (avec ses apostrophes et traits d'union internes) ou un signe de ponctuation. Les accents
@@ -164,10 +163,8 @@ def vise_article(cible: tuple[str, str] | None, numero: str, nouveau: bool) -> b
 
 # Dispositif ----------------------------------------------------------------------------------
 def texte_dispositif(dispositif: str | None) -> str:
-    """HTML d'un dispositif (AN ou AMELI) -> texte, un paragraphe par ligne."""
-    t = html.unescape(dispositif or "").replace("\\r", "").replace("\\n", "\n")
-    t = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</li>", "\n", t)
-    t = html.unescape(re.sub(r"<[^>]+>", "", t))
+    """Dispositif (AN ou AMELI, texte ou HTML) -> texte, un paragraphe par ligne."""
+    t = texte_html((dispositif or "").replace("\\r", "").replace("\\n", "\n"))
     return "\n".join(l for l in (re.sub(r"[ \t\xa0 ]+", " ", x).strip() for x in t.split("\n")) if l)
 
 

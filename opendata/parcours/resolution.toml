@@ -1,0 +1,54 @@
+# Proposition de résolution examinée dans une seule chambre (lecture unique) : résolution
+# européenne (commission des affaires européennes, puis commission au fond ; adoptée sans vote en
+# séance faute de demande dans le délai), modification du règlement, autres résolutions. L'AN publie
+# un seul type, « Résolution », pour toutes ; le Sénat en distingue trois (modèles dérivés).
+
+cle = "resolution"
+version = 1
+libelle = "Résolution"
+famille = "resolution"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Règlement de l'AN (art. 82, 136, 151-1 à 151-11) ; règlement du Sénat (art. 50 bis et suivants, 73 quinquies)"
+types = ["Résolution", "proposition de résolution autre"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt"
+phases = ["depot"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "commission_ae"
+libelle = "Commission des affaires européennes"
+phases = ["commission_ae"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "commission"
+libelle = "Commission au fond"
+phases = ["commission"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "seance"
+libelle = "Séance"
+phases = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+issue = "adopte"
+
+[[etape]]
+cle = "cc"
+libelle = "Conseil constitutionnel"
+phases = ["cc"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
