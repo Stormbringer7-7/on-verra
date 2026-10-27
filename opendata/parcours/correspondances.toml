@@ -1,0 +1,425 @@
+# Codes d'actes publiés -> phase et rôle, communs à tous les modèles de la juridiction.
+# Le premier motif qui correspond l'emporte (ordre du fichier) ; un acte sans correspondance est
+# « hors modèle » (compté, listé, jamais placé de force).
+#
+# Rôles :
+#   ouvre     : l'étape a commencé (réunion, nomination, saisine, séance) ;
+#   conclut   : l'acte qui dit l'étape faite (rapport de la commission au fond, décision) ;
+#   annexe    : montré, sans effet sur l'état (structure, étude d'impact, avis du Conseil d'État) ;
+#   deviation : acte d'une déviation seulement. Un acte qui ouvre ou conclut peut aussi porter une
+#               déviation (`deviation`), par ex. « considéré comme adopté (49.3) ».
+# Une déviation est rattachée à l'étape de l'acte classé qui la précède dans l'ordre publié.
+#
+# AN : `codeActe` des dossiers législatifs (« AN1-COM-FOND-RAPPORT ») ; préfixes de lecture AN1,
+# SN1, AN2…, ANNLEC, SNNLEC, ANLDEF, ANLUNI (lecture unique), AN20 (contrôle), AN21 (Gouvernement).
+# Sénat : codes « DOSLEG-… » composés par l'adaptateur à partir de DOSLEG (lecture `typleccod`,
+# assemblée `codass`, origine du texte `oritxtcod`) : voir src/adaptateurs/sources/senat/dossiers.py.
+
+juridiction = "FR"
+
+# Déviations communes à tous les modèles de la juridiction (un modèle peut les redéfinir).
+[[deviation]]
+cle = "motion_procedure"
+libelle = "Motion de procédure (rejet préalable, question préalable, renvoi en commission)"
+fondement = "Règlement de l'AN, art. 91 ; règlement du Sénat, art. 44"
+effet = "rejoint"
+si = "adoptée|par l'adoption|renvoyé"
+effet_si = "remplace"
+
+[[deviation]]
+cle = "retrait"
+libelle = "Retrait"
+fondement = "Retrait par son auteur ou par le Gouvernement, avant l'adoption définitive"
+effet = "termine"
+issue = "retire"
+
+[[deviation]]
+cle = "retrait_ordre_du_jour"
+libelle = "Retiré de l'ordre du jour"
+fondement = "Conférence des présidents"
+effet = "rejoint"
+
+[[deviation]]
+cle = "irrecevabilite"
+libelle = "Déclaré irrecevable"
+fondement = "Constitution, art. 40 et 41 ; règlements des assemblées"
+effet = "termine"
+issue = "irrecevable"
+
+[[deviation]]
+cle = "caducite"
+libelle = "Caducité"
+fondement = "Fin de législature ou dissolution (textes en instance à l'AN) ; renouvellement partiel du Sénat (propositions des sénateurs non adoptées, règlement du Sénat) : état publié par DOSLEG"
+effet = "termine"
+issue = "caduc"
+
+[[deviation]]
+cle = "fusion"
+libelle = "Fusionné avec un autre dossier"
+fondement = "Examen joint (état publié par DOSLEG)"
+effet = "termine"
+issue = "fusionne"
+
+# ---------- AN : déviations ----------
+[[correspondance]]
+systeme = "AN"
+motif = "-PROCACC$"
+phase = "depot"
+role = "deviation"
+deviation = "procedure_acceleree"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN21-DGVT$"
+phase = "declaration"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN21-MOTION$"
+phase = "motion"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN21-MOTION-VOTE$"
+phase = "vote"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN21-DEBATS"
+phase = "debat"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN21-APAN$"
+phase = "allocution"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-DEBATS-MOTION(-VOTE)?$"
+phase = "seance"
+role = "deviation"
+deviation = "motion_procedure"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-(DGVT|MOTION|MOTION-VOTE)$"
+phase = "seance"
+role = "deviation"
+deviation = "engagement_responsabilite"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-RTRINI$"
+phase = "retrait"
+role = "deviation"
+deviation = "retrait"
+
+# ---------- AN : annexes ----------
+[[correspondance]]
+systeme = "AN"
+motif = "^((AN|SN)(\\d+|NLEC|LDEF|LUNI)|CMP|CC|PROM)$"
+phase = "lecture"
+role = "annexe"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-(ETI|AVCE|DPTLETTRECT|ACIN)$"
+phase = "depot"
+role = "annexe"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN-APPLI"
+phase = "application"
+role = "annexe"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN20-(COMENQ|MISINF)$"
+phase = "creation"
+role = "annexe"
+
+# ---------- AN : contrôle (AN20) ----------
+[[correspondance]]
+systeme = "AN"
+motif = "^AN20-(COMENQ|MISINF)-CREA$"
+phase = "creation"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN20-(COMENQ|MISINF)-NOMIN$"
+phase = "nomination"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^AN20(-COMENQ|-MISINF)?-RAPPORT$"
+phase = "rapport"
+role = "conclut"
+
+# ---------- AN : lectures ----------
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-DEPOT$"
+phase = "cmp"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-DEPOT$"
+phase = "depot"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-COM-CAE-RAPPORT$"
+phase = "commission_ae"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-COM-CAE"
+phase = "commission_ae"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-COM-RAPPORT"
+phase = "cmp"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-COM-FOND-RAPPORT$"
+phase = "commission"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-DEBATS(-AN|-SN)?-DEC$"
+phase = "seance"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-DEBATS"
+phase = "seance"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-DEC$"
+phase = "cmp"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CMP-"
+phase = "cmp"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-COM"
+phase = "commission"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-DEBATS-DEC$"
+phase = "seance"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "-DEBATS"
+phase = "seance"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CC-CONCLUSION$"
+phase = "cc"
+role = "conclut"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^CC-"
+phase = "cc"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "AN"
+motif = "^PROM-PUB$"
+phase = "promulgation"
+role = "conclut"
+
+# ---------- Sénat (DOSLEG) : loi ----------
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-PROCACC$"
+phase = "depot"
+role = "deviation"
+deviation = "procedure_acceleree"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-ETAT-05$"
+phase = "etat"
+role = "deviation"
+deviation = "caducite"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-ETAT-06$"
+phase = "etat"
+role = "deviation"
+deviation = "retrait"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-ETAT-02$"
+phase = "etat"
+role = "deviation"
+deviation = "fusion"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-CC-SAISINE$"
+phase = "cc"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-CC$"
+phase = "cc"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-PROM$"
+phase = "promulgation"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-JO$"
+phase = "jo"
+role = "conclut"
+
+# ---------- Sénat (DOSLEG) : lectures ----------
+# Lectures `typleccod` : 1, 2, 3, 7 (4e) ; 4 = CMP ; 5 = nouvelle ; 6 = définitive ; 8 = Congrès ;
+# 9 = référendum. Assemblée : A, S, I (CMP).
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d$"
+phase = "lecture"
+role = "annexe"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "-REPRIS$"
+phase = "depot"
+role = "annexe"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-8-"
+phase = "congres"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-9-"
+phase = "referendum"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-4-I-"
+phase = "cmp"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(15|24)$"
+phase = "retrait"
+role = "deviation"
+deviation = "retrait"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(12|32)$"
+phase = "seance"
+role = "deviation"
+deviation = "irrecevabilite"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT13$"
+phase = "seance"
+role = "deviation"
+deviation = "motion_procedure"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT10$"
+phase = "seance"
+role = "deviation"
+deviation = "retrait_ordre_du_jour"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(0|1|3|4|38|46)$"
+phase = "depot"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT35$"
+phase = "commission"
+role = "ouvre"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(23|25|28|29|30|33|36|48)$"
+phase = "commission"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-RAP$"
+phase = "commission"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(17|26)$"
+phase = "seance"
+role = "conclut"
+deviation = "engagement_responsabilite"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(27|31)$"
+phase = "seance"
+role = "conclut"
+deviation = "motion_procedure"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-TXT(2|5|6|7|8|9|11|14|16|18|19|20|21|22|34|37|39|40|41|42|43|44|45|47)$"
+phase = "seance"
+role = "conclut"
+
+[[correspondance]]
+systeme = "SENAT"
+motif = "^DOSLEG-\\d-[ASI]-SEANCE$"
+phase = "seance"
+role = "ouvre"

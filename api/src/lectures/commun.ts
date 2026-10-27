@@ -103,26 +103,18 @@ export function parmiFacultatif<T extends string>(valeur: unknown, vocabulaire: 
   return valeur === undefined || valeur === null ? undefined : parmi(valeur, vocabulaire, nom);
 }
 
-/** Cases des gabarits de parcours (`lecture.parcours_gabarit.cle`). */
-export const CASES: Record<CleCase, true> = {
-  depot: true,
-  commission_1_o: true,
-  seance_1_o: true,
-  commission_1_s: true,
-  seance_1_s: true,
-  lecture_1_o: true,
-  lecture_1_s: true,
-  lecture_2_o: true,
-  lecture_2_s: true,
-  cmp: true,
-  conclusions_cmp: true,
-  nouvelle_lecture: true,
-  lecture_definitive: true,
-  cc: true,
-  promulgation: true,
-  jo: true,
-  promulgation_jo: true,
-};
+/**
+ * Clé d'étape d'un modèle de parcours (`canon.parcours_etape.cle`) : les étapes viennent des
+ * modèles (opendata/parcours/), seule la forme est vérifiée ici ; une clé qu'aucun modèle du
+ * dossier ne porte donne une fiche introuvable (404).
+ */
+export function cleEtape(valeur: unknown, nom: string): CleCase {
+  if (typeof valeur !== 'string' || !/^[a-z0-9_]{1,60}$/.test(valeur)) throw new RequeteInvalide(`${nom} inconnu : ${String(valeur)}`);
+  return valeur;
+}
+
+export const cleEtapeFacultative = (valeur: unknown, nom: string): CleCase | undefined =>
+  valeur === undefined || valeur === null ? undefined : cleEtape(valeur, nom);
 
 // ---------- Barre du dossier ----------
 

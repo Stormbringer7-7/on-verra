@@ -2,7 +2,20 @@
 // cases visibles de la barre de parcours, état final d'un parcours terminé, texte d'une synthèse
 // absente (une seule mention pour toute une liste).
 
-import type { CaseCompacte, CleCase, EtatCase, EtatDossier, Lien, Provenance, Synthese } from '@/core';
+import type {
+  CaseCompacte,
+  CaseParcours,
+  CleCase,
+  DeviationParcours,
+  DossierLie,
+  EffetDeviation,
+  EtatCase,
+  EtatDossier,
+  Lien,
+  Parcours,
+  Provenance,
+  Synthese,
+} from '@/core';
 import { date } from '../../format';
 
 // ---------- Liens ----------
@@ -89,6 +102,9 @@ const ETATS_FINAUX: Partial<Record<EtatDossier, string>> = {
   rejete: 'Rejeté',
   retire: 'Retiré',
   caduc: 'Caduc',
+  fusionne: 'Fusionné',
+  irrecevable: 'Irrecevable',
+  rapport_publie: 'Rapport publié',
 };
 
 /**
@@ -114,14 +130,125 @@ export function etatFinal(cases: CaseDatee[], etat: EtatDossier | null = null): 
 
 /**
  * « Étape actuelle : CMP · vous êtes : Commission AN » (ce qui est connu seulement) ; sans étape
- * courante, l'état final du dossier s'il est terminé (« Promulgué le 12/03/2026 »).
+ * courante, l'étape attendue (« Étape attendue : Lecture définitive AN »), sinon l'état final du
+ * dossier s'il est terminé (« Promulgué le 12/03/2026 »).
  */
 export function legendeBarre(cases: CaseDatee[], ici?: CleCase | null, etat: EtatDossier | null = null): string | null {
   const courante = cases.find((c) => c.courante);
+  const attendue = courante ? undefined : cases.find((c) => c.attendue);
   const active = ici ? cases.find((c) => c.cle === ici) : undefined;
   const morceaux = [
-    courante ? `Étape actuelle : ${courante.libelle}` : etatFinal(cases, etat),
+    courante ? `Étape actuelle : ${courante.libelle}` : attendue ? `Étape attendue : ${attendue.libelle}` : etatFinal(cases, etat),
     active && active.cle !== courante?.cle ? `vous êtes : ${active.libelle}` : null,
   ].filter((m): m is string => m !== null);
   return morceaux.length ? morceaux.join(' · ') : null;
 }
+
+// ---------- Rail du parcours (fiche Dossier) ----------
+
+/** Jours entre deux dates ISO (AAAA-MM-JJ). */
+export const joursEntre = (de: string, a: string) => Math.round((Date.parse(a) - Date.parse(de)) / 86_400_000);
+
+/** « 1 jour », « 12 jours », « 5 semaines », « 4 mois ». */
+export function dureeLisible(jours: number): string {
+  if (jours < 14) return `${jours} jour${jours > 1 ? 's' : ''}`;
+  if (jours < 70) return `${Math.round(jours / 7)} semaines`;
+  return `${Math.round(jours / 30.4)} mois`;
+}
+
+/** Ce que fait une déviation au parcours de droit commun, en clair. */
+export const EFFET_DEVIATION: Record<EffetDeviation, string> = {
+  rejoint: 'Détour, puis retour au parcours',
+  termine: 'Fin du parcours',
+  remplace: 'Remplace l’issue de l’étape',
+  suspend: 'Parcours suspendu',
+};
+
+/** Nature d'une étape dans le droit commun, quand elle n'est pas obligatoire. */
+export const NATURE_ETAPE = { obligatoire: null, conditionnelle: 'Conditionnelle', facultative: 'Facultative' } as const;
+
+/**
+ * Les dates d'une étape, en clair. `jour` : jour de référence de la projection ; `depuis` : fin
+ * de la dernière étape faite, pour l'étape attendue (« En attente depuis 13 jours »).
+ */
+export function quandEtape(c: CaseParcours, jour: string, depuis: string | null = null): string {
+  if (c.etat === 'sans_objet') return 'Sans objet';
+  if (c.attendue) return depuis ? `En attente depuis ${dureeLisible(Math.max(0, joursEntre(depuis, jour)))}` : 'Étape attendue';
+  if (c.etat === 'a_venir') return c.programmeeLe ? `Programmée le ${date(c.programmeeLe)}` : 'À venir';
+  if (c.etat === 'inconnu') return 'Donnée non publiée';
+  if (c.etat === 'en_cours') return c.debut ? `Depuis le ${date(c.debut)} · ${dureeLisible(Math.max(0, joursEntre(c.debut, jour)))}` : 'En cours';
+  if (c.debut && c.fin && c.fin !== c.debut) return `Du ${date(c.debut)} au ${date(c.fin)} · ${dureeLisible(joursEntre(c.debut, c.fin) + 1)}`;
+  const le = c.fin ?? c.debut;
+  return le ? `Le ${date(le)}` : 'Dates non publiées';
+}
+
+/** Trait du rail sous une étape, vers la suivante montrée : plein (fait), pointillé (à venir), aucun. */
+export type TraitRail = 'plein' | 'pointille' | 'aucun';
+
+export type LigneRail =
+  | { type: 'etape'; etape: CaseParcours; quand: string; nature: string | null; trait: TraitRail }
+  | { type: 'attente'; libelle: string; trait: TraitRail }
+  | { type: 'deviation'; deviation: DeviationParcours; effet: string; premiere: boolean; derniere: boolean; trait: TraitRail }
+  | { type: 'branche'; libelle: string; vers: string; trait: TraitRail }
+  | { type: 'enfants'; etape: CleCase; dossiers: DossierLie[]; trait: TraitRail };
+
+/** Attente montrée entre deux étapes à partir d'une semaine. */
+const ATTENTE_MONTREE = 7;
+
+/**
+ * Lignes du rail, de haut en bas : chaque étape du modèle (les sans objet seulement quand on
+ * compare au droit commun), l'attente avant elle (une semaine ou plus), puis les déviations qui ont
+ * lieu à cette étape (un seul niveau de décalage), les branches du droit commun prises depuis elle,
+ * et les dossiers rattachés. Une déviation qui termine ne revient pas au rail.
+ */
+export function lignesRail(parcours: Parcours, comparer = false): LigneRail[] {
+  const montrees = parcours.cases.filter((c) => comparer || c.etat !== 'sans_objet');
+  const jour = parcours.dateReference;
+  const derniereFaite = [...parcours.cases].reverse().find((c) => c.etat === 'faite');
+  const depuis = derniereFaite ? (derniereFaite.fin ?? derniereFaite.debut) : null;
+  const traitVers = (suivante: CaseParcours | undefined): TraitRail => {
+    if (!suivante) return 'aucun';
+    return ['faite', 'en_cours', 'inconnu'].includes(suivante.etat) ? 'plein' : 'pointille';
+  };
+  const lignes: LigneRail[] = [];
+  let precedente: CaseParcours | null = null;
+  montrees.forEach((c, i) => {
+    const trait = traitVers(montrees[i + 1]);
+    if (precedente && c.etat !== 'sans_objet') {
+      const de = precedente.fin ?? precedente.debut;
+      const a = c.debut ?? c.fin;
+      if (de && a && joursEntre(de, a) >= ATTENTE_MONTREE) {
+        lignes.push({ type: 'attente', libelle: `${dureeLisible(joursEntre(de, a))} d’attente`, trait: 'plein' });
+      }
+    }
+    lignes.push({ type: 'etape', etape: c, quand: quandEtape(c, jour, depuis), nature: NATURE_ETAPE[c.nature], trait });
+    const deviations = parcours.deviations.filter((d) => d.etape === c.cle);
+    deviations.forEach((d, j) =>
+      lignes.push({
+        type: 'deviation',
+        deviation: d,
+        effet: EFFET_DEVIATION[d.effet],
+        premiere: j === 0,
+        derniere: j === deviations.length - 1,
+        trait: j === deviations.length - 1 && d.effet === 'termine' ? 'aucun' : trait,
+      }),
+    );
+    parcours.branches
+      .filter((b) => b.de === c.cle)
+      .forEach((b) => {
+        const vers = parcours.cases.find((x) => x.cle === b.vers);
+        lignes.push({ type: 'branche', libelle: b.libelle, vers: vers ? `Puis directement : ${vers.libelle}` : 'Fin du parcours', trait });
+      });
+    const enfants = parcours.enfants.filter((e) => e.etape === c.cle);
+    if (enfants.length) lignes.push({ type: 'enfants', etape: c.cle, dossiers: enfants, trait });
+    if (c.etat !== 'sans_objet') precedente = c;
+  });
+  return lignes;
+}
+
+/** « 4 dossiers rattachés », « 1 dossier rattaché ». */
+export const nombreRattaches = (n: number) => `${n} dossier${n > 1 ? 's' : ''} rattaché${n > 1 ? 's' : ''}`;
+
+/** « Événement de : Projet de loi de finances pour 2026 · Nouvelle lecture ». */
+export const evenementDe = (parent: DossierLie) =>
+  `Événement de : ${parent.dossier.titre}${parent.etapeLibelle ? ` · ${parent.etapeLibelle}` : ''}`;

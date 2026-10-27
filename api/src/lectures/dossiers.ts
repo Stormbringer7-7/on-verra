@@ -5,7 +5,7 @@
 import type { EtatDossier, Origine, SortAmendement } from '@contrat/domain/model';
 
 import {
-  CASES,
+  cleEtape,
   type Handlers,
   type LecturesDeps,
   Introuvable,
@@ -37,6 +37,9 @@ export const ETATS: Record<EtatDossier, string> = {
   rejete: 'Rejetés',
   retire: 'Retirés',
   caduc: 'Caducs',
+  fusionne: 'Fusionnés',
+  irrecevable: 'Irrecevables',
+  rapport_publie: 'Rapports publiés',
 };
 export const ORIGINES: Record<Origine, string> = { gouvernement: 'Gouvernement', parlementaire: 'Parlementaires' };
 const SORTS: Record<SortAmendement, true> = {
@@ -122,7 +125,7 @@ export function lecturesDossiers({ depots, synthetiseur, horloge }: LecturesDeps
 
     ConsulterEtape: async ({ dossier, cle }) => {
       texte(dossier, 'Identifiant du dossier');
-      parmi(cle, CASES, 'Case du parcours');
+      cleEtape(cle, 'Case du parcours');
       const etape = trouve(await dossiers.etape(dossier, cle), 'Étape');
       const [barre, votes, quiIntervient] = await Promise.all([
         barreObligatoire(depots, dossier, cle),

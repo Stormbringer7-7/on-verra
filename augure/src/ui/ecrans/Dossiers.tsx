@@ -10,7 +10,8 @@ import { useAller } from '../../navigation';
 import { Label, Puce, T } from '../components/base';
 import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
-import { PointsParcours } from '../components/dossiers/BarreDossier';
+import { BarreCompacte } from '../components/commun/BarreParcours';
+import { evenementDe, legendeBarre } from '../components/commun/statuts';
 import { Avertissement, Colonnes, Ligne, Pagination, Requete, TitreEcran } from '../components/dossiers/blocs';
 import { entreeDossiers, etatDossier } from '../components/dossiers/presentation';
 import { date, titreOfficielDistinct } from '../format';
@@ -108,10 +109,14 @@ function LigneDossier({ dossier: d }: { dossier: DossierResume }) {
       {d.titreEnClair !== null && titreOfficielDistinct(d.titreEnClair, d.titreOfficiel) && (
         <T variant="caption" ton="inkMuted">{d.titreOfficiel}</T>
       )}
+      {d.parent && <T variant="caption" couleur={p.inkQuote}>{evenementDe(d.parent)}</T>}
       {d.barre.length > 0 ? (
-        <PointsParcours cases={d.barre} />
+        <>
+          <BarreCompacte cases={d.barre} />
+          {legendeBarre(d.barre, null, d.etat) && <T variant="caption" ton="inkSoft">{legendeBarre(d.barre, null, d.etat)}</T>}
+        </>
       ) : (
-        <T variant="caption" ton="inkMuted">Pas de barre de parcours pour ce type de texte.</T>
+        <T variant="caption" ton="inkMuted">Pas de parcours publié pour ce dossier.</T>
       )}
       <T variant="caption" ton="inkMuted">
         {d.dernierEvenement

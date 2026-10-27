@@ -14,6 +14,8 @@ périmées, elles faussent les plans de l'API (jointures estimées à 7 000 lign
 import re
 from pathlib import Path
 
+from .... import parcours
+
 PROJECTIONS = Path(__file__).resolve().parents[3] / "projections"
 SCHEMA = "lecture"
 CHANTIER = "lecture_nouveau"
@@ -32,6 +34,8 @@ class ProjecteurPostgres:
 
     def projeter(self) -> dict[str, int]:
         with self.cx.transaction():
+            # Modèles de parcours (opendata/parcours/) : relus à chaque projection, avant celles qui les lisent.
+            parcours.charger(self.cx)
             self.analyser("canon")
             self.cx.execute(f"DROP SCHEMA IF EXISTS {CHANTIER} CASCADE")
             self.cx.execute(f"CREATE SCHEMA {CHANTIER}")

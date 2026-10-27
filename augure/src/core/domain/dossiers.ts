@@ -20,14 +20,26 @@ import type {
   Synthese,
 } from './commun';
 import type { InterventionExtrait, Intervenant } from './discussions';
-import type { CaseCompacte, CaseParcours, CleCase, EtatCase, Echeance, Parcours, Procedure } from './parcours';
+import type { CaseCompacte, CaseParcours, CleCase, DeviationParcours, DossierLie, EtatCase, Echeance, Parcours, Procedure } from './parcours';
 import type { ScrutinResume } from './scrutins';
 import type { LienInteret } from './transparence';
 
 // ---------- Vocabulaire ----------
 
-/** Où en est le texte (filtre « Où en est le texte »). */
-export type EtatDossier = 'en_cours' | 'adopte' | 'promulgue' | 'rejete' | 'retire' | 'caduc';
+/**
+ * Où en est le dossier (filtre « Où en est le texte ») : issue de son parcours
+ * (`lecture.parcours_dossier_synthese.issue`), jamais un échec supposé.
+ */
+export type EtatDossier =
+  | 'en_cours'
+  | 'adopte'
+  | 'promulgue'
+  | 'rejete'
+  | 'retire'
+  | 'caduc'
+  | 'fusionne'
+  | 'irrecevable'
+  | 'rapport_publie';
 /** Qui l'a proposé (`canon.dossier.initiative`). */
 export type Origine = 'gouvernement' | 'parlementaire';
 export type NatureTexte = 'projet' | 'proposition';
@@ -89,6 +101,8 @@ export interface DossierResume {
   prochaineEcheance: Echeance | null;
   /** Dernier acte publié du parcours (« Conseil constitutionnel saisi le 17/10/2026 »). */
   dernierEvenement: { date: string; libelle: string } | null;
+  /** Dossier dont celui-ci est un événement (« Événement de : … · étape »), sinon null. */
+  parent: DossierLie | null;
 }
 
 export interface Accueil {
@@ -301,6 +315,11 @@ export interface FicheEtape {
   votes: ScrutinResume[];
   quiIntervient: { intervenants: Intervenant[]; total: number };
   documents: DocumentOfficiel[];
+  /** Déviations qui ont lieu à cette étape. */
+  deviations: DeviationParcours[];
+  /** Dossiers rattachés à cette étape (un 49.3 rattaché à la séance). */
+  enfants: DossierLie[];
+  /** Étapes voisines affichées (les étapes sans objet sont sautées). */
   precedente: { cle: CleCase; libelle: string } | null;
   suivante: { cle: CleCase; libelle: string } | null;
 }

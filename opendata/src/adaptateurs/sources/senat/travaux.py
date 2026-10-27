@@ -18,7 +18,6 @@ Références, toutes explicites :
 Les dumps complètent leurs clés d'espaces : elles sont nettoyées avant toute jointure.
 """
 
-import html
 import re
 
 from ....chargement import Document, Flux, charger
@@ -103,11 +102,6 @@ class Referentiel:
         return self.amendement_par_numero.get((signet, re.sub(r"\D", "", numero)), []) if signet else []
 
 
-def texte_html(x: str | None) -> str | None:
-    """« <body><p>Alin&#233;a 3…</p></body> » : gardé en HTML, entités décodées."""
-    return html.unescape(x) if x else None
-
-
 def article_vise(a: dict, ref: Referentiel) -> tuple[str, str | None]:
     """Mêmes natures que pour l'AN (`an.amendements.article_vise`) : (« article », numéro), une
     absence voulue (« additionnel », « intitule », « division », « sans_division ») ou « illisible »."""
@@ -169,7 +163,7 @@ def amendement(doc: Document, ref: Referentiel):
         "article_suivi_id": suivi, "etape_id": an("acte", examinees[0]) if len(examinees) == 1 else None,
         "division": ref.subdivisions.get(a["subid"]), "sort": SORTS.get(ref.sorts.get(a["sorid"]), "en_attente"),
         "sort_source": ref.sorts.get(a["sorid"]), "date_depot": jour(a["datdep"]),
-        "dispositif": texte_html(a["dis"]), "expose": texte_html(a["obj"])}, f"/amd/{a['id']}")
+        "dispositif": a["dis"], "expose": a["obj"]}, f"/amd/{a['id']}")
     avis = [{"emetteur": emetteur, "avis": AVIS[code], "avis_source": code}
             for emetteur, code in (("commission", a.get("avcid")), ("gouvernement", a.get("avgid"))) if code in AVIS]
     yield Dependants("avis_amendement", {"amendement_id": ident}, avis, f"/amd/{a['id']}")

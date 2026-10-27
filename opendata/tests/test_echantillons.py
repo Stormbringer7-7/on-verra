@@ -10,7 +10,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from src.echantillons.aplatir import nul, tables_de, texte_html
+from src.echantillons.aplatir import nul, tables_de
+from src.textes import texte_html
 from src.echantillons.base import ecrire, ouvrir, profil, type_de
 from src.echantillons.lecture import html_membre, reservoir, tables_dump, xml_dict
 
@@ -59,10 +60,20 @@ class Profil(unittest.TestCase):
 
 class Lecture(unittest.TestCase):
     def test_html_en_texte(self):
-        # Champ HTML de l'AN, compte rendu du Sénat (XHTML mal formé) : tous les nœuds texte, entités décodées.
-        self.assertEqual(texte_html("<p>M.&#160;Le&#160;Coq</p><p>Compl&#x00E9;ter</p>"), "M. Le Coq Compléter")
+        # Champ HTML de l'AN, compte rendu du Sénat (XHTML mal formé) : tous les nœuds texte, entités
+        # décodées, un alinéa par ligne ; encodage réparé.
+        self.assertEqual(texte_html("<p>M.&#160;Le&#160;<i>Coq</i></p><p>Compl&#x00E9;ter</p>"), "M. Le Coq\nCompléter")
         self.assertEqual(html_membre(b'<cri><link rel="a"><p>Texte</p></cri>'), {"texte": "Texte"})
-        self.assertEqual(texte_html("sans balise"), "sans balise")
+        self.assertEqual(texte_html("sans balise\n  ni entité"), "sans balise\n  ni entité")
+        self.assertEqual(texte_html("visant a&#768; mettre"), "visant à mettre")
+        self.assertEqual(texte_html("rÃ©forme"), "réforme")
+        # espace insécable perdue : réparé séquence par séquence
+        self.assertEqual(texte_html("visant Ã  soutenir la pÃ©rennitÃ© de lâ€˜artisanat"),
+                         "visant à soutenir la pérennité de l‘artisanat")
+        # HTML encodé deux fois
+        self.assertEqual(texte_html("&lt;p&gt;II.&amp;nbsp;– Compléter&lt;/p&gt;&lt;p&gt;Horizons &amp;amp; Indépendants&lt;/p&gt;"),
+                         "II. – Compléter\nHorizons & Indépendants")
+        self.assertEqual(texte_html("R&D, 5 €, Ça va, café « noir », État"), "R&D, 5 €, Ça va, café « noir », État")
 
     def test_xml_contenu_mixte_lu_comme_texte(self):
         d = xml_dict(b'<a x="1"><b>u</b><b>v</b><CONTENU>Premier<br/>second <i>mot</i></CONTENU></a>')

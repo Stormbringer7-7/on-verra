@@ -14,7 +14,7 @@ import { IndicateurVue } from '../components/commun/IndicateurVue';
 import { Signaler } from '../components/commun/Signaler';
 import { Source } from '../components/commun/Source';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Avertissement, Carte, Colonnes, LienExterne, Ligne, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { ExtraitVue, ListeInterets } from '../components/dossiers/elements';
 import { AVERTISSEMENT_POURQUOI, faitsDuVote, POSITION } from '../components/dossiers/presentation';

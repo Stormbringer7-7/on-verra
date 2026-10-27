@@ -150,7 +150,7 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
 
   // ----- Barre de parcours -----
 
-  it('parcours du projet agricole : 14 cases, celles de indicateurs.md (vide tant que la projection manque)', async () => {
+  it('parcours du projet agricole : 16 étapes du modèle loi ordinaire, celles de indicateurs.md (vide tant que la projection manque)', async () => {
     const p = await depot.parcours(agricole);
     const barre = (await depot.barre(agricole))!;
     expect(barre.dossier).toEqual({ id: agricole, titre: 'Projet de loi d’urgence pour la protection et la souveraineté agricoles' });
@@ -159,12 +159,19 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
       expect(barre.cases).toEqual([]);
       return;
     }
-    expect(p).toMatchObject({ procedure: 'acceleree', origine: 'AN', prochaineEcheance: null });
+    expect(p).toMatchObject({
+      modele: { cle: 'loi_ordinaire', famille: 'legislatif' }, procedure: 'acceleree', origine: 'AN', prochaineEcheance: null,
+      branches: [{ de: 'conclusions_cmp', vers: 'cc', libelle: 'Texte de la CMP adopté : fin de la navette' }],
+      parent: null, enfants: [],
+    });
+    // procédure accélérée : déviation au dépôt, le parcours reprend
+    expect(p!.deviations).toEqual([expect.objectContaining({ cle: 'procedure_acceleree', etape: 'depot', effet: 'rejoint' })]);
     const c = Object.fromEntries(p!.cases.map((x) => [x.cle, x]));
-    expect(p!.cases).toHaveLength(14);
-    expect(c.depot).toMatchObject({ etat: 'faite', debut: '2026-04-08', fin: '2026-04-08' });
+    expect(p!.cases).toHaveLength(16);
+    expect(c.depot).toMatchObject({ etat: 'faite', debut: '2026-04-08', fin: '2026-04-08', nature: 'obligatoire' });
     expect(c.commission_1_o).toMatchObject({ etat: 'faite', fin: '2026-05-07', libelle: 'Commission AN' });
     expect(c.seance_1_o).toMatchObject({ etat: 'faite', fin: '2026-06-02', conclusion: 'adopté' });
+    expect(c.transmission_1_s).toMatchObject({ etat: 'faite', debut: '2026-06-03', libelle: 'Transmission Sénat' });
     expect(c.seance_1_s).toMatchObject({ etat: 'faite', conclusion: 'modifié' });
     expect(c.lecture_2_o.etat).toBe('sans_objet');
     expect(c.cmp).toMatchObject({ etat: 'faite', debut: '2026-07-06', fin: '2026-07-17', conclusion: 'Accord' });
@@ -174,7 +181,7 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
     expect(c.cc.provenance).toEqual(expect.arrayContaining([expect.objectContaining({ systeme: 'CONSTIT', idNatif: '2026-914' })]));
     expect(c.promulgation).toMatchObject({ etat: 'faite', conclusion: 'Loi n° 2026-796' });
     expect(c.jo).toMatchObject({ etat: 'faite', debut: '2026-08-19', conclusion: 'JO n° 192' });
-    expect(p!.cases.filter((x) => x.etat !== 'sans_objet')).toHaveLength(10);
+    expect(p!.cases.filter((x) => x.etat !== 'sans_objet')).toHaveLength(11);
     expect(p!.cases.some((x) => x.courante)).toBe(false);
     // Chaque case faite porte la provenance des actes qui l'établissent.
     expect(p!.cases.filter((x) => x.etat === 'faite').every((x) => x.provenance.length > 0)).toBe(true);
@@ -184,22 +191,26 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
   it('parcours fin de vie : navette normale, CMP en désaccord, lecture définitive, loi 2026-794', async () => {
     const p = await depot.parcours(finDeVie);
     if (!projection) return expect(p).toBeNull();
-    expect(p).toMatchObject({ procedure: 'normale', origine: 'AN' });
+    expect(p).toMatchObject({ procedure: 'normale', origine: 'AN', deviations: [] });
     const c = Object.fromEntries(p!.cases.map((x) => [x.cle, x]));
-    expect(p!.cases).toHaveLength(11);
-    expect(c.lecture_1_s).toMatchObject({ etat: 'faite', conclusion: 'rejetée' });
+    expect(p!.cases).toHaveLength(16);
+    expect(c.seance_1_s).toMatchObject({ etat: 'faite', conclusion: 'rejetée' });
     expect(c.cmp).toMatchObject({ etat: 'faite', conclusion: 'Désaccord' });
+    // CMP en désaccord : branche du droit commun vers la nouvelle lecture
+    expect(p!.branches).toEqual([{ de: 'cmp', vers: 'nouvelle_lecture', libelle: 'CMP sans accord : nouvelle lecture' }]);
     expect(c.conclusions_cmp.etat).toBe('sans_objet');
     expect(c.nouvelle_lecture).toMatchObject({ etat: 'faite', conclusion: 'AN : adoptée · Sénat : rejetée' });
     expect(c.lecture_definitive).toMatchObject({ etat: 'faite', fin: '2026-07-15', conclusion: 'adoptée' });
-    expect(c.promulgation_jo).toMatchObject({ etat: 'faite', fin: '2026-08-19', conclusion: 'Loi n° 2026-794 · JO n° 192' });
+    expect(c.promulgation).toMatchObject({ etat: 'faite', fin: '2026-08-18', conclusion: 'Loi n° 2026-794' });
+    expect(c.jo).toMatchObject({ etat: 'faite', fin: '2026-08-19', conclusion: 'JO n° 192' });
   });
 
   it('étapes : une ligne par case affichée, avec son organe (vide sans projection)', async () => {
     const e = await depot.etapes(agricole);
     if (!projection) return expect(e).toEqual([]);
     expect(e.map((x) => x.cle)).toEqual([
-      'depot', 'commission_1_o', 'seance_1_o', 'commission_1_s', 'seance_1_s', 'cmp', 'conclusions_cmp', 'cc', 'promulgation', 'jo',
+      'depot', 'commission_1_o', 'seance_1_o', 'transmission_1_s', 'commission_1_s', 'seance_1_s', 'cmp', 'conclusions_cmp', 'cc',
+      'promulgation', 'jo',
     ]);
     expect(e.find((x) => x.cle === 'commission_1_o')?.organe?.nom).toBe('Commission des affaires économiques');
     expect(e.find((x) => x.cle === 'cc')?.organe?.nom).toBe('Conseil constitutionnel');
@@ -215,7 +226,7 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
       return;
     }
     expect(commission).toMatchObject({ numero: 2, organe: { nom: 'Commission des affaires économiques' }, resume: null });
-    expect(commission!.precedente).toEqual({ cle: 'depot', libelle: 'Dépôt' });
+    expect(commission!.precedente).toEqual({ cle: 'depot', libelle: 'Dépôt AN' });
     expect(commission!.suivante).toEqual({ cle: 'seance_1_o', libelle: 'Séance AN' });
     expect(commission!.documents.every((d) => d.provenance && d.provenance.idNatif)).toBe(true);
     expect(cc!.documents).toEqual(
@@ -223,10 +234,10 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
     );
     // Sans modification_article : origine jamais affirmée.
     if (!modifications) expect([...commission!.changements, ...cc!.changements].every((c) => c.origine.type === 'non_etablie')).toBe(true);
-    expect(await depot.etape(agricole, 'lecture_1_o')).toBeNull(); // case d'un autre gabarit
-    // 1re lecture AN de la PPL fin de vie : texte de la commission (BTC1364) puis texte adopté
-    // (BTA0122), cités par les actes de la case ; un changement par article.
-    const lecture = (await depot.etape(finDeVie, 'lecture_1_o'))!;
+    expect(await depot.etape(agricole, 'lecture_1_o')).toBeNull(); // clé d'aucune étape du modèle
+    // Séance AN de la PPL fin de vie : texte de la commission (BTC1364) puis texte adopté
+    // (BTA0122), cités par les actes de l'étape ; un changement par article.
+    const lecture = (await depot.etape(finDeVie, 'seance_1_o'))!;
     const ids = lecture.changements.map((c) => c.article.id);
     expect(new Set(ids).size).toBe(ids.length);
     const art13 = lecture.changements.find((c) => c.article.numero === '13');
@@ -368,7 +379,7 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
       expect(c['Étapes franchies']).toBeUndefined();
       expect(c['Durée d’examen']).toBeUndefined();
     } else {
-      expect(c['Étapes franchies']).toMatchObject({ valeur: 10, detail: 'sur 10 étapes' });
+      expect(c['Étapes franchies']).toMatchObject({ valeur: 11, detail: 'sur 11 étapes' });
       expect(c['Durée d’examen']).toMatchObject({ valeur: '133 jours', detail: 'du 08/04/2026 au 19/08/2026' });
     }
   });

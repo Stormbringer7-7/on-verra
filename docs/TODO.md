@@ -189,6 +189,10 @@ Relevé à l'intégration du 24/10/2026 ([contrat.md](contrat.md)).
 - [x] **Recherche v4** (25/10/2026) : `ChercherParFamilles` (6 familles, 21 déclinaisons comptées, numéros officiels exacts ou ambigus), contrat, fixtures, API mémoire et Postgres, écran. Toucher un résultat ouvre l'Explorer filtré, « Fiche » ouvre l'objet seul. Numéros 0,003 à 0,3 s, une déclinaison 0,3 à 0,7 s, parcourir 2 à 3 s.
   - [ ] Index plein texte des amendements (colonne `texte_recherche` + GIN), puis remettre le dispositif dans la recherche (aujourd'hui : numéro ou titre du dossier).
   - [ ] Étapes, personnes auditionnées, circonscriptions, rapports et déports dans la Recherche, quand leurs données existent.
+  - [x] **Expressions et personne** (27/10/2026) : plusieurs expressions exactes (puces retirables, cumulées) et un filtre personne (action « Filtrer » sur un député, un sénateur ou un ministre), par lien publié seulement ; les déclinaisons sans lien le disent (`horsPersonne`). Index plein texte des amendements et des questions (migration 0022). Copie complète : « Silence pour la France » + Jean-Philippe Tanguy 0,28 s, l'expression seule 0,22 s, Tanguy seul 0,41 s.
+  - [ ] Filtre personne pour les groupes (appartenance datée), les commissions (membres) et le lobbying (rapprochements vérifiés seulement) : à décider, le lien existe mais n'est pas « ce que la personne a fait ».
+  - [ ] Surlignage des formes accordées que la base trouve (plein texte français) : aujourd'hui seulement le mot pour mot ; `ts_headline` côté API, si besoin.
+  - [ ] Garder les expressions et la personne dans l'adresse de l'écran (partage d'une recherche).
 - [x] **Territoires** (lot 3, 25/10/2026), sans les codes postaux : département de chaque mandat (AN : AMO ; Sénat : `elusen.dptnum` → `dpt.dptcod`) ; projections `lecture.departement`, `elu_departement`, `carte_scrutin` (vue), `presence_elu`, `presence_departement` (année en cours, comparée au groupe) ; `ConsulterCarte`, `ConsulterDepartement` ; écrans Carte (vraie carte, présence AN, présence Sénat ou un vote) et Département.
   - [ ] Codes postaux → circonscriptions et `TrouverRepresentants` : source officielle à charger ; une commune partagée donne ses candidates.
   - [ ] Présence sur 12 mois glissants : index `(chambre, date)` sur `lecture.participation_scrutin` d'abord (aujourd'hui 2 min 24 s).
@@ -359,6 +363,53 @@ avec ses informations générales, pour explorer les faits qui l'entourent.
   `analytique`, pas dans `canon`. Plus tard, le port `Actualites` propose, un humain valide.
 - [ ] Touche : contrat (`FiltresFaits.moment`, familles, `FicheVisee`), migration et chargeur,
   dépôts pg et mémoire, fixtures avec des moments réels, écran de fiche.
+
+## Parcours des dossiers (intégré le 27/10/2026, tous les types)
+
+Parcours suivi comparé au droit commun du type de dossier, embranchement à chaque déviation.
+Modèles : `opendata/parcours/` ; règles et mesures : `opendata/docs/indicateurs.md`, « Parcours ».
+
+- [x] **Modèles en base, versionnés** : 20 modèles (législatif, résolutions, contrôle,
+  Gouvernement, autre) couvrant les 19 types de l'AN et les 24 `typloi` du Sénat ; écrits en TOML,
+  rechargés dans `canon.parcours_*` à chaque projection ; l'ancien gabarit (2 procédures, lois
+  seulement) est supprimé. Base entière : 14 880 dossiers, tous avec un modèle.
+- [x] **Correspondance source → modèle** (`correspondances.toml`) : aucun acte AN hors modèle ;
+  49 actes du Sénat hors modèle, hors racines de lecture (à revoir à la main).
+- [x] **Déviations, branches, hiérarchie** (`parcours_deviation`, `parcours_branche`,
+  `dossier_lien`) ; les 8 engagements 49.3 de la 17e rattachés à l'étape de leur texte.
+- [x] **Étapes des dossiers du Sénat** (DOSLEG : lectures, textes, rapports, séances, CC,
+  promulgation, état) : 11 526 dossiers, 97 914 étapes.
+- [x] **Jamais « échec » sans acte sourcé** ; issue du dossier calculée (`synthese.issue`).
+- [x] Contrat et API : clés d'étapes libres, modèle, déviations, branches, parent et enfants,
+  étape attendue, trois états de dossier en plus (fusionné, irrecevable, rapport publié).
+- [x] **Écrans** (canevas, pages 11 à 16) : rail du parcours sur la fiche Dossier (modèle et
+  fondement, « Comparer au droit commun », attentes, déviations en un seul décalage, branches,
+  dossiers rattachés dépliables, « Événement de »), fiche déviation, déviations et dossiers
+  rattachés sur la fiche Étape, barre compacte (étape attendue, icône de déviation dessinée),
+  rappel du dossier unique (`commun/RappelDossier`).
+- [ ] **Filtre « Type » de l'écran Dossiers** (canevas page 15) : `FiltreDossiers` n'a ni famille
+  ni modèle, et `lister` ne filtre que la législature, l'état et l'origine ; à ajouter au contrat
+  et à l'API (`lecture.dossier_modele`), avec les compteurs par type.
+- [ ] **Vote d'une motion de censure** : l'adaptateur AN ne lit pas `decision.libelle` des actes
+  `…-MOTION-VOTE` (« Motion rejetée ») ; l'étape « Vote » d'un 49.3 est faite sans conclusion, et son
+  issue tombe à « adopte » (étape sans rejet publié). À lire dans `an/dossiers.py`, puis vérifier
+  les issues du modèle « responsabilite_gouvernement ».
+- [ ] **Déployer** : migration 0021, puis `canon --relire --etapes senat.dossiers` (étapes du Sénat)
+  et les étapes touchées par le nettoyage HTML, puis `projeter`.
+- [ ] **Étape = forme complète** : durée d'attente entre étapes, documents entrant et sortant,
+  amendements (chantier des textes et « commits »).
+- [ ] **Hiérarchie au-delà du 49.3** : loi spéciale, ratification d'ordonnance, saisine du Conseil
+  constitutionnel : seulement par lien explicite publié (aucun trouvé pour l'instant).
+- [ ] **Versions des modèles** : une seule version par modèle (valable depuis 1958, ou depuis la
+  réforme qui crée la procédure) ; écrire les versions d'avant 2008 si l'écart compte à l'écran.
+- [ ] **Scrutins** (relevé sur l'échantillon 17e) : `seanceRef` 100 %, `dossierRef` 35 %, aucune
+  référence d'étape ; le lien étape → scrutin vient des actes (`voteRefs`). Seuls les scrutins
+  publics sont publiés : un vote à main levée n'a pas de scrutin, ce n'est pas un manque.
+- [ ] **Tableaux de bord** : une couche de requêtes type GraphQL (adaptateur de plus sur `lecture`)
+  pour explorer ; exposée aux utilisateurs seulement via des indicateurs déclarés (mesure,
+  dénominateur, période, « ce que la donnée ne dit pas »).
+- [ ] Ensuite : textes, articles, alinéas et « commits » par étape ; la vie de la loi (décrets
+  d'application, QPC) passe après.
 
 ## App (augure)
 

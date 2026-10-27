@@ -1,0 +1,21 @@
+# Loi organique : parcours de la loi ordinaire (`herite`), avec un contrôle du Conseil
+# constitutionnel obligatoire et un dernier mot de l'AN à la majorité absolue de ses membres
+# (vote conforme des deux chambres si la loi concerne le Sénat).
+
+cle = "loi_organique"
+version = 1
+herite = "loi_ordinaire"
+libelle = "Loi organique"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 46 (délais, majorité absolue en lecture définitive, vote conforme pour le Sénat) et 61, al. 1 (contrôle obligatoire)"
+types = ["Projet ou proposition de loi organique", "projet de loi organique", "proposition de loi organique"]
+
+[[etape]]
+cle = "lecture_definitive"
+libelle = "Lecture définitive AN (majorité absolue)"
+
+[[etape]]
+cle = "cc"
+nature = "obligatoire"

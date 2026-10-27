@@ -1,0 +1,61 @@
+# Référendum d'initiative partagée : proposition de loi d'un cinquième des parlementaires,
+# contrôle du Conseil constitutionnel, recueil des soutiens d'un dixième des électeurs (9 mois),
+# examen par chaque chambre dans les 6 mois, sinon référendum.
+
+cle = "referendum_initiative_partagee"
+version = 1
+libelle = "Référendum d'initiative partagée"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 2015-01-01
+fondement = "Constitution, art. 11, al. 3 à 6 (révision de 2008) ; loi organique du 6 décembre 2013, en vigueur le 1er janvier 2015"
+types = ["Proposition de loi présentée en application de l'article 11 de la Constitution", "proposition de loi en application de l'article 11"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt"
+phases = ["depot"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "cc"
+libelle = "Conseil constitutionnel"
+phases = ["cc"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "recueil"
+libelle = "Recueil des soutiens (9 mois)"
+phases = ["recueil"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "examen"
+libelle = "Examen par les deux chambres (6 mois)"
+phases = ["commission", "seance"]
+conclut = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+issue = "en_cours"
+
+[[etape]]
+cle = "referendum"
+libelle = "Référendum"
+phases = ["referendum"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+issue = "adopte"
+
+[[transition]]
+de = "cc"
+vers = "fin"
+condition = "non conforme|non-conformité"
+libelle = "Non conforme : fin de la procédure"

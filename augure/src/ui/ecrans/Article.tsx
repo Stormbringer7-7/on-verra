@@ -12,7 +12,7 @@ import type { Pages } from '../../navigation';
 import { Label, Segmente, T } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Carte, Colonnes, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { DiffTexte, OrigineVue } from '../components/dossiers/elements';
 import { CHAMBRE_COURTE, entreeArticle, titreOrigine } from '../components/dossiers/presentation';

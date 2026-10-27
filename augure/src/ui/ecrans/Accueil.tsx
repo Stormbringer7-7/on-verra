@@ -11,6 +11,7 @@ import { Action, Carte, Label, Puce, T, TitreEcran, TitreSection } from '../comp
 import { Puces } from '../components/fondations';
 import { BarreCompacte } from '../components/commun/BarreParcours';
 import { Signaler } from '../components/commun/Signaler';
+import { evenementDe } from '../components/commun/statuts';
 import { Chargement, Colonnes, Ecran, Erreur } from '../components/Ecran';
 import { LigneScrutin } from '../components/LigneScrutin';
 import { dateLongue, titreOfficielDistinct } from '../format';
@@ -34,6 +35,7 @@ function CarteDossier({ dossier: d }: { dossier: DossierResume }) {
         <Label style={styles.nature}>{natureDossier(d)}</Label>
         {statut && <Label couleur={p[statut.ton]}>{statut.libelle}</Label>}
       </View>
+      {d.parent && <T variant="caption" couleur={p.inkQuote}>{evenementDe(d.parent)}</T>}
       <T variant="card">{titre}</T>
       {officiel && (
         <T variant="small" ton="inkMuted">

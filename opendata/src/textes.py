@@ -7,8 +7,54 @@ articles : ce passage n'est pas couvert ici (il passera par Légifrance, en revu
 """
 
 import re
+import unicodedata
+from html.parser import HTMLParser
 
 from .domaine import IdentiteNative, Systeme
+
+_HTML = re.compile(r"</?[a-zA-Z][^<>]*>|&#?\w+;")
+# UTF-8 relu en Windows-1252 : « Ã© » pour « é », « â€™ » pour « ’ ». Seulement ces marqueurs, qui
+# n'existent pas en français : « Ã », « Â » ou « â€ » suivis d'octets de suite (0x80-0xBF tels que
+# Windows-1252 les affiche ; après « Ã », l'espace insécable de « à » est parfois devenue une espace).
+_SUITE = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”" \
+         "•–—˜™š›œžŸ -¿"
+_MOJIBAKE = re.compile(f"Ã[{_SUITE} ]|â€[{_SUITE}]|Â[ -¿]")
+# Un alinéa est un paragraphe : ces balises seules coupent la ligne.
+_LIGNE = {"p", "div", "li", "tr", "br"}
+
+
+def _relu(sequence: str) -> str:
+    try:
+        return sequence.replace(" ", "\xa0").encode("cp1252").decode("utf-8")
+    except UnicodeError:
+        return sequence
+
+
+def texte_html(s: str) -> str:
+    """Texte publié → texte propre : HTML parsé (tous les nœuds texte, entités décodées), un alinéa
+    par ligne, encodage réparé (UTF-8 lu en Windows-1252, accents décomposés). Sans balise ni
+    entité, seul l'encodage est réparé. HTML encodé deux fois (« &lt;p&gt; », « &amp;nbsp; ») :
+    parsé jusqu'à ce que le texte ne change plus."""
+    if _MOJIBAKE.search(s):
+        try:
+            s = s.encode("cp1252").decode("utf-8")
+        except UnicodeError:
+            s = _MOJIBAKE.sub(lambda m: _relu(m.group()), s)
+    for _ in range(3):
+        if not _HTML.search(s):
+            break
+        morceaux: list[str] = []
+        p = HTMLParser(convert_charrefs=True)
+        p.handle_data = morceaux.append
+        p.handle_starttag = p.handle_endtag = lambda balise, *_: morceaux.append("\n") if balise in _LIGNE else None
+        p.feed(s)
+        p.close()
+        lignes = (re.sub(r"[^\S\n]+", " ", l).strip() for l in "".join(morceaux).split("\n"))
+        propre = "\n".join(l for l in lignes if l)
+        if propre == s:
+            break
+        s = propre
+    return unicodedata.normalize("NFC", s)
 
 ORDINAUX = {"1er": "1", "premier": "1", "unique": "unique"}
 # Forme d'un numéro d'article : « 3 », « 3 bis », « 3 bis A », « 4 septies », « 1 A », « liminaire ».

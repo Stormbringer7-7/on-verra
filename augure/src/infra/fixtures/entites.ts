@@ -160,10 +160,12 @@ export const ART = {
 
 type Ligne = [CleCase, string, EtatCase, boolean?];
 const barre = (lignes: Ligne[]): CaseCompacte[] =>
-  lignes.map(([cle, libelle, etat, courante]) => ({ cle, libelle, etat, courante: courante ?? false }));
+  lignes.map(([cle, libelle, etat, courante]) => ({ cle, libelle, etat, courante: courante ?? false, attendue: false, deviation: false }));
+/** Barre dont l'étape `cle` porte une déviation. */
+const avecDeviation = (cle: CleCase, lignes: Ligne[]) => barre(lignes).map((c) => (c.cle === cle ? { ...c, deviation: true } : c));
 
-/** Procédure accélérée, CMP conclusive, Conseil constitutionnel saisi (en cours). */
-export const BARRE_ENERGIE = barre([
+/** Procédure accélérée (déviation au dépôt), CMP conclusive, Conseil constitutionnel saisi (en cours). */
+export const BARRE_ENERGIE = avecDeviation('depot', [
   ['depot', 'Dépôt', 'faite'],
   ['commission_1_o', 'Commission AN', 'faite'],
   ['seance_1_o', 'Séance AN', 'faite'],

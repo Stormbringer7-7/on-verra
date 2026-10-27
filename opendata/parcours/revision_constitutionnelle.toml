@@ -1,0 +1,64 @@
+# Révision de la Constitution : navette jusqu'au vote en termes identiques (ni CMP ni dernier
+# mot), puis Congrès (projet seulement, 3/5 des suffrages exprimés) ou référendum (obligatoire
+# pour une proposition). Pas de contrôle du Conseil constitutionnel.
+
+cle = "revision_constitutionnelle"
+version = 1
+herite = "loi_ordinaire"
+libelle = "Révision constitutionnelle"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 89"
+types = ["Projet ou proposition de loi constitutionnelle", "projet de loi constitutionnelle", "proposition de loi constitutionnelle"]
+retire = ["cmp", "conclusions_cmp", "nouvelle_lecture", "lecture_definitive", "cc"]
+
+[[etape]]
+cle = "congres"
+libelle = "Congrès du Parlement"
+phases = ["congres"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+apres = "lecture_n"
+issue = "adopte"
+
+[[etape]]
+cle = "referendum"
+libelle = "Référendum"
+phases = ["referendum"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+apres = "congres"
+issue = "adopte"
+
+[[transition]]
+de = "seance_1_s"
+vers = "congres"
+condition = "sans modification|conforme"
+libelle = "Adopté dans les mêmes termes : Congrès ou référendum"
+
+[[transition]]
+de = "lecture_2_o"
+vers = "congres"
+condition = "sans modification|conforme"
+libelle = "Adopté dans les mêmes termes : Congrès ou référendum"
+
+[[transition]]
+de = "lecture_2_s"
+vers = "congres"
+condition = "sans modification|conforme"
+libelle = "Adopté dans les mêmes termes : Congrès ou référendum"
+
+[[transition]]
+de = "lecture_n"
+vers = "congres"
+condition = "sans modification|conforme"
+libelle = "Adopté dans les mêmes termes : Congrès ou référendum"
+
+[[transition]]
+de = "congres"
+vers = "promulgation"
+condition = "adopt"
+libelle = "Adopté par le Congrès : pas de référendum"

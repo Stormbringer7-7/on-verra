@@ -64,14 +64,20 @@ type Detail = { lieu: Lieu | null; debut?: string; fin?: string; conclusion?: st
 function parcoursComplet(dossier: string, cases: CaseCompacte[], details: Partial<Record<CleCase, Detail>>): CaseParcours[] {
   return cases.map((c, i) => {
     const d = details[c.cle] ?? { lieu: null };
+    const facultative =
+      d.facultative ??
+      !['depot', 'commission_1_o', 'seance_1_o', 'transmission_1_s', 'commission_1_s', 'seance_1_s', 'promulgation', 'jo'].includes(c.cle);
     return {
       rang: i + 1,
       cle: c.cle,
       libelle: c.libelle,
       lieu: d.lieu,
-      facultative: d.facultative ?? !['depot', 'commission_1_o', 'seance_1_o', 'commission_1_s', 'seance_1_s', 'lecture_1_o', 'lecture_1_s', 'promulgation', 'jo', 'promulgation_jo'].includes(c.cle),
+      facultative,
+      nature: facultative ? (c.cle === 'cc' ? 'facultative' : 'conditionnelle') : 'obligatoire',
       etat: c.etat,
       courante: c.courante,
+      attendue: c.attendue,
+      deviation: c.deviation,
       debut: d.debut ?? null,
       fin: d.fin ?? null,
       programmeeLe: d.programmeeLe ?? null,
@@ -112,18 +118,47 @@ const CASES_LOCATION = parcoursComplet('DLR5L17N-location', BARRE_LOCATION, {
   promulgation_jo: { lieu: 'PR' },
 });
 
+const LOI_ORDINAIRE: Parcours['modele'] = {
+  cle: 'loi_ordinaire',
+  version: 1,
+  libelle: 'Loi ordinaire',
+  famille: 'legislatif',
+  fondement: 'Constitution, art. 39 à 45 (navette, CMP, dernier mot de l’AN), 61 (Conseil constitutionnel) et 10 (promulgation)',
+};
+
 export const PARCOURS_ENERGIE: Parcours = {
+  modele: LOI_ORDINAIRE,
   procedure: 'acceleree',
   origine: 'AN',
   cases: CASES_ENERGIE,
+  deviations: [
+    {
+      cle: 'procedure_acceleree',
+      libelle: 'Procédure accélérée',
+      fondement: 'Constitution, art. 45, al. 2 : CMP possible après une seule lecture dans chaque chambre',
+      etape: 'depot',
+      effet: 'rejoint',
+      debut: '2026-01-12',
+      conclusion: null,
+      provenance: [prov('AN', 'acte', 'DLR5L17N-energie-procacc')],
+    },
+  ],
+  branches: [],
+  parent: null,
+  enfants: [],
   dateReference: '2026-10-24',
   prochaineEcheance: null,
 };
 
 export const PARCOURS_LOCATION: Parcours = {
+  modele: LOI_ORDINAIRE,
   procedure: 'normale',
   origine: 'AN',
   cases: CASES_LOCATION,
+  deviations: [],
+  branches: [{ de: 'cmp', vers: 'nouvelle_lecture', libelle: 'CMP sans accord : nouvelle lecture' }],
+  parent: null,
+  enfants: [],
   dateReference: '2026-10-24',
   prochaineEcheance: {
     date: '2026-11-05',
@@ -164,6 +199,7 @@ const resume = (
     etapeCourante: courante ? { cle: courante.cle, libelle: courante.libelle, etat: courante.etat } : null,
     prochaineEcheance,
     dernierEvenement,
+    parent: null,
   };
 };
 
@@ -552,11 +588,18 @@ function voisines(cases: CaseCompacte[], cle: CleCase) {
   return { numero: i + 1, precedente: v(visibles[i - 1]), suivante: v(visibles[i + 1]) };
 }
 
+/** Déviations et dossiers rattachés à l'étape `cle` du parcours. */
+const rattache = (parcours: Parcours, cle: CleCase) => ({
+  deviations: parcours.deviations.filter((d) => d.etape === cle),
+  enfants: parcours.enfants.filter((e) => e.etape === cle),
+});
+
 export const ETAPES: Record<string, FicheEtape> = {
   'dossier-energie/commission_1_o': {
     barre: barreIci(D.energie, BARRE_ENERGIE, 'commission_1_o'),
     case: CASES_ENERGIE[1],
     ...voisines(BARRE_ENERGIE, 'commission_1_o'),
+    ...rattache(PARCOURS_ENERGIE, 'commission_1_o'),
     organe: AFFECO_AN,
     resume:
       'La commission réécrit le texte avant la séance. Elle relève l’objectif de renouvelables et étend les économies d’énergie aux collectivités.',
@@ -604,6 +647,7 @@ export const ETAPES: Record<string, FicheEtape> = {
     barre: barreIci(D.energie, BARRE_ENERGIE, 'seance_1_o'),
     case: CASES_ENERGIE[2],
     ...voisines(BARRE_ENERGIE, 'seance_1_o'),
+    ...rattache(PARCOURS_ENERGIE, 'seance_1_o'),
     organe: { id: 'assemblee-nationale', nom: 'Assemblée nationale' },
     resume:
       'Les 577 députés examinent le texte de la commission. Le calendrier des réacteurs est assoupli ; le texte est adopté par scrutin public.',
@@ -634,6 +678,7 @@ export const ETAPES: Record<string, FicheEtape> = {
     barre: barreIci(D.energie, BARRE_ENERGIE, 'cc'),
     case: CASES_ENERGIE[11],
     ...voisines(BARRE_ENERGIE, 'cc'),
+    ...rattache(PARCOURS_ENERGIE, 'cc'),
     organe: { id: 'conseil-constitutionnel', nom: 'Conseil constitutionnel' },
     resume:
       'Soixante députés demandent au Conseil constitutionnel de vérifier que la loi respecte la Constitution. La loi ne peut pas être promulguée avant sa décision.',
@@ -647,6 +692,7 @@ export const ETAPES: Record<string, FicheEtape> = {
     barre: barreIci(D.location, BARRE_LOCATION, 'lecture_1_o'),
     case: CASES_LOCATION[1],
     ...voisines(BARRE_LOCATION, 'lecture_1_o'),
+    ...rattache(PARCOURS_LOCATION, 'lecture_1_o'),
     organe: { id: 'assemblee-nationale', nom: 'Assemblée nationale' },
     resume: null,
     chiffres: [ch('Amendements déposés', 402), ch('Adoptés', 58), ch('Scrutins publics', 1)],
@@ -678,6 +724,7 @@ export const ETAPES: Record<string, FicheEtape> = {
     barre: barreIci(D.location, BARRE_LOCATION, 'cmp'),
     case: CASES_LOCATION[5],
     ...voisines(BARRE_LOCATION, 'cmp'),
+    ...rattache(PARCOURS_LOCATION, 'cmp'),
     organe: { id: 'cmp-location', nom: 'Commission mixte paritaire' },
     resume: null,
     chiffres: [ch('Membres', 14), ch('Résultat', 'Désaccord')],
@@ -696,6 +743,7 @@ export const ETAPES: Record<string, FicheEtape> = {
     barre: barreIci(D.location, BARRE_LOCATION, 'lecture_definitive'),
     case: CASES_LOCATION[8],
     ...voisines(BARRE_LOCATION, 'lecture_definitive'),
+    ...rattache(PARCOURS_LOCATION, 'lecture_definitive'),
     organe: { id: 'assemblee-nationale', nom: 'Assemblée nationale' },
     resume: null,
     chiffres: [],

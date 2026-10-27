@@ -23,10 +23,12 @@
 // quand il diffère (table vide, projection pas encore chargée) — l'adaptateur rend alors vide ou null.
 
 import type { DemandeGroupes, Nommes } from '@contrat/domain/explorer';
+import type { FiltresRecherche } from '@contrat/domain/familles';
 import type {
   AccuseSignalement,
   CompteRecherche,
   DeclinaisonRecherche,
+  GroupeRef,
   NumeroOfficiel,
   ResultatFamille,
   Chambre,
@@ -266,15 +268,16 @@ export interface DossiersRepository {
 
   /**
    * Où en est chaque texte non abouti de la législature (Où en sont les textes) ; null hors
-   * projection. Non abouti : ni JO (ou promulgation et JO) fait, ni retiré, ni rejeté en 1re
-   * lecture de la chambre de dépôt ou en lecture définitive. Position : la case active (faite ou
+   * projection. Textes : dossiers de la famille législative. Non abouti : issue du parcours en
+   * cours ou adopté (pas encore publié au JO), donc ni publié, ni rejeté, ni retiré, ni caduc, ni
+   * fusionné, ni irrecevable. Position : la case active (faite ou
    * en cours) de plus haut rang ; `en_examen` si elle est en cours avec un acte d'examen
    * (réunion, rapport, débat, décision, saisine du Conseil : un dépôt, un renvoi en commission ou
    * une nomination de rapporteur seuls ne suffisent pas), depuis son début ; sinon `en_attente`,
    * depuis son début si elle est en cours, depuis sa fin (à défaut son début) si elle est faite.
    * Hors Parlement, d'après les cases suivantes
    * qui ne sont pas `sans_objet` (le Conseil constitutionnel à venir, facultatif, est sauté) :
-   * case `cc` en cours → decision_cc ; suite promulgation ou promulgation_jo → promulgation ;
+   * case `cc` en cours → decision_cc ; suite promulgation → promulgation ;
    * promulgation faite, suite jo → publication_jo. Un texte sans case active est indéterminé.
    * Tables : lecture.parcours_dossier, lecture.parcours_dossier_synthese (date_reference, retire_le),
    * canon.dossier (legislature, initiative).
@@ -544,7 +547,11 @@ export interface RechercheRepository {
    * tous les objets de la législature), plafonné à PLAFOND_COMPTE. Mêmes règles de correspondance
    * que `chercherDeclinaison`.
    */
-  compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]): Promise<Partial<Record<DeclinaisonRecherche, CompteRecherche>>>;
+  compterFamilles(
+    q: string | null,
+    declinaisons: DeclinaisonRecherche[],
+    filtres?: FiltresRecherche,
+  ): Promise<Partial<Record<DeclinaisonRecherche, CompteRecherche>>>;
 
   /**
    * Une page des résultats d'une déclinaison, les plus pertinents d'abord (q null : les plus
@@ -554,8 +561,22 @@ export interface RechercheRepository {
    * commission_enquete, assemblee, departement), canon.personne, canon.fonction, canon.scrutin,
    * canon.amendement, canon.intervention (texte_recherche), canon.question,
    * canon.representant_interets, canon.action_representation, canon.declaration, canon.correspondance (INSEE).
+   *
+   * Filtres (`FiltresRecherche`, cumulés avec la requête) : chaque expression cherchée comme
+   * expression exacte (`phraseto_tsquery('french')`) dans le texte publié du résultat (intervention,
+   * amendement et question : index `texte_recherche` ; scrutin : titre ; lobbying : objet des
+   * actions ; objets : leur nom ou titre) ; la personne, par le lien publié de `LIEN_PERSONNE`
+   * (initiateur, la personne elle-même, vote nominatif, auteur, orateur, déclarant), jamais par le texte.
    */
-  chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination): Promise<Page<ResultatFamille>>;
+  chercherDeclinaison(
+    q: string | null,
+    declinaison: DeclinaisonRecherche,
+    pagination: Pagination,
+    filtres?: FiltresRecherche,
+  ): Promise<Page<ResultatFamille>>;
+
+  /** La personne d'un filtre, nommée pour sa puce (nom affiché, groupe actuel) ; null si inconnue. Tables : canon.personne. */
+  nommerPersonne(id: string): Promise<{ id: string; nom: string; groupe: GroupeRef | null } | null>;
 
   /**
    * Objets qui portent exactement ce numéro officiel (forme comparable, `numeroComparable`) :

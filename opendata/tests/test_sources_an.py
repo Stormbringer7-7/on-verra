@@ -146,6 +146,15 @@ class Dossiers(unittest.TestCase):
         d = next(iter(dossiers.dossier(doc(dossiers.DOSSIERS, projet))))
         self.assertEqual(d.valeurs["initiative"], "gouvernement")
 
+    def test_conclusion_d_un_vote_de_motion(self):
+        # DLR5L17N53597 : le vote sur la motion de censure porte `decision`, pas `statutConclusion`
+        motion = json.loads(json.dumps(self.DOSSIER))
+        motion["dossierParlementaire"]["actesLegislatifs"]["acteLegislatif"]["actesLegislatifs"]["acteLegislatif"].append(
+            {"@xsi:type": "DecisionMotionCensure_Type", "uid": "L17-VOTE", "codeActe": "AN1-MOTION-VOTE",
+             "dateActe": "2026-01-23T00:00:00.000+01:00", "decision": {"fam_code": "TSORTMOT02", "libelle": "Motion rejetée"}})
+        etapes = [e for e in dossiers.dossier(doc(dossiers.DOSSIERS, motion)) if isinstance(e, Objet) and e.type == "etape"]
+        self.assertEqual(etapes[-1].valeurs["conclusion"], "Motion rejetée")
+
     def test_liens_dedoublonnes(self):
         elements = list(dossiers.dossier(doc(dossiers.DOSSIERS, self.DOSSIER)))
         initiateurs = next(e for e in elements if isinstance(e, Dependants) and e.parent["nature"] == "initiateur")

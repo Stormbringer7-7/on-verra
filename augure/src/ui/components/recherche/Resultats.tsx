@@ -7,7 +7,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { FAMILLES_RECHERCHE, type FamilleComptee, type FamilleRecherche, type ResultatFamille, type SectionRecherche } from '@/core';
 import { useAller } from '../../../navigation';
 import { nombre } from '../../format';
-import { ficheDe, libelleCompte, ouverture, type Ouverture } from '../../recherche';
+import { DECLINAISONS_PERSONNES, ficheDe, libelleCompte, ouverture, surligner, type Ouverture } from '../../recherche';
 import { usePalette } from '../../theme/ThemeProvider';
 import { space } from '../../theme/tokens';
 import { BoutonSecondaire, Label, Ligne, Pastille, Puce, T } from '../base';
@@ -44,15 +44,45 @@ function useOuvrir() {
   };
 }
 
-export function Resultat({ r }: { r: ResultatFamille }) {
+/** Un titre, les expressions filtrées surlignées là où elles figurent mot pour mot. */
+function TitreSurligne({ titre, textes }: { titre: string; textes: readonly string[] }) {
+  const p = usePalette();
+  if (!textes.length) return <>{titre}</>;
+  return (
+    <>
+      {surligner(titre, textes).map((s, i) =>
+        s.surligne ? (
+          <T key={i} variant="text" style={{ backgroundColor: p.filtreSoft, color: p.ink }}>
+            {s.texte}
+          </T>
+        ) : (
+          s.texte
+        ),
+      )}
+    </>
+  );
+}
+
+export function Resultat({
+  r,
+  textes = [],
+  filtrerPersonne,
+}: {
+  r: ResultatFamille;
+  /** Expressions filtrées : surlignées dans le titre (l'extrait d'une intervention). */
+  textes?: readonly string[];
+  /** Une personne : l'action « Filtrer » pose le filtre personne sur elle. */
+  filtrerPersonne?(r: ResultatFamille): void;
+}) {
   const ouvrir = useOuvrir();
   const o = ouverture(r);
+  const filtrable = filtrerPersonne && DECLINAISONS_PERSONNES.includes(r.declinaison);
   const contenu = (
     <>
       {r.groupe && <Pastille couleur={r.groupe.couleur} />}
       <View style={styles.resultat}>
         <T variant="text" style={styles.titre}>
-          {r.titre}
+          <TitreSurligne titre={r.titre} textes={textes} />
         </T>
         <T variant="small" ton="inkMuted">
           {r.contexte}
@@ -75,11 +105,16 @@ export function Resultat({ r }: { r: ResultatFamille }) {
       {contenu}
     </Ligne>
   );
-  if (!fiche) return ligne;
+  if (!fiche && !filtrable) return ligne;
   return (
     <View style={styles.avecFiche}>
       <View style={styles.ligneSouple}>{ligne}</View>
-      <BoutonSecondaire onPress={() => ouvrir(fiche)}>Fiche</BoutonSecondaire>
+      {filtrable && (
+        <BoutonSecondaire onPress={() => filtrerPersonne(r)} accessibilityLabel={`Filtrer la recherche sur ${r.titre}`}>
+          Filtrer
+        </BoutonSecondaire>
+      )}
+      {fiche && <BoutonSecondaire onPress={() => ouvrir(fiche)}>Fiche</BoutonSecondaire>}
     </View>
   );
 }
@@ -109,7 +144,21 @@ export function PucesFamilles({
   );
 }
 
-export function Section({ s, detail, voirTout, page }: { s: SectionRecherche; detail: boolean; voirTout(): void; page(n: number): void }) {
+export function Section({
+  s,
+  detail,
+  voirTout,
+  page,
+  textes,
+  filtrerPersonne,
+}: {
+  s: SectionRecherche;
+  detail: boolean;
+  voirTout(): void;
+  page(n: number): void;
+  textes?: readonly string[];
+  filtrerPersonne?(r: ResultatFamille): void;
+}) {
   const p = usePalette();
   const r = s.resultats;
   const total = r.total ?? null;
@@ -127,7 +176,7 @@ export function Section({ s, detail, voirTout, page }: { s: SectionRecherche; de
         </T>
       </View>
       {r.elements.map((x) => (
-        <Resultat key={`${x.declinaison}:${x.id}`} r={x} />
+        <Resultat key={`${x.declinaison}:${x.id}`} r={x} textes={textes} filtrerPersonne={filtrerPersonne} />
       ))}
       {!detail && (r.suivante !== null || (total !== null && total > r.elements.length)) && (
         <Pressable accessibilityRole="button" onPress={voirTout} style={styles.plus}>

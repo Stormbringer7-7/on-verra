@@ -17,7 +17,7 @@ import { Signaler } from '../components/commun/Signaler';
 import { Source } from '../components/commun/Source';
 import { aucuneSynthese, PAS_DE_SYNTHESE } from '../components/commun/statuts';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Carte, Colonnes, LienExterne, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { Hemicycle } from '../components/dossiers/Hemicycle';
 import { adresseAncre, CHAMBRE_COURTE, LIEU } from '../components/dossiers/presentation';

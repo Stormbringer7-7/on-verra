@@ -12,7 +12,7 @@ import { Action, Label, Pastille, T } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
 import { Source } from '../components/commun/Source';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { BarreDossierVue } from '../components/dossiers/BarreDossier';
+import { BarreDossierVue } from '../components/commun/RappelDossier';
 import { Avertissement, Carte, Colonnes, Ligne, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { DiffTexte, ExtraitVue, LigneScrutin, ListeInterets } from '../components/dossiers/elements';
 import { nomAuteur, personneAuteur, sortAmendement, texteDuHtml } from '../components/dossiers/presentation';

@@ -52,152 +52,157 @@ Présences publiées par l'agenda pour chaque réunion : présent, excusé, abse
 commission et année : réunions, présences, excusés, absences, taux, et **taux moyen de la même
 commission la même année**, comme point de comparaison. « Excusé » n'est pas « absent ».
 
-## Parcours d'un dossier de loi (barre de l'écran Dossier)
+## Parcours d'un dossier (tous les types)
 
-`lecture.parcours_gabarit`, `lecture.parcours_acte`, `lecture.parcours_dossier`,
-`lecture.parcours_dossier_synthese` — requêtes : `src/projections/45_parcours_gabarit.sql`,
-`src/projections/55_parcours_dossier.sql`.
+`lecture.dossier_modele`, `lecture.dossier_sans_modele`, `lecture.parcours_acte`,
+`lecture.parcours_dossier`, `lecture.parcours_deviation`, `lecture.parcours_branche`,
+`lecture.dossier_lien`, `lecture.parcours_dossier_synthese` — requêtes :
+[`src/projections/45_parcours_acte.sql`](../src/projections/45_parcours_acte.sql),
+[`src/projections/55_parcours_dossier.sql`](../src/projections/55_parcours_dossier.sql).
 
-Le modèle stocke les **étapes réellement publiées** (`canon.etape`, une ligne par acte AN, typée
-d'après `@xsi:type` par [type_etape()](../src/adaptateurs/sources/an/dossiers.py#L48)). La barre est
-une projection : un **gabarit** selon la procédure, chaque case lue dans ces étapes, la décision du
-Conseil constitutionnel (`canon.decision_cc`) et la loi publiée (`canon.texte_publie`). Rien n'est
-supposé : une case sans preuve reste `inconnu`, jamais `faite`. Chaque case donne sa **provenance**
-(`provenance` : les `entite_id` canon qui l'établissent : étapes, décision, loi). Les entités
-retirées de la source sont ignorées.
+Le canon stocke les **actes réellement publiés** (`canon.etape`) : codes `codeActe` de l'AN
+(« AN1-COM-FOND-RAPPORT »), codes « DOSLEG-… » composés par l'adaptateur du Sénat pour les dossiers
+que l'AN ne cite pas ([dossiers.py](../src/adaptateurs/sources/senat/dossiers.py)). Le parcours
+est une projection : le **modèle de parcours** du type du dossier (le droit commun), chaque étape
+lue dans ces actes, la décision du Conseil constitutionnel (`canon.decision_cc`) et la loi publiée
+(`canon.texte_publie`). Rien n'est supposé : une étape sans preuve reste `inconnu`, jamais
+`faite` ; une donnée absente n'est jamais un échec. Chaque étape donne sa **provenance**.
 
-Périmètre : dossiers dont `type_procedure` commence par « Projet » ou « Proposition », hors loi
-constitutionnelle et article 11 (autre parcours : Congrès, référendum), avec une première lecture
-publiée (chambre de dépôt = celle de la première lecture). Sur la base réelle : 2 489 dossiers
-(198 accélérés, 2 291 en navette normale).
+### Modèles de parcours
 
-### Gabarits
+Écrits à la main d'après le droit dans [`opendata/parcours/`](../parcours/) (un fichier par modèle,
+le commit vaut décision humaine), chargés dans `canon.parcours_*` au début de chaque `projeter`
+([parcours.py](../src/parcours.py)). Un modèle : type(s) de dossier publiés (AN
+`procedureParlementaire`, Sénat `typloi`), version et dates de validité (une réforme = une
+nouvelle version), fondement juridique, étapes (phases d'actes reçues, lecture, côté de la
+navette, nature obligatoire / conditionnelle / facultative), transitions (branches du droit
+commun) et déviations possibles. Un modèle peut hériter d'un autre (`herite`).
 
-Les deux formes du design (canevas « Panoptique v2 », écran Dossier), complétées des cases que la
-procédure **peut** connaître ; le front n'affiche pas les cases `sans_objet`. `{o}` = chambre de
-dépôt, `{s}` = l'autre.
+20 modèles, en cinq familles :
 
-| Accélérée (`procedure_acceleree`) | Normale | Facultative | Conclue par (acte daté publié) |
-|---|---|---|---|
-| Dépôt | Dépôt | non | dépôt dans la chambre d'origine (`AN1-DEPOT`, `SN1-DEPOT`, accord `-ACIN`) |
-| Commission {o}, Séance {o} | 1re lecture {o} | non | commission : rapport de la commission saisie au fond (`…-COM-FOND-RAPPORT`) ; séance ou lecture : décision (`…-DEBATS-DEC`) |
-| Commission {s}, Séance {s} | 1re lecture {s} | non | idem dans l'autre chambre |
-| 2e lecture {o}, 2e lecture {s} | idem | oui | décision `AN2-`/`SN2-DEBATS-DEC` |
-| CMP | CMP | oui | décision de la CMP (`CMP-DEC` : « Accord », « Désaccord ») |
-| Vote du texte de la CMP | Vote du texte de la CMP | oui | décision de **chaque** chambre sur le texte de la CMP (`CMP-DEBATS-AN-DEC` et `-SN-DEC`), ou un rejet |
-| Nouvelle lecture | Nouvelle lecture | oui | décision de **chaque** chambre (`ANNLEC-`, `SNNLEC-DEBATS-DEC`) |
-| Lecture définitive AN | Lecture définitive AN | oui | décision `ANLDEF-DEBATS-DEC` |
-| Conseil constit. | Conseil constit. | oui | acte `CC-CONCLUSION`, ou décision du stock CONSTIT liée au dossier |
-| Promulgation, Journal officiel | Promulgation et JO | non | promulgation : acte `PROM-PUB` daté (ou date de signature Légifrance) ; JO : date de publication de la loi |
+| Famille | Modèles |
+|---|---|
+| législatif | loi ordinaire, loi organique, révision constitutionnelle, loi de finances, financement de la sécurité sociale, ratification d'un traité, référendum d'initiative partagée |
+| résolution | résolution, résolution européenne, modification du règlement, résolution (art. 34-1), Haute Cour, motion référendaire |
+| contrôle | commission d'enquête, mission d'information, rapport d'information, pétition, prérogatives d'une commission d'enquête |
+| gouvernement | responsabilité du Gouvernement (49.1, 49.2, 49.3) |
+| autre | allocution |
 
-Le design nomme « Lecture définitive » la lecture des conclusions de la CMP en procédure
-accélérée ; ce n'est pas une lecture définitive (article 45, alinéa 4 : dernier mot de l'AN après
-échec), d'où « Vote du texte de la CMP » (clé `conclusions_cmp`), décidé le 25/10/2026 : la case « Lecture définitive AN »
-reste réservée au dernier mot de l'AN, les deux pouvant figurer dans un même dossier (conclusions
-rejetées, puis nouvelle lecture). Il sépare Promulgation et JO en procédure accélérée et les réunit
-en navette : repris tel quel.
+Étapes de la loi ordinaire (`{o}` : chambre de dépôt, `{s}` : l'autre) : Dépôt {o}, Commission
+{o}, Séance {o}, Transmission {s}, Commission {s}, Séance {s}, 2e lecture {o}, 2e lecture {s},
+lectures suivantes, CMP, Vote du texte de la CMP, Nouvelle lecture, Lecture définitive AN,
+Conseil constitutionnel, Promulgation, Journal officiel. « Vote du texte de la CMP » (clé
+`conclusions_cmp`) n'est pas la lecture définitive (article 45, alinéa 4 : dernier mot de l'AN
+après échec), les deux pouvant figurer dans un même dossier.
 
-Rangement des actes (`lecture.parcours_acte`) : par chambre et lecture de l'acte (`AN1`, `SN2`,
-`ANNLEC`…, cf. `LECTURES` de l'adaptateur), et en procédure accélérée `…1-DEBATS…` pour la séance,
-le reste pour la commission (le dépôt de l'autre chambre y compris : le texte lui est transmis).
-Les actes `CMP-DEBATS`, `CMP-DGVT`, `CMP-MOTION` (49.3 sur le texte de la CMP) vont aux conclusions.
-Annexes non comptées : procédure accélérée, étude d'impact, avis du Conseil d'État, lettre
-rectificative. Hors gabarit (comptés dans `actes_hors_gabarit`) : lectures `unique`, `an20`…
+**Rangement des actes** (`lecture.parcours_acte`) : le code de chaque acte est lu par
+[`correspondances.toml`](../parcours/correspondances.toml) (premier motif qui correspond) : une
+phase (dépôt, commission, séance, CMP, CC…) et un rôle : `ouvre` (l'étape a commencé), `conclut`
+(l'acte qui la dit faite : rapport de la commission saisie au fond, décision), `annexe` (montré,
+sans effet), `deviation`. L'étape est la première du modèle qui reçoit cette phase, pour la
+lecture et la chambre de l'acte. Catégorie : `case`, `annexe`, `deviation`, ou `hors_modele` (code
+inconnu, phase qu'aucune étape ne reçoit, déviation que le modèle ne prévoit pas) : compté dans
+`actes_hors_modele`, jamais placé de force.
 
-### États d'une case
+**Déviations** (`lecture.parcours_deviation`) : un événement qui modifie le droit commun,
+rattaché à l'étape de l'acte classé qui le précède dans l'ordre publié. Effet : `rejoint` (le
+parcours reprend), `termine` (les étapes suivantes sont sans objet), `remplace`, `suspend` ;
+`effet_si` quand une conclusion correspond (49.3 : « Motion adoptée » termine). Procédure
+accélérée, 49.3, motion de procédure, retrait, retrait de l'ordre du jour, irrecevabilité,
+caducité, fusion.
+
+**Branches** (`lecture.parcours_branche`) : une transition du modèle prise par le dossier, quand
+la conclusion publiée d'une étape faite correspond à sa condition (« sans modification » : fin de
+la navette ; CMP sans accord : nouvelle lecture ; texte de la CMP adopté ; rejet en lecture
+définitive). Les étapes entre les deux sont sans objet. Ce n'est pas un événement.
+
+**Hiérarchie** (`lecture.dossier_lien`) : un dossier rattaché à l'étape d'un autre, par lien
+explicite seulement : un document publié dans le dossier enfant est cité par un acte du parent
+(un engagement de responsabilité 49.3 : sa déclaration `DECL…` est citée par le dossier du texte).
+`racine_id` (synthèse) : le dossier principal, en remontant les parents.
+
+### États d'une étape
 
 Jour de référence : la date du `projeter` (`date_reference`). Un acte daté **après** ce jour
 (séance inscrite à l'ordre du jour, l'AN les publie à l'avance) est une échéance, pas une preuve.
+Un état publié sans date (DOSLEG : caduc, retiré, fusionné) est un fait.
 
 | État | Définition |
 |---|---|
-| `faite` | l'acte qui conclut la case est publié et daté (au plus tard le jour de référence) |
-| `en_cours` | un acte daté de la case est publié, pas celui qui la conclut, et rien n'est publié après |
+| `faite` | assez d'actes conclusifs publiés et datés (2 pour le vote du texte de la CMP et la nouvelle lecture : les deux chambres), ou un rejet ; CC : décision du stock CONSTIT ; promulgation : acte daté ou loi publiée ; JO : date de publication |
+| `en_cours` | un acte de l'étape est publié, pas assez pour la conclure, et rien n'est publié après |
 | `a_venir` | aucun acte, et le parcours publié ne l'a pas dépassée |
-| `sans_objet` | n'aura pas lieu, d'après un fait publié : CMP sans accord (pas de conclusions) ; conclusions adoptées (ni nouvelle lecture ni lecture définitive) ; texte adopté « sans modification » par une chambre saisie du texte de l'autre (fin de la navette) ; retrait ; rejet en lecture définitive ; case facultative sans acte alors qu'une case suivante en a (2e lecture quand la CMP est réunie, CC non saisi avant la promulgation) |
-| `inconnu` | la donnée ne permet pas de conclure : case obligatoire sans acte alors que la suite en a ; case commencée, jamais conclue, alors que la suite a eu lieu (ou le texte a été retiré) |
+| `sans_objet` | n'aura pas lieu, d'après un fait publié : branche prise, déviation qui termine, étape non obligatoire sans acte alors qu'une suivante en a |
+| `inconnu` | la donnée ne permet pas de conclure : étape obligatoire sans acte alors que la suite en a ; étape commencée, jamais conclue, alors que la suite a eu lieu (ou le parcours s'est terminé) |
 
-**Étape courante** (`courante`, `etape_courante`) : la dernière case `en_cours` ; à défaut, la
-première case `a_venir` déjà programmée (acte daté après le jour de référence) au-delà de la
-dernière case active. Sinon aucune : le dossier n'est pas « entre deux étapes » par supposition.
+**Étape courante** (`courante`) : la dernière `en_cours` ; à défaut, la première `a_venir` déjà
+programmée au-delà de la dernière active. **Étape attendue** (`attendue`) : la première `a_venir`
+au-delà de la dernière active, si le parcours n'est pas terminé. **Issue** (synthèse) : celle d'une
+déviation qui termine (retiré, caduc, fusionné, irrecevable, rejeté), sinon celle de la dernière
+étape faite qui en porte une (`rejete` si sa conclusion dit un rejet), sinon `en_cours`.
 
 **Prochaine échéance** (`lecture.parcours_dossier_synthese`) : la plus proche, à partir du jour de
-référence, parmi : les actes programmés (ils disent quelle case ; heure et état lus sur la réunion
-que l'acte cite, lien explicite, et son point d'ordre du jour ; un point « Supprimé » ou « Annulé »
-retire l'échéance), les points d'ordre du jour de l'agenda AN liés au dossier (ni supprimés ni
-annulés ; « Eventuel » est exposé tel quel), les événements annoncés (`canon.evenement_agenda`). À
-date égale, l'acte. Sur la base réelle au 24/10/2026 : 20 dossiers ont une échéance (12 points
-« Confirmé », 6 « Eventuel », 2 actes programmés sans point d'ordre du jour), 2 262 une étape courante (toutes `en_cours`).
+référence, parmi : les actes programmés (heure et état lus sur la réunion que l'acte cite et son
+point d'ordre du jour ; un point « Supprimé » ou « Annulé » retire l'échéance), les points d'ordre
+du jour de l'agenda AN liés au dossier, les événements annoncés (`canon.evenement_agenda`). À date
+égale, l'acte.
 
-Ce que la donnée **ne dit pas** : le délai du Conseil constitutionnel (un mois, huit jours en cas
-d'urgence : calculable, non publié, donc non affiché) ; l'abandon d'un texte sans acte de clôture
-(une proposition rejetée en 1re lecture par sa chambre d'origine reste `a_venir` pour la suite) ; la
-caducité en fin de législature ; les étapes du Sénat que l'AN ne reprend pas (séances du Sénat
-souvent réduites à la décision, rapports parfois absents : `inconnu`) ; une 3e lecture. Les lois de
-finances (CMP après une lecture, sans `procedure_acceleree` dans la source) prennent le gabarit
-normal : leurs 2es lectures restent `a_venir` jusqu'à la CMP. Quand l'AN ne publie pas la date du
-JO, l'adaptateur reprend la date de l'acte : la case JO est alors datée de la promulgation (1 loi
-sur 150 a les deux dates égales). Mesure au 24/10/2026 : 63 cases `inconnu` sur 27 973, dont 51
-« 1re lecture » commencées et jamais conclues (textes retirés, ou PLF dont l'AN ne publie pas la
-décision de 1re lecture).
+Mesure sur une copie complète de `civictrace` (27/10/2026, 14 880 dossiers, dont 11 526 dossiers
+du Sénat avec leurs étapes DOSLEG) : tous ont un modèle (`dossier_sans_modele` vide) ; 126 210
+actes, dont 49 hors modèle hors racines de lecture (un dépôt sur une assemblée « indéterminée »,
+un texte sans code d'origine, une décision du Conseil constitutionnel sur une révision
+constitutionnelle) et **aucun côté AN** ; 269 étapes `inconnu` sur 212 425 ; 6 655 déviations
+(5 013 caducités, 819 procédures accélérées, 291 retraits, 46 engagements de responsabilité…) ;
+les 8 engagements 49.3 de la 17e rattachés à l'étape de leur texte, les 12 motions de censure
+spontanées (49.2) sans parent.
 
-### Exemples réels (base `civictrace`, 24/10/2026)
+Ce que la donnée **ne dit pas** : le délai du Conseil constitutionnel (calculable, non publié) ;
+l'abandon d'un texte sans acte de clôture (une proposition rejetée en 1re lecture par sa chambre
+d'origine reste `en_cours`) ; les étapes du Sénat que l'AN ne reprend pas pour les dossiers qu'il
+cite (séances du Sénat souvent réduites à la décision : `inconnu`) ; la CMP du Sénat sans
+conclusion publiée (DOSLEG ne dit ni accord ni désaccord) ; le temps législatif programmé.
 
-**DLR5L17N54085**, projet de loi d'urgence pour la protection et la souveraineté agricoles,
-procédure accélérée. Étapes canon (extrait, 73 actes) : `AN1-DEPOT` 08/04/2026 ;
-`AN1-COM-FOND-RAPPORT` 07/05 ; `AN1-DEBATS-DEC` 02/06 « adopté » ; `SN1-DEPOT` 03/06 ;
-`SN1-COM-FOND-RAPPORT` 17/06 ; `SN1-DEBATS-DEC` 02/07 « modifié » ; `CMP-SAISIE` 06/07 ; `CMP-DEC`
-17/07 « Accord » ; `CMP-DEBATS-AN-DEC` 20/07 et `CMP-DEBATS-SN-DEC` 21/07 « adopté, dans les
-conditions prévues à l'article 45, alinéa 3 » ; `CC-SAISIE-AN` 24/07 ; `CC-CONCLUSION` 14/08 ;
-`PROM-PUB` 18/08 ; loi 2026-796 au JO n° 192 du 19/08 ; décision 2026-914 DC.
+### Exemples réels (copie de `civictrace`, 27/10/2026)
 
-| Case | État | Début | Fin | Conclusion |
+**DLR5L17N54085**, projet de loi d'urgence pour la protection et la souveraineté agricoles, loi
+ordinaire, procédure accélérée (déviation au dépôt, `rejoint`).
+
+| Étape | État | Début | Fin | Conclusion |
 |---|---|---|---|---|
-| Dépôt | faite | 08/04/2026 | 08/04/2026 | |
+| Dépôt AN | faite | 08/04/2026 | 08/04/2026 | |
 | Commission AN | faite | 08/04 | 07/05 | |
 | Séance AN | faite | 19/05 | 02/06 | adopté |
+| Transmission Sénat | faite | 03/06 | 03/06 | |
 | Commission Sénat | faite | 03/06 | 17/06 | |
 | Séance Sénat | faite | 02/07 | 02/07 | modifié |
-| 2e lecture AN, 2e lecture Sénat | sans_objet | | | |
+| 2e lecture AN, 2e lecture Sénat, lectures suivantes | sans_objet | | | |
 | CMP | faite | 06/07 | 17/07 | Accord |
 | Vote du texte de la CMP | faite | 20/07 | 21/07 | AN : adopté, dans les conditions prévues à l'article 45, alinéa 3, de la Constitution · Sénat : idem |
-| Nouvelle lecture, Lecture définitive AN | sans_objet | | | |
-| Conseil constit. | faite | 24/07 | 14/08 | Non conformité partielle - réserve |
+| Nouvelle lecture, Lecture définitive AN | sans_objet (branche « Texte de la CMP adopté ») | | | |
+| Conseil constitutionnel | faite | 24/07 | 14/08 | Non conformité partielle - réserve |
 | Promulgation | faite | 18/08 | 18/08 | Loi n° 2026-796 |
 | Journal officiel | faite | 19/08 | 19/08 | JO n° 192 |
 
-Les dix cases affichées sont celles du design. Rejouée au 01/08/2026 (même données) : CC
-`en_cours`, étape courante, prochaine échéance le 14/08 ; promulgation et JO `a_venir`.
+**DLR5L17N51670**, proposition de loi relative à la fin de vie (aide à mourir), navette normale :
+séance Sénat « rejetée » 28/01/2026 ; 2e lectures faites ; CMP « Désaccord » 03/06 (branche vers
+la nouvelle lecture : vote du texte de la CMP sans objet) ; nouvelle lecture « AN : adoptée ·
+Sénat : rejetée » ; lecture définitive « adoptée » 15/07 ; CC 14/08 « Conformité - réserve » ;
+loi 2026-794 promulguée le 18/08, JO n° 192 du 19/08. 14 étapes faites, aucune `inconnu`, issue
+`promulgue`.
 
-**DLR5L17N51670**, proposition de loi relative à la fin de vie (aide à mourir), navette normale.
-Étapes canon : `AN1-DEPOT` 11/03/2025 ; `AN1-DEBATS-DEC` 27/05/2025 « adoptée » ;
-`SN1-DEBATS-DEC` 28/01/2026 « rejetée » ; `AN2-DEBATS-DEC` 25/02 « adoptée » ; `SN2-DEBATS-DEC`
-12/05 « rejetée » ; `CMP-DEC` 03/06 « Désaccord » ; `ANNLEC-DEBATS-DEC` 30/06 « adoptée » ;
-`SNNLEC-DEBATS-DEC` 07/07 « rejetée » ; `ANLDEF-DEBATS-DEC` 15/07 « adoptée » ; cinq saisines du
-Conseil du 16 au 20/07 ; `CC-CONCLUSION` 14/08 ; `PROM-PUB` 18/08 ; loi 2026-794 au JO du 19/08.
+**PLF et PLFSS de la 17e** : trois 49.3 du budget de la Sécurité sociale 2025 rattachés à la
+nouvelle lecture et un à la CMP ; PLF 2025 : un à la CMP ; PLF 2026 : deux en nouvelle lecture et
+un en lecture définitive (dossiers enfants, `dossier_lien`).
 
-| Case | État | Début | Fin | Conclusion |
-|---|---|---|---|---|
-| Dépôt | faite | 11/03/2025 | 11/03/2025 | |
-| 1re lecture AN | faite | 11/03/2025 | 27/05/2025 | adoptée |
-| 1re lecture Sénat | faite | 27/05/2025 | 28/01/2026 | rejetée |
-| 2e lecture AN | faite | 28/01/2026 | 25/02 | adoptée |
-| 2e lecture Sénat | faite | 25/02 | 12/05 | rejetée |
-| CMP | faite | 19/05 | 03/06 | Désaccord |
-| Vote du texte de la CMP | sans_objet | | | |
-| Nouvelle lecture | faite | 12/05 | 07/07 | AN : adoptée · Sénat : rejetée |
-| Lecture définitive AN | faite | 09/07 | 15/07 | adoptée |
-| Conseil constit. | faite | 16/07 | 14/08 | Conformité - réserve |
-| Promulgation et JO | faite | 18/08 | 19/08 | Loi n° 2026-794 · JO n° 192 |
+**ppl23-694** (Sénat), proposition de loi sur le renouvellement des parcs éoliens, déposée au
+Sénat le 17/06/2024 puis caduque (état DOSLEG `05`, sans date) : dépôt fait, caducité rattachée au
+dépôt (`termine`), toutes les étapes suivantes sans objet, issue `caduc`.
 
-La nouvelle lecture commence le 12/05, avant la décision de la CMP : l'AN date ainsi le dépôt
-`ANNLEC-DEPOT`. Rejouée au 10/07/2026 : lecture définitive `en_cours` (dépôt du 09/07), étape
-courante, échéance le 15/07 ; CC et promulgation `a_venir`. Les dossiers, déjà promulgués au
-24/10/2026, n'ont plus d'étape courante ni d'échéance.
-
-Tests : [test_accelere_en_cours](../tests/test_projection_parcours.py#L115),
-[test_navette_normale_complete](../tests/test_projection_parcours.py#L140),
-[test_texte_du_senat_adopte_conforme](../tests/test_projection_parcours.py#L155).
+Tests : [test_accelere_en_cours](../tests/test_projection_parcours.py#L152),
+[test_navette_normale_complete](../tests/test_projection_parcours.py#L184),
+[test_texte_du_senat_adopte_conforme](../tests/test_projection_parcours.py#L205),
+[test_engagement_de_responsabilite_enfant_du_texte](../tests/test_projection_parcours.py#L230),
+[test_senat_caduc](../tests/test_projection_parcours.py#L243).
 
 ## Ce qui a été dit, ce qui a été voté
 
@@ -232,7 +237,7 @@ fait retenu, sans texte, ses dimensions déjà calculées. Mêmes règles que le
 | `groupe_id` | intervention : appartenance publiée de l'orateur le jour de la réunion, dans la chambre (la plus récente si deux se chevauchent) ; amendement : son groupe auteur publié |
 | `auteur_id` | premier auteur personne de l'amendement, par ordre publié |
 | `article_suivi_id` | intervention : l'article de l'amendement discuté, jamais rapproché du texte |
-| `cle` | case du parcours (réunion citée par un acte du dossier ; étape de l'amendement) |
+| `cle` | étape du parcours (réunion citée par un acte du dossier ; étape de l'amendement) |
 
 Au 25/10/2026 sur `civictrace` : 444 456 interventions retenues (dont 242 488 avec un groupe du jour)
 et 171 770 amendements, les mêmes nombres que l'Explorer sans filtre. Sans ces projections, chaque

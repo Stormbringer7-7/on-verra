@@ -1,0 +1,36 @@
+# Demande d'attribution à une commission des prérogatives d'une commission d'enquête (six mois au
+# plus) : proposition de résolution du Sénat, adoptée en séance.
+
+cle = "prerogatives_enquete"
+version = 1
+libelle = "Prérogatives d'une commission d'enquête"
+famille = "controle"
+juridiction = "FR"
+valide_du = 1996-06-14
+fondement = "Ordonnance n° 58-1100 du 17 novembre 1958, art. 5 ter (loi du 14 juin 1996) ; règlement du Sénat, art. 22 ter"
+types = ["demande d'attribution des prérogatives d'une commission d'enquête"]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt"
+phases = ["depot"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "commission"
+libelle = "Commission"
+phases = ["commission"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "seance"
+libelle = "Séance"
+phases = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "adopte"

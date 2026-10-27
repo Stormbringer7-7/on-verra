@@ -8,14 +8,15 @@ import { RouteProp, useRoute } from '@react-navigation/native';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ConsulterDossier, type ActeurDossier, type FicheDossier, type SortAmendement } from '@/core';
+import { ConsulterDossier, type ActeurDossier, type DeviationParcours, type FicheDossier, type SortAmendement } from '@/core';
 import { useAller, type Pages } from '../../navigation';
 import { Action, Label, Pastille, Puce, T } from '../components/base';
-import { BarreParcours } from '../components/commun/BarreParcours';
+import { FeuilleDeviation } from '../components/commun/FeuilleDeviation';
+import { RailParcours } from '../components/commun/RailParcours';
 import { Signaler } from '../components/commun/Signaler';
 import { SuivreDossier } from '../components/commun/Suivre';
 import { Source } from '../components/commun/Source';
-import { aSynthese, aucuneSynthese, PAS_DE_SYNTHESE } from '../components/commun/statuts';
+import { aSynthese, aucuneSynthese, evenementDe, PAS_DE_SYNTHESE } from '../components/commun/statuts';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
 import { Avertissement, Carte, Colonnes, Ligne, ListeChiffres, OngletsDefilants, Pagination, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { LigneAmendement, LigneScrutin, ListeInterets } from '../components/dossiers/elements';
@@ -108,9 +109,10 @@ export function Dossier() {
   );
 }
 
-function Entete({ fiche: { entete: e } }: { fiche: FicheDossier }) {
+function Entete({ fiche: { entete: e, parcours } }: { fiche: FicheDossier }) {
   const p = usePalette();
   const aller = useAller();
+  const parent = parcours?.parent ?? null;
   const auteur = personneAuteur(e.auteur);
   const titre = e.titreEnClair ?? e.titre;
   const debut = [titreOfficielDistinct(titre, e.titreOfficiel), e.dateDepot ? `déposé le ${date(e.dateDepot)}` : null]
@@ -118,6 +120,18 @@ function Entete({ fiche: { entete: e } }: { fiche: FicheDossier }) {
     .join(' · ');
   return (
     <View style={{ gap: space[2] }}>
+      {parent && (
+        // Dossier publié comme événement d'un autre (un 49.3) : on remonte au parent, à son étape.
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={evenementDe(parent)}
+          onPress={() => (parent.etape ? aller.etape(parent.dossier.id, parent.etape) : aller.dossier(parent.dossier.id))}
+          style={[styles.parent, { borderColor: p.lineFaint, backgroundColor: p.surfaceRaised }]}
+        >
+          <T variant="small" couleur={p.inkQuote}>{evenementDe(parent)}</T>
+          <T variant="caption" ton="inkMuted">Lien établi par un document publié dans les deux dossiers</T>
+        </Pressable>
+      )}
       <View style={styles.ligneEtiquettes}>
         <Label>{e.type}</Label>
         {e.procedure === 'acceleree' && (
@@ -152,7 +166,9 @@ function Entete({ fiche: { entete: e } }: { fiche: FicheDossier }) {
 function OngletParcours({ fiche: f }: { fiche: FicheDossier }) {
   const p = usePalette();
   const aller = useAller();
-  const navette = f.parcours?.procedure === 'normale';
+  const [deviation, setDeviation] = useState<DeviationParcours | null>(null);
+  const parcours = f.parcours;
+  const navette = parcours?.modele.famille === 'legislatif' && parcours.procedure === 'normale';
   const changementsSansSynthese = aucuneSynthese(f.ceQuiAChange.map((c) => c.resume));
   const etapesSansSynthese = aucuneSynthese(f.etapes.map((e) => e.resume));
   return (
@@ -181,27 +197,43 @@ function OngletParcours({ fiche: f }: { fiche: FicheDossier }) {
           );
         })}
       </Carte>
-      <Section titre="Parcours du texte">
-        {f.parcours ? (
+      <Section titre="Parcours">
+        {parcours ? (
           <>
-            <BarreParcours parcours={f.parcours} etat={f.entete.etat} onCase={(cle) => aller.etape(f.entete.id, cle)} />
-            {f.parcours.prochaineEcheance && (
-              <T variant="caption" ton="signal">
-                {`Prochaine échéance : ${f.parcours.prochaineEcheance.libelle} · ${date(f.parcours.prochaineEcheance.date)}${f.parcours.prochaineEcheance.etat ? ` (${f.parcours.prochaineEcheance.etat})` : ''}`}
-              </T>
-            )}
+            <RailParcours
+              parcours={parcours}
+              etapes={f.etapes}
+              onEtape={(cle) => aller.etape(f.entete.id, cle)}
+              onDeviation={setDeviation}
+              onDossier={aller.dossier}
+            />
             {navette && (
               <Avertissement>
                 Navette : le texte passe d’une chambre à l’autre jusqu’à un accord. Après l’échec d’une CMP, le Gouvernement peut
                 demander à l’Assemblée de statuer définitivement (Constitution, art. 45).
               </Avertissement>
             )}
+            <FeuilleDeviation
+              deviation={deviation}
+              etape={parcours.cases.find((c) => c.cle === deviation?.etape) ?? null}
+              rattache={parcours.enfants.find((e) => e.etape === deviation?.etape) ?? null}
+              onFermer={() => setDeviation(null)}
+              onEtape={() => {
+                const cle = deviation!.etape;
+                setDeviation(null);
+                aller.etape(f.entete.id, cle);
+              }}
+              onDossier={(id) => {
+                setDeviation(null);
+                aller.dossier(id);
+              }}
+            />
           </>
         ) : (
-          <Avertissement>Pas de barre de parcours pour ce type de texte : les étapes publiées sont listées ci-dessous.</Avertissement>
+          <Avertissement>Pas de parcours publié pour ce dossier : les étapes publiées sont listées ci-dessous.</Avertissement>
         )}
-        {etapesSansSynthese && <SyntheseVue synthese={null} titre="En clair" />}
-        {f.etapes.map((e) => (
+        {!parcours && etapesSansSynthese && <SyntheseVue synthese={null} titre="En clair" />}
+        {!parcours && f.etapes.map((e) => (
           <Ligne key={e.cle} onPress={() => aller.etape(f.entete.id, e.cle)} accessibilityLabel={`Étape ${e.libelle}`}>
             <View style={styles.entreDeux}>
               <View style={styles.ligneEtiquettes}>
@@ -354,6 +386,7 @@ function OngletInterets({ fiche: f }: { fiche: FicheDossier }) {
 const styles = StyleSheet.create({
   ligneEtiquettes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space[2] },
   badge: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 6, minHeight: 22, justifyContent: 'center' },
+  parent: { gap: space[1], paddingHorizontal: 14, paddingVertical: space[3], borderWidth: 1, borderRadius: radius.lg },
   changement: { gap: space[1], minHeight: 44, justifyContent: 'center' },
   entreDeux: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
   tableau: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },

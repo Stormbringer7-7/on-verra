@@ -207,7 +207,8 @@ Procédure et types de cas : [rapprochements.md](../opendata/docs/rapprochements
 | [uml.md](../opendata/docs/uml.md) | diagrammes du fichier source à la colonne (régénéré par `python -m src uml`) |
 | [rapprochements.md](../opendata/docs/rapprochements.md) | ce qui est relié automatiquement, ce qui ne l'est jamais, revue |
 | [modifications.md](../opendata/docs/modifications.md) | ce qui a changé article par article, amendement à l'origine |
-| [indicateurs.md](../opendata/docs/indicateurs.md) | projections `lecture` : barre de parcours, participation, écarts, limites |
+| [indicateurs.md](../opendata/docs/indicateurs.md) | projections `lecture` : parcours des dossiers, participation, écarts, limites |
+| [opendata/parcours/](../opendata/parcours/) | modèles de parcours, un par type de dossier (droit commun, déviations, branches), et correspondances des codes d'actes publiés |
 | [sources/](../opendata/docs/sources/README.md) | une fiche par source avec des exemples réels reliés au code (liens vérifiés par `opendata/tests/test_docs.py`) : [AN](../opendata/docs/sources/an.md), [Sénat](../opendata/docs/sources/senat.md), [Légifrance et CC](../opendata/docs/sources/legifrance.md), [HATVP](../opendata/docs/sources/hatvp.md), [RNE](../opendata/docs/sources/rne.md), [INSEE](../opendata/docs/sources/insee.md) |
 | [augure/README.md](../augure/README.md) | app : design, sources de données, navigation, règles d'affichage |
 | [augure/AGENTS.md](../augure/AGENTS.md) | consignes Expo / React Native pour les agents de code |

@@ -13,6 +13,9 @@ export const ETATS: Record<EtatDossier, string> = {
   rejete: 'Rejeté',
   retire: 'Retiré',
   caduc: 'Caduc',
+  fusionne: 'Fusionné',
+  irrecevable: 'Irrecevable',
+  rapport_publie: 'Rapport publié',
 };
 
 /** « PROJET DE LOI · GOUVERNEMENT » : type publié et origine, si elle est connue. */
@@ -22,6 +25,9 @@ export const natureDossier = (d: DossierResume) => [d.type, d.origine ? ORIGINES
 export function statutDossier(d: DossierResume): { libelle: string; ton: 'signal' | 'ink' | 'inkMuted' } | null {
   if (d.etat && d.etat !== 'en_cours') return { libelle: ETATS[d.etat], ton: 'inkMuted' };
   if (d.etapeCourante) return { libelle: d.etapeCourante.libelle, ton: d.etapeCourante.etat === 'en_cours' ? 'signal' : 'ink' };
+  // Rien en cours : l'étape attendue du parcours, sinon l'état.
+  const attendue = d.barre.find((c) => c.attendue);
+  if (attendue) return { libelle: `Attendue : ${attendue.libelle}`, ton: 'ink' };
   return d.etat ? { libelle: ETATS[d.etat], ton: 'ink' } : null;
 }
 

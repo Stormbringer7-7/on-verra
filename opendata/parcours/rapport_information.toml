@@ -1,0 +1,20 @@
+# Rapport d'information d'une commission, sans mission (évaluation, application des lois…) :
+# un seul acte, le dépôt du rapport.
+
+cle = "rapport_information"
+version = 1
+libelle = "Rapport d'information"
+famille = "controle"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Règlement de l'AN, art. 145 et 145-7 ; règlement du Sénat, art. 22"
+types = ["Rapport d'information sans mission"]
+
+[[etape]]
+cle = "rapport"
+libelle = "Rapport"
+phases = ["rapport"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "rapport_publie"

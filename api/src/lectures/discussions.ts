@@ -3,7 +3,7 @@
 
 import type { CibleInterventions } from '@contrat/domain/model';
 
-import { CASES, type Handlers, type LecturesDeps, RequeteInvalide, borner, parmi, remplirPar, texte, texteFacultatif, trouve } from './commun';
+import { cleEtape, type Handlers, type LecturesDeps, RequeteInvalide, borner, parmi, remplirPar, texte, texteFacultatif, trouve } from './commun';
 import { REMPLIR } from './syntheses';
 
 /** La cible telle qu'elle doit être : exactement une, et ses identifiants. */
@@ -11,7 +11,7 @@ function cibleValide(cible: unknown): CibleInterventions {
   const c = (cible ?? {}) as Record<string, unknown>;
   switch (c.type) {
     case 'etape':
-      return { type: 'etape', dossier: texte(c.dossier, 'Identifiant du dossier'), cle: parmi(c.cle, CASES, 'Case du parcours') };
+      return { type: 'etape', dossier: texte(c.dossier, 'Identifiant du dossier'), cle: cleEtape(c.cle, 'Case du parcours') };
     case 'reunion':
       return { type: 'reunion', id: texte(c.id, 'Identifiant de la réunion') };
     case 'amendement':

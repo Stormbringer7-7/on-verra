@@ -1,0 +1,49 @@
+# Responsabilité du Gouvernement devant l'AN. L'AN publie un seul type pour :
+# - 49.3 : déclaration engageant la responsabilité sur un texte, motion(s) de censure dans les
+#   24 h, débat, vote ; motion rejetée ou absente : texte considéré comme adopté (dossier enfant du
+#   dossier du texte, rattaché à l'étape) ;
+# - 49.2 : motion de censure spontanée (sans déclaration) ;
+# - 49.1 : déclaration de politique générale, débat, vote de confiance.
+# Une motion adoptée oblige le Gouvernement à démissionner (art. 50).
+
+cle = "responsabilite_gouvernement"
+version = 1
+libelle = "Responsabilité du Gouvernement"
+famille = "gouvernement"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 49 et 50 ; règlement de l'AN, art. 152 à 156"
+types = ["Engagement de la responsabilité gouvernementale"]
+
+[[etape]]
+cle = "declaration"
+libelle = "Déclaration du Gouvernement"
+phases = ["declaration"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "motion"
+libelle = "Dépôt de la motion de censure"
+phases = ["motion"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "debat"
+libelle = "Débat en séance"
+phases = ["debat"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "vote"
+libelle = "Vote"
+phases = ["vote"]
+lecture = "*"
+cote = "*"
+nature = "conditionnelle"
+issue = "adopte"

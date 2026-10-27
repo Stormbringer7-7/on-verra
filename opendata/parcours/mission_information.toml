@@ -1,0 +1,36 @@
+# Mission d'information : créée par une commission ou la Conférence des présidents, nomination
+# des membres, auditions, rapport.
+
+cle = "mission_information"
+version = 1
+libelle = "Mission d'information"
+famille = "controle"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Règlement de l'AN, art. 145 ; règlement du Sénat, art. 21 et 22"
+types = ["Mission d'information"]
+
+[[etape]]
+cle = "creation"
+libelle = "Création"
+phases = ["creation"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "nomination"
+libelle = "Nomination des membres"
+phases = ["nomination"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+
+[[etape]]
+cle = "rapport"
+libelle = "Rapport"
+phases = ["rapport"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "rapport_publie"

@@ -126,7 +126,8 @@ def dossier(doc: Document):
 
     for ordre, (a, parent, racine, pointeur) in enumerate(tous):
         etape = an("acte", f"{uid}:{a['uid']}")
-        statut = a.get("statutConclusion") or {}
+        # Conclusion : `statutConclusion` (lectures, CMP), `decision` (motions : « Motion rejetée »)
+        statut = a.get("statutConclusion") or a.get("decision") or {}
         yield Objet("etape", etape, {
             "dossier_id": ident, "parent_id": an("acte", f"{uid}:{parent}") if parent else None, "type": type_etape(a, parent is None),
             "code_source": a["codeActe"], "libelle": (a.get("libelleActe") or {}).get("nomCanonique"),

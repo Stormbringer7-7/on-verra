@@ -36,11 +36,11 @@ flowchart LR
 
 | Étape | Ce qui se passe | Code |
 |---|---|---|
-| Fichier brut | téléchargé, rangé sous son empreinte sha256, jamais modifié ; un fichier inchangé n'est pas relu | [charger()](../src/chargement.py#L80) |
-| `brut.enregistrement_source` | une ligne par (système, fichier, membre de l'archive, empreinte) : une nouvelle version du fichier donne une nouvelle ligne, l'ancienne reste | [charger()](../src/chargement.py#L80) |
+| Fichier brut | téléchargé, rangé sous son empreinte sha256, jamais modifié ; un fichier inchangé n'est pas relu | [charger()](../src/chargement.py#L81) |
+| `brut.enregistrement_source` | une ligne par (système, fichier, membre de l'archive, empreinte) : une nouvelle version du fichier donne une nouvelle ligne, l'ancienne reste | [charger()](../src/chargement.py#L81) |
 | Adaptateur | lit le fichier et produit des objets avec leur **identité native** (l'identifiant de la source) ; il ne touche pas à la base | `src/adaptateurs/sources/` |
 | Registre d'identités | relie chaque identité native à une entité interne, seulement si c'est certain | [RegistreIdentites.identifier()](../src/identites.py#L47) |
-| Écriture | colonnes écrites avec leur provenance ; une valeur connue remplacée part dans l'historique ; une référence vers un objet inconnu reste vide et devient un cas de revue | [ecrire()](../src/chargement.py#L115), [inconnue()](../src/chargement.py#L220) |
+| Écriture | colonnes écrites avec leur provenance ; une valeur connue remplacée part dans l'historique ; une référence vers un objet inconnu reste vide et devient un cas de revue | [ecrire()](../src/chargement.py#L116), [inconnue()](../src/chargement.py#L221) |
 | Revue humaine | une personne tranche, la décision est tracée (qui, quand, pourquoi) puis appliquée | [decider()](../src/revue.py#L206), [appliquer()](../src/revue.py#L110) |
 
 ## 2. Le rapprochement : comment deux données sont reliées
@@ -448,6 +448,65 @@ erDiagram
         uuid dossier_id FK
         text url
     }
+    parcours_modele {
+        text cle PK
+        int version PK
+        text libelle
+        text famille
+        text juridiction
+        date valide_du
+        date valide_au
+        text fondement
+        text fichier
+    }
+    parcours_type {
+        text modele PK, FK
+        int version PK, FK
+        text type_source PK
+    }
+    parcours_etape {
+        text modele PK, FK
+        int version PK, FK
+        text cle PK
+        int rang
+        text libelle
+        text_array phases
+        text_array conclut
+        text lecture
+        text cote
+        text nature
+        int conclusifs
+        text issue
+    }
+    parcours_transition {
+        text modele FK
+        int version FK
+        text de
+        text vers
+        text condition
+        text libelle
+    }
+    parcours_deviation {
+        text modele PK, FK
+        int version PK, FK
+        text cle PK
+        text libelle
+        text fondement
+        text effet
+        text si
+        text effet_si
+        text issue
+    }
+    parcours_correspondance {
+        text juridiction PK
+        int rang PK
+        text systeme
+        text motif
+        text phase
+        text role
+        text deviation
+        text fichier
+    }
     etape }o--|| dossier : "dossier_id"
     etape }o--o| organisation : "organe_id"
     etape }o--o| etape : "parent_id"
@@ -468,6 +527,14 @@ erDiagram
     evenement_agenda }o--o| reunion : "reunion_id"
     decision_cc }o--o| dossier : "dossier_id"
     texte_publie }o--o| dossier : "dossier_id"
+    parcours_type }o--|| parcours_modele : "modele"
+    parcours_type }o--|| parcours_modele : "version"
+    parcours_etape }o--|| parcours_modele : "modele"
+    parcours_etape }o--|| parcours_modele : "version"
+    parcours_transition }o--|| parcours_modele : "modele"
+    parcours_transition }o--|| parcours_modele : "version"
+    parcours_deviation }o--|| parcours_modele : "modele"
+    parcours_deviation }o--|| parcours_modele : "version"
 ```
 <!-- /uml -->
 
@@ -495,6 +562,7 @@ erDiagram
         text dispositif
         text expose
         uuid seance_id FK
+        tsvector texte_recherche
     }
     avis_amendement {
         uuid amendement_id PK, FK
@@ -646,6 +714,7 @@ erDiagram
         text cloture_libelle
         date date_cloture
         jsonb publication_jo
+        tsvector texte_recherche
     }
     reunion }o--o| document : "compte_rendu_id"
     reunion }o--o| organisation : "organe_id"
@@ -856,7 +925,7 @@ Code : [actes()](../src/adaptateurs/sources/an/dossiers.py#L64)
 | `cycleDeVie/chrono/dateDepot` | `date` | tel quel |
 | `auteurs`, `coSignataires` | `lien` (auteur, cosignataire) | références explicites |
 
-Code : [document()](../src/adaptateurs/sources/an/dossiers.py#L164)
+Code : [document()](../src/adaptateurs/sources/an/dossiers.py#L165)
 
 #### Réunion, ordre du jour, présences `[AN:reunion:<uid>]` — `reunion/<RU…>.json`
 
@@ -947,7 +1016,7 @@ Code : [compte_rendu()](../src/adaptateurs/sources/an/commissions.py#L97)
 | paragraphe `assnat9ArticleNum` | `version_article.numero`, `intitule`, `mention`, `ordre` | « Article 2 bis (nouveau) » ([articles()](../src/adaptateurs/sources/an/textes.py#L59)) |
 | paragraphes suivants | `version_article.texte`, `empreinte` | jusqu'à l'article suivant ; sha256 |
 | mention « (Supprimé) », « (Conforme) » | `version_article.statut` | supprime, conforme, present… |
-| clé du dossier Sénat si l'AN la cite, sinon du dossier AN + numéro | `article_suivi` `[CIVICTRACE:article_suivi:<dossier>#<n°>]` | même article des deux côtés de la navette ([article_suivi()](../src/textes.py#L88)) |
+| clé du dossier Sénat si l'AN la cite, sinon du dossier AN + numéro | `article_suivi` `[CIVICTRACE:article_suivi:<dossier>#<n°>]` | même article des deux côtés de la navette ([article_suivi()](../src/textes.py#L134)) |
 | texte sans balise d'article, plage « Articles 3 à 5 » | — | **revue** (constat), aucun suivi supposé |
 
 Code : [version()](../src/adaptateurs/sources/an/textes.py#L90)
@@ -978,16 +1047,16 @@ flowchart LR
 | ODSEN_HISTOGROUPES › `Code du groupe politique`, `Nom court…` | `organisation` (groupe) | nom de la période la plus récente ([groupe()](../src/adaptateurs/sources/senat/senateurs.py#L50)) |
 | › `Id fonction occupée`, `Nom court fonction`, dates | `fonction` (membre_groupe) | une fonction par période (membre, puis président…) ([appartenance()](../src/adaptateurs/sources/senat/senateurs.py#L67)) |
 | DOSLEG `loi` › `signet` | `dossier` `[SENAT:dossier:<signet>]` | déjà relié par l'AN : **rien n'est réécrit** (pas deux sources pour un même champ) |
-| › `loient` + `loitit`, `motclef`, `proaccdat` | `titre`, `titre_court`, `procedure_acceleree` | concaténés ; présence de la date ([dossier()](../src/adaptateurs/sources/senat/dossiers.py#L15)) |
+| › `loient` + `loitit`, `motclef`, `proaccdat` | `titre`, `titre_court`, `procedure_acceleree` | concaténés ; présence de la date ([dossier()](../src/adaptateurs/sources/senat/dossiers.py#L143)) |
 | AMELI `amd` › `id`, `num`, `datdep` | `amendement` `[SENAT:amendement:<id>]` : `numero`, `date_depot` | tels quels |
 | › `txtid` → `txt_ameli.doslegsignet` | `dossier_id` | référence explicite |
 | › `subid`, `sorid` | `division`, `sort`, `sort_source` | libellés des tables de référence AMELI |
 | › `dis`, `obj` | `dispositif`, `expose` | HTML nettoyé |
 | › `avcid`, `avgid` | `avis_amendement` (commission, gouvernement) | F → favorable, D → defavorable, S → sagesse… |
-| `amdsen` › `senid`, `rng` | `lien` (auteur = rang 1, cosignataires) | matricule par référence explicite ([amendement()](../src/adaptateurs/sources/senat/travaux.py#L146)) |
+| `amdsen` › `senid`, `rng` | `lien` (auteur = rang 1, cosignataires) | matricule par référence explicite ([amendement()](../src/adaptateurs/sources/senat/travaux.py#L140)) |
 | AMELI `scr` › `sesann`, `scrnum`, `scrdat`, `scrint`, `scrvot`, `scrpou`, `scrcon` | `scrutin` `[SENAT:scrutin:<session>-<n°>]` | tels quels ; nature lue dans l'intitulé |
 | › `code` → séance → lecture → `loi.signet` | `scrutin.dossier_id` | chaîne de références explicites |
-| `amescr` | `scrutin.amendement_id` | un seul amendement de ce numéro dans le dossier ; sinon **revue** ([scrutin()](../src/adaptateurs/sources/senat/travaux.py#L185)) |
+| `amescr` | `scrutin.amendement_id` | un seul amendement de ce numéro dans le dossier ; sinon **revue** ([scrutin()](../src/adaptateurs/sources/senat/travaux.py#L179)) |
 | `votsen` › `senmat`, `posvotcod`, `senmatdel`, `stavotidt` | `vote.personne_id`, `position`, `par_delegation`, `cause` | 1 → pour, 2 → contre, 3 → abstention, 4 → non_votant |
 | cri.zip › `d<AAAAMMJJ>.xml` | `reunion` `[SENAT:seance:d<date>]`, `document` (compte rendu) | un jour de séance |
 | › `@mat` + `type` 1 | `intervention.orateur_id` | matricule du sénateur : OFFICIAL_ID |

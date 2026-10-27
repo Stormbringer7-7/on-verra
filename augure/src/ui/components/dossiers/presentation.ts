@@ -11,9 +11,7 @@ import type {
   AmendementResume,
   ArticleResume,
   Auteur,
-  CaseCompacte,
   CibleInterventions,
-  CleCase,
   EtatCase,
   EtatDossier,
   ExplicationVote,
@@ -31,7 +29,6 @@ import type {
   TypeDocument,
 } from '../../../core';
 import type { ParamsDiscussions } from '../../../navigation';
-import { etatFinal } from '../commun/statuts';
 
 // ---------- Libellés ----------
 
@@ -42,6 +39,9 @@ export const ETAT_DOSSIER: Record<EtatDossier, string> = {
   rejete: 'Rejeté',
   retire: 'Retiré',
   caduc: 'Caduc',
+  fusionne: 'Fusionné',
+  irrecevable: 'Irrecevable',
+  rapport_publie: 'Rapport publié',
 };
 
 /** État d'un dossier ; null : la donnée ne permet pas de conclure. */
@@ -66,7 +66,7 @@ export const ETAT_CASE: Record<EtatCase, string> = {
   en_cours: 'En cours',
   a_venir: 'À venir',
   sans_objet: 'Sans objet',
-  inconnu: 'Donnée insuffisante',
+  inconnu: 'Donnée non publiée',
 };
 
 export const LIEU: Record<Lieu, string> = {
@@ -120,27 +120,6 @@ export const faitsArticle = (a: ArticleResume | undefined): string | null =>
   a
     ? `${ETAT_ARTICLE[a.etat]}${a.ajoutePar ? ` · ${CHAMBRE_COURTE[a.ajoutePar]}` : ''}${a.modifications ? ` · ${a.modifications} modif.` : ''}`
     : null;
-
-// ---------- Barre ----------
-
-/** Cases montrées : les `sans_objet` (n'auront pas lieu, d'après un fait publié) sont masquées. */
-export const casesVisibles = <C extends { etat: EtatCase }>(cases: C[]) => cases.filter((c) => c.etat !== 'sans_objet');
-
-/**
- * « Étape actuelle » et « vous êtes » d'une barre de dossier ; `final` : l'état final d'un dossier
- * terminé (« Promulgué »), à la place d'une étape courante qui n'existe plus.
- */
-export function reperesBarre(cases: CaseCompacte[], ici: CleCase | null) {
-  const courante = cases.find((c) => c.courante) ?? null;
-  const vous = ici ? (cases.find((c) => c.cle === ici) ?? null) : null;
-  return { courante: courante?.libelle ?? null, final: courante ? null : etatFinal(cases), ici: vous?.libelle ?? null };
-}
-
-/** Ligne sous la barre : étape actuelle, sinon état final, sinon « non établie » (dossier en cours). */
-export function legendeReperes(r: ReturnType<typeof reperesBarre>): string {
-  const ou = r.courante ? `Étape actuelle : ${r.courante}` : (r.final ?? 'Étape actuelle : non établie');
-  return `${ou}${r.ici ? ` · vous êtes : ${r.ici}` : ''}`;
-}
 
 // ---------- Entrées des commandes ----------
 

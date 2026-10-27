@@ -6,24 +6,11 @@ objet seul dans un autre (liste d'un élément) : `normaliser` relève les chemi
 au moins une fois et y met l'objet seul dans une liste, jusqu'à ce que plus rien ne change.
 `xsi:nil` (valeur absente publiée par l'AN) devient NULL. Fonctions pures."""
 
-import re
 from collections import defaultdict
-from html.parser import HTMLParser
+
+from ..textes import texte_html
 
 SEPARATEUR_TABLE = "__"
-_HTML = re.compile(r"</?[a-zA-Z][^<>]*>|&#?\w+;")
-
-
-def texte_html(s: str) -> str:
-    """HTML → texte : tous les nœuds texte joints, entités décodées, espaces resserrés."""
-    if not _HTML.search(s):
-        return s
-    morceaux: list[str] = []
-    p = HTMLParser(convert_charrefs=True)
-    p.handle_data = morceaux.append
-    p.feed(s)
-    p.close()
-    return re.sub(r"\s+", " ", " ".join(morceaux)).strip()
 
 
 def nul(v) -> bool:

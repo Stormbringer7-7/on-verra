@@ -1,0 +1,28 @@
+# Pétition : déposée par des citoyens, renvoyée à une commission qui peut la classer, l'examiner
+# et publier un rapport ; un débat en séance est possible au-delà de 500 000 signatures.
+
+cle = "petition"
+version = 1
+libelle = "Pétition"
+famille = "controle"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Règlement de l'AN, art. 147 à 151 ; règlement du Sénat, art. 87 à 89 bis"
+types = ["Pétitions"]
+
+[[etape]]
+cle = "rapport"
+libelle = "Rapport de la commission"
+phases = ["rapport"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "rapport_publie"
+
+[[etape]]
+cle = "seance"
+libelle = "Débat en séance"
+phases = ["seance"]
+lecture = "*"
+cote = "*"
+nature = "facultative"

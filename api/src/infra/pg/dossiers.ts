@@ -31,15 +31,19 @@ import type {
   ChangementEtape,
   Chiffre,
   CleCase,
+  DeviationParcours,
   DocumentOfficiel,
+  DossierLie,
   DossierRef,
   DossierResume,
   Echeance,
+  EffetDeviation,
   EnteteDossier,
   EtapeResume,
   EtatCase,
   EtatDossier,
   Facette,
+  FamilleParcours,
   FicheAmendement,
   FicheArticle,
   FicheEtape,
@@ -50,6 +54,7 @@ import type {
   AvisAmendement,
   Lieu,
   ListeDossiers,
+  NatureEtape,
   NatureTexte,
   Origine,
   OrigineModification,
@@ -83,12 +88,16 @@ const vivant = (colonne: string) =>
   `NOT EXISTS (SELECT 1 FROM canon.entite x_ WHERE x_.entite_id = ${colonne} AND (x_.retiree_de_la_source_le IS NOT NULL OR x_.fusionnee_dans IS NOT NULL))`;
 
 const SYSTEMES: readonly Systeme[] = ['AN', 'SENAT', 'LEGIFRANCE', 'CONSTIT', 'HATVP', 'RNE', 'INSEE', 'CIVICTRACE'];
-const ETATS_DOSSIER: readonly EtatDossier[] = ['en_cours', 'adopte', 'promulgue', 'rejete', 'retire', 'caduc'];
-const SORTS: readonly SortAmendement[] = ['adopte', 'rejete', 'retire', 'tombe', 'non_soutenu', 'irrecevable', 'en_attente'];
-const CLES: readonly CleCase[] = [
-  'depot', 'commission_1_o', 'seance_1_o', 'commission_1_s', 'seance_1_s', 'lecture_1_o', 'lecture_1_s', 'lecture_2_o',
-  'lecture_2_s', 'cmp', 'conclusions_cmp', 'nouvelle_lecture', 'lecture_definitive', 'cc', 'promulgation', 'jo', 'promulgation_jo',
+const ETATS_DOSSIER: readonly EtatDossier[] = [
+  'en_cours', 'adopte', 'promulgue', 'rejete', 'retire', 'caduc', 'fusionne', 'irrecevable', 'rapport_publie',
 ];
+const SORTS: readonly SortAmendement[] = ['adopte', 'rejete', 'retire', 'tombe', 'non_soutenu', 'irrecevable', 'en_attente'];
+/** Clé d'étape d'un modèle de parcours (`canon.parcours_etape.cle`) : mot en minuscules et « _ ». */
+const cleEtape = (valeur: string | null | undefined): CleCase | null =>
+  valeur != null && /^[a-z0-9_]+$/.test(valeur) ? valeur : null;
+const FAMILLES: readonly FamilleParcours[] = ['legislatif', 'resolution', 'controle', 'gouvernement', 'autre'];
+const NATURES: readonly NatureEtape[] = ['obligatoire', 'conditionnelle', 'facultative'];
+const EFFETS: readonly EffetDeviation[] = ['rejoint', 'termine', 'remplace', 'suspend'];
 const ETATS_CASE: readonly EtatCase[] = ['faite', 'en_cours', 'a_venir', 'sans_objet', 'inconnu'];
 const STATUTS_VERSION: readonly StatutVersionArticle[] = ['present', 'ajoute', 'supprime', 'conforme', 'non_modifie'];
 const LIEUX: readonly Lieu[] = ['AN', 'SENAT', 'CMP', 'CC', 'PR', 'JO', 'GOUVERNEMENT'];
@@ -107,6 +116,9 @@ const LIBELLES_ETAT: Record<EtatDossier, string> = {
   rejete: 'Rejetés',
   retire: 'Retirés',
   caduc: 'Caducs',
+  fusionne: 'Fusionnés',
+  irrecevable: 'Irrecevables',
+  rapport_publie: 'Rapports publiés',
 };
 const LIBELLES_ORIGINE: Record<Origine, string> = { gouvernement: 'Gouvernement', parlementaire: 'Parlementaires' };
 const LIBELLES_DOCUMENT: Record<TypeDocument, string> = {
@@ -135,22 +147,12 @@ const LIBELLES_AVIS: Record<string, string> = {
 };
 
 /**
- * État déduit du parcours (port : promulgation ou JO faite → promulgue ; retrait → retire ; rejet
- * publié qui clôt le texte : 1re lecture de la chambre d'origine ou lecture définitive → rejete ;
- * conclusions de CMP ou lecture définitive adoptées → adopte ; une case en cours → en_cours ;
- * sinon null). Une ligne par dossier de la projection.
+ * État d'un dossier : l'issue de son parcours (`lecture.parcours_dossier_synthese.issue`, cf.
+ * projection 55) : déviation qui termine (retrait, caducité, fusion…), sinon dernière étape faite
+ * qui porte une issue (« rejete » si sa conclusion dit un rejet), sinon en cours. Une ligne par
+ * dossier de la projection.
  */
-const ETATS_PARCOURS = `
-  SELECT p.dossier_id,
-    CASE
-      WHEN bool_or(p.cle IN ('promulgation', 'jo', 'promulgation_jo') AND p.etat = 'faite') THEN 'promulgue'
-      WHEN bool_or(s.retire_le IS NOT NULL) THEN 'retire'
-      WHEN bool_or(p.cle IN ('seance_1_o', 'lecture_1_o', 'lecture_definitive') AND p.etat = 'faite' AND p.conclusion ~* 'rejet') THEN 'rejete'
-      WHEN bool_or(p.cle IN ('conclusions_cmp', 'lecture_definitive') AND p.etat = 'faite' AND COALESCE(p.conclusion, '') !~* 'rejet') THEN 'adopte'
-      WHEN bool_or(p.etat = 'en_cours') THEN 'en_cours'
-    END AS etat
-  FROM lecture.parcours_dossier p
-  LEFT JOIN lecture.parcours_dossier_synthese s ON s.dossier_id = p.dossier_id`;
+const ETATS_PARCOURS = `SELECT s.dossier_id, s.issue AS etat FROM lecture.parcours_dossier_synthese s`;
 
 /** Statut publié dans canon.dossier, s'il est du vocabulaire. */
 const STATUT_PUBLIE = `CASE WHEN d.statut IN (${ETATS_DOSSIER.map((e) => `'${e}'`).join(', ')}) THEN d.statut END`;
@@ -171,12 +173,15 @@ interface LigneDossier {
 
 interface LigneCase {
   dossier_id: string;
+  modele: string;
+  version: number;
   procedure: string;
-  origine: string;
+  origine: string | null;
   rang: number;
   cle: string;
   libelle: string;
   chambre: string | null;
+  nature: string;
   facultative: boolean;
   etat: string;
   debut: string | null;
@@ -184,6 +189,8 @@ interface LigneCase {
   programmee_le: string | null;
   conclusion: string | null;
   courante: boolean;
+  attendue: boolean;
+  deviation: boolean;
   provenance: string[] | null;
   date_reference: string;
 }
@@ -273,7 +280,14 @@ function joursEntre(debut: string, fin: string): number {
 }
 
 function compacte(c: LigneCase): CaseCompacte {
-  return { cle: c.cle as CleCase, libelle: c.libelle, etat: dans(ETATS_CASE, c.etat) ?? 'inconnu', courante: c.courante };
+  return {
+    cle: c.cle,
+    libelle: c.libelle,
+    etat: dans(ETATS_CASE, c.etat) ?? 'inconnu',
+    courante: c.courante,
+    attendue: c.attendue,
+    deviation: c.deviation,
+  };
 }
 
 function page<T>(elements: T[], pagination: Pagination, total: number): Page<T> {
@@ -604,8 +618,10 @@ export class PgDossiers implements DossiersRepository {
     const resultat = new Map<string, LigneCase[]>();
     if (ids.length === 0 || !(await this.projection())) return resultat;
     const lignes = await this.db.all<LigneCase>(
-      `SELECT p.dossier_id, p.procedure, p.origine, p.rang::int AS rang, p.cle, p.libelle, p.chambre, p.facultative, p.etat,
-              p.debut::text AS debut, p.fin::text AS fin, p.programmee_le::text AS programmee_le, p.conclusion, p.courante,
+      `SELECT p.dossier_id, p.modele, p.version::int AS version, p.procedure, p.origine, p.rang::int AS rang, p.cle, p.libelle,
+              p.chambre, p.nature, p.facultative, p.etat, p.debut::text AS debut, p.fin::text AS fin,
+              p.programmee_le::text AS programmee_le, p.conclusion, p.courante, p.attendue,
+              EXISTS (SELECT 1 FROM lecture.parcours_deviation v WHERE v.dossier_id = p.dossier_id AND v.etape_cle = p.cle) AS deviation,
               p.provenance::text[] AS provenance, p.date_reference::text AS date_reference
        FROM lecture.parcours_dossier p WHERE p.dossier_id = ANY($ids::uuid[]) ORDER BY p.dossier_id, p.rang`,
       { ids },
@@ -636,7 +652,7 @@ export class PgDossiers implements DossiersRepository {
       heure: s.prochaine_echeance_heure,
       libelle: s.prochaine_echeance_libelle ?? '',
       etat: s.prochaine_echeance_etat,
-      cle: dans(CLES, s.prochaine_echeance_cle),
+      cle: cleEtape(s.prochaine_echeance_cle),
     };
   }
 
@@ -652,7 +668,7 @@ export class PgDossiers implements DossiersRepository {
       { ids },
     );
     for (const l of lignes) {
-      const cle = dans(CLES, l.cle);
+      const cle = cleEtape(l.cle);
       if (cle) resultat.set(l.etape_id, { cle, libelle: l.libelle });
     }
     return resultat;
@@ -663,9 +679,20 @@ export class PgDossiers implements DossiersRepository {
     if (ids.length === 0) return [];
     const projection = await this.projection();
     const [lignes, cases, syntheses] = await Promise.all([
-      this.db.all<LigneDossier & { etat_parcours: string | null; dernier_date: string | null; dernier_libelle: string | null }>(
+      this.db.all<
+        LigneDossier & {
+          etat_parcours: string | null;
+          dernier_date: string | null;
+          dernier_libelle: string | null;
+          parent_id: string | null;
+          parent_titre: string | null;
+          parent_titre_court: string | null;
+          parent_etape: string | null;
+          parent_etape_libelle: string | null;
+        }
+      >(
         projection
-          ? `WITH etats AS (${ETATS_PARCOURS} WHERE p.dossier_id = ANY($ids::uuid[]) GROUP BY p.dossier_id),
+          ? `WITH etats AS (${ETATS_PARCOURS} WHERE s.dossier_id = ANY($ids::uuid[])),
              dernier AS (
                SELECT DISTINCT ON (a.dossier_id) a.dossier_id, a.debut::text AS date,
                       p.libelle || COALESCE(' · ' || COALESCE(a.conclusion, a.libelle), '') AS libelle
@@ -674,12 +701,22 @@ export class PgDossiers implements DossiersRepository {
                ORDER BY a.dossier_id, a.debut DESC, a.ordre DESC)
              SELECT d.entite_id AS id, d.titre, d.titre_court, d.type_procedure, d.procedure_acceleree, d.initiative,
                     d.legislature, d.date_depot::text AS date_depot, ${STATUT_PUBLIE} AS statut,
-                    e.etat AS etat_parcours, n.date AS dernier_date, n.libelle AS dernier_libelle
+                    e.etat AS etat_parcours, n.date AS dernier_date, n.libelle AS dernier_libelle,
+                    pa.id AS parent_id, pa.titre AS parent_titre, pa.titre_court AS parent_titre_court, pa.etape AS parent_etape,
+                    pa.etape_libelle AS parent_etape_libelle
              FROM canon.dossier d LEFT JOIN etats e ON e.dossier_id = d.entite_id LEFT JOIN dernier n ON n.dossier_id = d.entite_id
+             LEFT JOIN LATERAL (
+               -- dossier dont celui-ci est un événement (lien explicite, cf. projection 55)
+               SELECT q.entite_id AS id, q.titre, q.titre_court, l.etape_cle AS etape, r.libelle AS etape_libelle
+               FROM lecture.dossier_lien l JOIN canon.dossier q ON q.entite_id = l.parent_id
+               LEFT JOIN lecture.parcours_dossier r ON r.dossier_id = l.parent_id AND r.cle = l.etape_cle
+               WHERE l.enfant_id = d.entite_id AND ${vivant('q.entite_id')} ORDER BY q.entite_id LIMIT 1) pa ON true
              WHERE d.entite_id = ANY($ids::uuid[]) AND ${vivant('d.entite_id')}`
           : `SELECT d.entite_id AS id, d.titre, d.titre_court, d.type_procedure, d.procedure_acceleree, d.initiative,
                     d.legislature, d.date_depot::text AS date_depot, ${STATUT_PUBLIE} AS statut,
-                    NULL::text AS etat_parcours, NULL::text AS dernier_date, NULL::text AS dernier_libelle
+                    NULL::text AS etat_parcours, NULL::text AS dernier_date, NULL::text AS dernier_libelle,
+                    NULL::uuid AS parent_id, NULL::text AS parent_titre, NULL::text AS parent_titre_court, NULL::text AS parent_etape,
+                    NULL::text AS parent_etape_libelle
              FROM canon.dossier d WHERE d.entite_id = ANY($ids::uuid[]) AND ${vivant('d.entite_id')}`,
         { ids },
       ),
@@ -691,7 +728,7 @@ export class PgDossiers implements DossiersRepository {
       const d = parId.get(id);
       if (!d) return [];
       const s = syntheses.get(id);
-      const courante = s?.etape_courante ? dans(CLES, s.etape_courante) : null;
+      const courante = s?.etape_courante ? cleEtape(s.etape_courante) : null;
       return [
         {
           id,
@@ -711,6 +748,14 @@ export class PgDossiers implements DossiersRepository {
               : null,
           prochaineEcheance: this.echeance(s),
           dernierEvenement: d.dernier_date && d.dernier_libelle ? { date: d.dernier_date, libelle: d.dernier_libelle } : null,
+          parent:
+            d.parent_id && d.parent_titre
+              ? {
+                  dossier: { id: d.parent_id, titre: titreAffiche(d.parent_titre, d.parent_titre_court) },
+                  etape: cleEtape(d.parent_etape),
+                  etapeLibelle: d.parent_etape_libelle,
+                }
+              : null,
         },
       ];
     });
@@ -738,7 +783,7 @@ export class PgDossiers implements DossiersRepository {
     const legislature = filtre.legislature ?? '17';
     const projection = await this.projection();
     const liste = `
-      WITH ${projection ? `etats AS (${ETATS_PARCOURS} GROUP BY p.dossier_id),
+      WITH ${projection ? `etats AS (${ETATS_PARCOURS}),
       dernier AS (SELECT a.dossier_id, max(a.debut) AS le FROM lecture.parcours_acte a WHERE a.accompli GROUP BY a.dossier_id),` : ''}
       liste AS (
         SELECT d.entite_id AS id, d.initiative, d.date_depot,
@@ -820,14 +865,14 @@ export class PgDossiers implements DossiersRepository {
          SELECT s.dossier_id, s.date_reference, k.initiative
          FROM lecture.parcours_dossier_synthese s
          JOIN canon.dossier k ON k.entite_id = s.dossier_id
-         WHERE k.legislature = $legislature AND s.retire_le IS NULL AND ${vivant('k.entite_id')}
+         JOIN lecture.dossier_modele m ON m.dossier_id = s.dossier_id AND m.famille = 'legislatif'
+         WHERE k.legislature = $legislature AND ${vivant('k.entite_id')}
        ), c AS (
          SELECT p.* FROM lecture.parcours_dossier p JOIN d ON d.dossier_id = p.dossier_id
        ), abouti AS (
-         -- publié au JO, ou rejeté en 1re lecture de la chambre de dépôt ou en lecture définitive
-         SELECT DISTINCT dossier_id FROM c
-         WHERE etat = 'faite'
-           AND (cle IN ('jo', 'promulgation_jo') OR (cle IN ('seance_1_o', 'lecture_1_o', 'lecture_definitive') AND conclusion ~* 'rejet'))
+         -- issue du parcours : publié au JO, rejeté, retiré, caduc, fusionné, irrecevable (adopté et
+         -- pas encore publié reste dans la file : promulgation, publication)
+         SELECT dossier_id FROM lecture.parcours_dossier_synthese WHERE issue NOT IN ('en_cours', 'adopte')
        ), position AS (
          -- case active (faite ou en cours) de plus haut rang ; en cours, elle n'est « en examen »
          -- qu'avec un acte d'examen (réunion, rapport, débat, décision, saisine du Conseil) : un
@@ -851,7 +896,7 @@ export class PgDossiers implements DossiersRepository {
               p.cle, p.libelle, p.chambre, p.en_examen, p.depuis::text AS depuis, (d.date_reference - p.depuis)::int AS jours,
               CASE
                 WHEN p.cle = 'cc' AND p.en_examen THEN 'decision_cc'
-                WHEN p.faite AND p.cle <> 'depot' AND s.cle IN ('promulgation', 'promulgation_jo') THEN 'promulgation'
+                WHEN p.faite AND p.cle <> 'depot' AND s.cle = 'promulgation' THEN 'promulgation'
                 WHEN p.faite AND p.cle = 'promulgation' AND s.cle = 'jo' THEN 'publication_jo'
               END AS hors_parlement
        FROM d
@@ -864,7 +909,7 @@ export class PgDossiers implements DossiersRepository {
     const positions: PositionTexte[] = [];
     let indetermines = 0;
     for (const l of lignes) {
-      const cle = dans(CLES, l.cle);
+      const cle = cleEtape(l.cle);
       if (!cle || l.en_examen === null) {
         indetermines++;
         continue;
@@ -918,7 +963,7 @@ export class PgDossiers implements DossiersRepository {
       const titre = titres.get(l.dossier);
       const provenance = provenances.get(l.etape);
       if (titre === undefined || !provenance) return [];
-      return [{ type: 'acte' as const, date: l.date, dossier: { id: l.dossier, titre }, cle: dans(CLES, l.cle), libelle: l.libelle, provenance }];
+      return [{ type: 'acte' as const, date: l.date, dossier: { id: l.dossier, titre }, cle: cleEtape(l.cle), libelle: l.libelle, provenance }];
     });
   }
 
@@ -988,28 +1033,102 @@ export class PgDossiers implements DossiersRepository {
     const [cases, syntheses] = await Promise.all([this.cases([id]), this.syntheses([id])]);
     const lignes = cases.get(id) ?? [];
     if (lignes.length === 0) return null;
-    const provenances = await this.provenances(lignes.flatMap((c) => c.provenance ?? []));
+    const [modele, deviations, branches, liens] = await Promise.all([
+      this.db.first<{ cle: string; version: number; libelle: string; famille: string; fondement: string }>(
+        `SELECT cle, version::int AS version, libelle, famille, fondement FROM canon.parcours_modele
+         WHERE cle = $cle AND version = $version`,
+        { cle: lignes[0].modele, version: lignes[0].version },
+      ),
+      this.db.all<{ cle: string; libelle: string; fondement: string; etape_cle: string; effet: string; debut: string | null;
+                    conclusion: string | null; provenance: string[] }>(
+        `SELECT cle, libelle, fondement, etape_cle, effet, debut::text AS debut, conclusion, provenance::text[] AS provenance
+         FROM lecture.parcours_deviation WHERE dossier_id = $id ORDER BY ordre`,
+        { id },
+      ),
+      this.db.all<{ de: string; vers: string; libelle: string }>(
+        `SELECT b.de, b.vers, b.libelle FROM lecture.parcours_branche b
+         JOIN lecture.parcours_dossier p ON p.dossier_id = b.dossier_id AND p.cle = b.de
+         WHERE b.dossier_id = $id ORDER BY p.rang`,
+        { id },
+      ),
+      this.db.all<{
+        sens: 'parent' | 'enfant';
+        id: string;
+        titre: string;
+        titre_court: string | null;
+        etape: string | null;
+        etape_libelle: string | null;
+      }>(
+        // libellé de l'étape : celle du dossier parent, où le lien a lieu
+        `SELECT 'parent' AS sens, d.entite_id AS id, d.titre, d.titre_court, l.etape_cle AS etape, p.libelle AS etape_libelle
+         FROM lecture.dossier_lien l JOIN canon.dossier d ON d.entite_id = l.parent_id
+         LEFT JOIN lecture.parcours_dossier p ON p.dossier_id = l.parent_id AND p.cle = l.etape_cle
+         WHERE l.enfant_id = $id AND ${vivant('d.entite_id')}
+         UNION ALL
+         SELECT 'enfant', d.entite_id, d.titre, d.titre_court, l.etape_cle, p.libelle
+         FROM lecture.dossier_lien l JOIN canon.dossier d ON d.entite_id = l.enfant_id
+         LEFT JOIN lecture.parcours_dossier p ON p.dossier_id = l.parent_id AND p.cle = l.etape_cle
+         WHERE l.parent_id = $id AND ${vivant('d.entite_id')}
+         ORDER BY 1, 2`,
+        { id },
+      ),
+    ]);
+    if (!modele) return null;
+    const provenances = await this.provenances([...lignes.flatMap((c) => c.provenance ?? []), ...deviations.flatMap((d) => d.provenance)]);
+    const sources = (ids: string[] | null) =>
+      (ids ?? []).flatMap((p) => {
+        const v = provenances.get(p);
+        return v ? [v] : [];
+      });
     const toutes: CaseParcours[] = lignes.map((c) => ({
       rang: c.rang,
-      cle: c.cle as CleCase,
+      cle: c.cle,
       libelle: c.libelle,
       lieu: lieuDe(c.chambre),
       facultative: c.facultative,
+      nature: dans(NATURES, c.nature) ?? 'obligatoire',
       etat: dans(ETATS_CASE, c.etat) ?? 'inconnu',
       courante: c.courante,
+      attendue: c.attendue,
+      deviation: c.deviation,
       debut: c.debut,
       fin: c.fin,
       programmeeLe: c.programmee_le,
       conclusion: c.conclusion,
-      provenance: (c.provenance ?? []).flatMap((p) => {
-        const v = provenances.get(p);
-        return v ? [v] : [];
-      }),
+      provenance: sources(c.provenance),
     }));
+    const lie = (l: (typeof liens)[number]): DossierLie => ({
+      dossier: { id: l.id, titre: titreAffiche(l.titre, l.titre_court) },
+      etape: cleEtape(l.etape),
+      etapeLibelle: l.etape_libelle,
+    });
+    const parent = liens.find((l) => l.sens === 'parent');
     return {
+      modele: {
+        cle: modele.cle,
+        version: modele.version,
+        libelle: modele.libelle,
+        famille: dans(FAMILLES, modele.famille) ?? 'autre',
+        fondement: modele.fondement,
+      },
       procedure: lignes[0].procedure === 'acceleree' ? 'acceleree' : 'normale',
-      origine: lignes[0].origine === 'SENAT' ? 'SENAT' : 'AN',
+      origine: lignes[0].origine === 'SENAT' ? 'SENAT' : lignes[0].origine === 'AN' ? 'AN' : null,
       cases: toutes,
+      deviations: deviations.map(
+        (d): DeviationParcours => ({
+          cle: d.cle,
+          libelle: d.libelle,
+          fondement: d.fondement,
+          etape: d.etape_cle,
+          effet: dans<EffetDeviation>(EFFETS, d.effet) ?? 'rejoint',
+          debut: d.debut,
+          conclusion: d.conclusion,
+          provenance: sources(d.provenance),
+        }),
+      ),
+      branches: branches.map((b) => ({ de: b.de, vers: b.vers, libelle: b.libelle })),
+      parent: parent ? lie(parent) : null,
+      enfants: liens.filter((l) => l.sens === 'enfant').map(lie),
       dateReference: lignes[0].date_reference,
       prochaineEcheance: this.echeance(syntheses.get(id)),
     };
@@ -1480,7 +1599,7 @@ export class PgDossiers implements DossiersRepository {
     const resumes = await this.resumesAmendements(ids.map((l) => l.id));
     return {
       parEtape: parEtape.flatMap((s) => {
-        const cle = dans(CLES, s.cle);
+        const cle = cleEtape(s.cle);
         return cle ? [{ cle, libelle: s.libelle, deposes: s.deposes, adoptes: s.adoptes }] : [];
       }),
       liste: page(ids.flatMap((l) => resumes.get(l.id) ?? []), pagination, total?.n ?? 0),
@@ -1548,7 +1667,7 @@ export class PgDossiers implements DossiersRepository {
   // ----- Étape (une case de la barre) -----
 
   async etape(dossier: string, cle: CleCase): Promise<Omit<FicheEtape, 'barre' | 'votes' | 'quiIntervient'> | null> {
-    if (!dans(CLES, cle) || !(await this.dossierLigne(dossier)) || !(await this.projection())) return null;
+    if (!cleEtape(cle) || !(await this.dossierLigne(dossier)) || !(await this.projection())) return null;
     const [toutes, details] = await Promise.all([this.cases([dossier]), this.organesEtChiffres(dossier, cle)]);
     const cases = toutes.get(dossier) ?? [];
     const c = cases.find((x) => x.cle === cle);
@@ -1572,6 +1691,8 @@ export class PgDossiers implements DossiersRepository {
       chiffres: d ? chiffresEtape(d, true) : [],
       changements,
       documents,
+      deviations: parcours!.deviations.filter((x) => x.etape === cle),
+      enfants: parcours!.enfants.filter((x) => x.etape === cle),
       precedente: i > 0 ? voisine(visibles[i - 1]) : null,
       suivante: i >= 0 ? voisine(visibles[i + 1]) : null,
     };

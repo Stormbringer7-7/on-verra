@@ -92,8 +92,8 @@ liens vers le code sont vérifiés par [test_chaque_lien_pointe_sur_sa_definitio
 Les UUID changent d'une base à l'autre : seuls les identifiants natifs sont stables.
 
 Chaîne commune à tous les objets : chaque document brut est enregistré par son empreinte sha256
-([charger()](../../src/chargement.py#L80)), analysé par l'adaptateur, puis écrit avec sa provenance
-(fichier, membre de l'archive, pointeur JSON) par [ecrire()](../../src/chargement.py#L115). Une
+([charger()](../../src/chargement.py#L81)), analysé par l'adaptateur, puis écrit avec sa provenance
+(fichier, membre de l'archive, pointeur JSON) par [ecrire()](../../src/chargement.py#L116). Une
 identité native connue donne toujours la même entité ([RegistreIdentites.identifier()](../../src/identites.py#L47),
 prouvé par [test_meme_identifiant_meme_entite](../../tests/test_identites.py#L28)).
 
@@ -228,7 +228,7 @@ un numéro ambigu ou introuvable part en revue (`amendement_ambigu`, `amendement
 
 Code : [scrutin()](../../src/adaptateurs/sources/an/scrutins.py#L78), [majoritaire()](../../src/adaptateurs/sources/an/scrutins.py#L58),
 [nature()](../../src/adaptateurs/sources/an/scrutins.py#L39) ·
-Tests : [test_scrutin](../../tests/test_sources_an.py#L282), [test_nature](../../tests/test_sources_an.py#L303)
+Tests : [test_scrutin](../../tests/test_sources_an.py#L291), [test_nature](../../tests/test_sources_an.py#L312)
 
 ### Amendement — `AN:amendement:AMANR5L17PO838901BTC2765P0D1N000357`
 
@@ -252,7 +252,7 @@ dispositif et exposé en HTML **tels que publiés**. Liens (`canon.lien`) : `aut
 Ce que l'AN ne publie pas : les avis du rapporteur et du Gouvernement (le Sénat, oui).
 
 Code : [amendement()](../../src/adaptateurs/sources/an/amendements.py#L112), [sort()](../../src/adaptateurs/sources/an/amendements.py#L28) ·
-Tests : [test_amendement](../../tests/test_sources_an.py#L251), [test_irrecevable_sans_sort](../../tests/test_sources_an.py#L271)
+Tests : [test_amendement](../../tests/test_sources_an.py#L260), [test_irrecevable_sans_sort](../../tests/test_sources_an.py#L280)
 
 #### Article suivi et étape de l'amendement
 
@@ -306,7 +306,7 @@ numéro dans les 75 398 cas où `titre` se lit. L'amendement **déclare l'articl
 absent de la base (texte non publié en HTML, gabarit non découpé, dossier dont les textes ne sont pas
 chargés), qui serait sinon une `reference_inconnue`.
 
-Étape ([Examens](../../src/adaptateurs/sources/an/dossiers.py#L232)) : chaque acte racine est une
+Étape ([Examens](../../src/adaptateurs/sources/an/dossiers.py#L233)) : chaque acte racine est une
 lecture (un dossier repris d'une législature à l'autre en a plusieurs du même code, « AN2 ») ; ses
 étapes d'examen sont les actes `…-COM-FOND`, `…-COM-AVIS`, `…-DEBATS`, `CMP-DEBATS-AN`. Plusieurs
 étapes pour le même texte et le même organe : cas `etape_ambigue` (le PLFSS 2025, DLR5L17N50588,
@@ -319,7 +319,7 @@ rangés sous un dossier absent de l'archive des dossiers (pas de clé de suivi),
 `article_vise_illisible` ; 138 182 reliés à une étape, 43 en revue `etape_ambigue`, 3 864 sans étape.
 
 Code : [article_vise()](../../src/adaptateurs/sources/an/amendements.py#L53), [numero_publie()](../../src/adaptateurs/sources/an/amendements.py#L45),
-[rattachement()](../../src/adaptateurs/sources/an/amendements.py#L82), [Examens](../../src/adaptateurs/sources/an/dossiers.py#L232),
+[rattachement()](../../src/adaptateurs/sources/an/amendements.py#L82), [Examens](../../src/adaptateurs/sources/an/dossiers.py#L233),
 [cle_suivi()](../../src/adaptateurs/sources/an/dossiers.py#L89) ·
 Tests : [test_divisions_reelles](../../tests/test_amendements_articles.py#L87), [test_commission_au_fond](../../tests/test_amendements_articles.py#L123),
 [test_commission_pour_avis_et_seance](../../tests/test_amendements_articles.py#L134), [test_etape_ambigue_en_revue](../../tests/test_amendements_articles.py#L158),
@@ -371,7 +371,7 @@ député, membre du Gouvernement, présence à la réunion). Rien n'est relié a
 
 Code : [compte_rendu()](../../src/adaptateurs/sources/an/commissions.py#L97),
 [candidats_orateur()](../../src/adaptateurs/sources/an/cas.py#L28) ·
-Tests : [test_decoupage](../../tests/test_sources_an.py#L204), [test_compte_rendu_sans_reunion_ignore](../../tests/test_sources_an.py#L243)
+Tests : [test_decoupage](../../tests/test_sources_an.py#L213), [test_compte_rendu_sans_reunion_ignore](../../tests/test_sources_an.py#L252)
 
 ### Réunion, ordre du jour, présences — agenda
 
@@ -380,7 +380,7 @@ Brut : `agenda.json.zip` (`reunion` : `@xsi:type`, `organeReuniRef`, `compteRend
 Canon : `canon.reunion`, `canon.point_odj` (avec `etat`), `canon.participation` (présent, excusé,
 absent : la base de l'indicateur de présence en commission), `canon.audition`, `canon.evenement_agenda`.
 
-Code : [reunion()](../../src/adaptateurs/sources/an/agenda.py#L20) · Test : [test_reunion_points_presences](../../tests/test_sources_an.py#L159)
+Code : [reunion()](../../src/adaptateurs/sources/an/agenda.py#L20) · Test : [test_reunion_points_presences](../../tests/test_sources_an.py#L168)
 
 ### Textes et articles — `AN:version_texte:<uid>`, `AN:article:<uid>#<numéro>`
 
@@ -421,8 +421,8 @@ une version d'une lecture précédente absente est marquée retirée (jamais sup
 devenus sans objet passent `CADUC`.
 
 Code : [articles()](../../src/adaptateurs/sources/an/textes.py#L59), [version()](../../src/adaptateurs/sources/an/textes.py#L90),
-[numero_article()](../../src/textes.py#L19), [numeros_articles()](../../src/textes.py#L52),
-[statut_mention()](../../src/textes.py#L76) ·
+[numero_article()](../../src/textes.py#L65), [numeros_articles()](../../src/textes.py#L98),
+[statut_mention()](../../src/textes.py#L122) ·
 Tests : [test_cas_reels_du_html](../../tests/test_textes.py#L122), [test_gabarit_sans_balisage_en_revue](../../tests/test_textes.py#L153),
 [test_numero_strict](../../tests/test_textes.py#L30), [test_intitules_groupes_et_plages](../../tests/test_textes.py#L37),
 [test_mentions](../../tests/test_textes.py#L45), [test_articles_du_html](../../tests/test_textes.py#L107)

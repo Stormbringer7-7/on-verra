@@ -11,8 +11,9 @@ import type {
   Trouve,
   TypeRecherche,
 } from '@contrat/domain/model';
+import type { FiltresRecherche } from '@contrat/domain/familles';
 import { normaliser } from '@contrat/domain/texte';
-import { candidatsCatalogue, comptesCatalogue, sectionCatalogue } from '@fixtures/familles';
+import { candidatsCatalogue, comptesCatalogue, personneCatalogue, sectionCatalogue } from '@fixtures/familles';
 
 import type { Pagination, RechercheRepository } from '../../ports';
 import { type DonneesMemoire, paginer } from './donnees';
@@ -38,12 +39,16 @@ export class RechercheMemoire implements RechercheRepository {
     return { q: demande.q, type: demande.type ?? null, sections };
   }
 
-  async compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]) {
-    return comptesCatalogue(q, declinaisons, (await this.donnees).retirees);
+  async compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[], filtres?: FiltresRecherche) {
+    return comptesCatalogue(q, declinaisons, (await this.donnees).retirees, filtres);
   }
 
-  async chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination) {
-    return sectionCatalogue(q, declinaison, pagination, (await this.donnees).retirees);
+  async chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination, filtres?: FiltresRecherche) {
+    return sectionCatalogue(q, declinaison, pagination, (await this.donnees).retirees, filtres);
+  }
+
+  async nommerPersonne(id: string) {
+    return (await this.donnees).retirees.has(id) ? null : personneCatalogue(id);
   }
 
   async candidatsNumero(numero: NumeroOfficiel, limite: number) {

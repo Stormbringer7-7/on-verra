@@ -46,6 +46,15 @@ describe('bus de commandes', () => {
     await expect(bus.execute(definitions.ConsulterDossier({ id: 'x' }))).rejects.toMatchObject({ statut: 404 });
     await expect(bus.execute(definitions.ConsulterDossier({ id: 'x' }))).rejects.toMatchObject({ statut: 404 });
   });
+
+  it('recherche : expressions invalides (400), personne inconnue (404)', async () => {
+    const bus = coreDeTest(memoire().depots);
+    const chercher = (d: object) => bus.execute(definitions.ChercherParFamilles(d as never));
+    await expect(chercher({ textes: 'Silence' })).rejects.toMatchObject({ statut: 400 });
+    await expect(chercher({ textes: ['a', 'b', 'c', 'd', 'e', 'f'] })).rejects.toMatchObject({ statut: 400 });
+    await expect(chercher({ textes: ['x'.repeat(101)] })).rejects.toMatchObject({ statut: 400 });
+    await expect(chercher({ personne: 'personne-inconnue' })).rejects.toMatchObject({ statut: 404 });
+  });
 });
 
 describe('pagination bornée', () => {

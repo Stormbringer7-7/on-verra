@@ -1,0 +1,228 @@
+# Loi ordinaire : projet (Gouvernement) ou proposition (parlementaires).
+#
+# Étape : phases d'actes qu'elle reçoit (cf. correspondances.toml), lecture (1, 2, n = 3e et
+# suivantes, nouvelle, definitive, cmp, *), côté (o = chambre de dépôt, s = l'autre, AN, SENAT,
+# CMP, CC, PR, JO, *), nature (obligatoire, conditionnelle, facultative), `conclut` : phases dont
+# un acte conclusif dit l'étape faite (défaut : toutes ses phases), `conclusifs` : nombre d'actes
+# conclusifs distincts (2 : les deux chambres), `issue` : issue du dossier quand l'étape est faite
+# (« rejete » si sa conclusion dit un rejet).
+# Transition : quand la conclusion de `de` correspond à `condition` (expression régulière, sans
+# casse), le parcours saute à `vers` (« fin » : plus rien) ; les étapes entre les deux sont sans objet.
+# Une étape facultative ou conditionnelle que le parcours a dépassée est aussi sans objet.
+
+cle = "loi_ordinaire"
+version = 1
+libelle = "Loi ordinaire"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 39 à 45 (navette, CMP, dernier mot de l'AN), 61 (Conseil constitutionnel) et 10 (promulgation)"
+types = [
+    # AN (procedureParlementaire)
+    "Projet de loi ordinaire", "Proposition de loi ordinaire",
+    # Sénat (typloi)
+    "projet de loi", "proposition de loi", "proposition de loi de programmation", "projet de loi de programmation",
+    "Projet de loi d'orientation", "projet de loi-cadre",
+]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt {o}"
+phases = ["depot"]
+lecture = "1"
+cote = "o"
+nature = "obligatoire"
+
+[[etape]]
+cle = "commission_1_o"
+libelle = "Commission {o}"
+phases = ["commission", "commission_ae"]
+conclut = ["commission"]
+lecture = "1"
+cote = "o"
+nature = "obligatoire"
+
+[[etape]]
+cle = "seance_1_o"
+libelle = "Séance {o}"
+phases = ["seance"]
+lecture = "1"
+cote = "o"
+nature = "obligatoire"
+issue = "en_cours"
+
+[[etape]]
+cle = "transmission_1_s"
+libelle = "Transmission {s}"
+phases = ["depot"]
+lecture = "1"
+cote = "s"
+nature = "obligatoire"
+
+[[etape]]
+cle = "commission_1_s"
+libelle = "Commission {s}"
+phases = ["commission", "commission_ae"]
+conclut = ["commission"]
+lecture = "1"
+cote = "s"
+nature = "obligatoire"
+
+[[etape]]
+cle = "seance_1_s"
+libelle = "Séance {s}"
+phases = ["seance"]
+lecture = "1"
+cote = "s"
+nature = "obligatoire"
+
+[[etape]]
+cle = "lecture_2_o"
+libelle = "2e lecture {o}"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "2"
+cote = "o"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "lecture_2_s"
+libelle = "2e lecture {s}"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "2"
+cote = "s"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "lecture_n"
+libelle = "Lectures suivantes"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "n"
+cote = "*"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "cmp"
+libelle = "CMP"
+phases = ["cmp"]
+lecture = "*"
+cote = "CMP"
+nature = "conditionnelle"
+
+[[etape]]
+cle = "conclusions_cmp"
+libelle = "Vote du texte de la CMP"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "cmp"
+cote = "*"
+nature = "conditionnelle"
+conclusifs = 2
+
+[[etape]]
+cle = "nouvelle_lecture"
+libelle = "Nouvelle lecture"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "nouvelle"
+cote = "*"
+nature = "conditionnelle"
+conclusifs = 2
+
+[[etape]]
+cle = "lecture_definitive"
+libelle = "Lecture définitive AN"
+phases = ["depot", "commission", "seance"]
+conclut = ["seance"]
+lecture = "definitive"
+cote = "AN"
+nature = "conditionnelle"
+issue = "adopte"
+
+[[etape]]
+cle = "cc"
+libelle = "Conseil constitutionnel"
+phases = ["cc"]
+lecture = "*"
+cote = "*"
+nature = "facultative"
+
+[[etape]]
+cle = "promulgation"
+libelle = "Promulgation"
+phases = ["promulgation"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "adopte"
+
+[[etape]]
+cle = "jo"
+libelle = "Journal officiel"
+phases = ["jo"]
+lecture = "*"
+cote = "*"
+nature = "obligatoire"
+issue = "promulgue"
+
+# Texte adopté dans les mêmes termes : la navette s'arrête.
+[[transition]]
+de = "seance_1_s"
+vers = "cc"
+condition = "sans modification|conforme"
+libelle = "Adopté sans modification : fin de la navette"
+
+[[transition]]
+de = "lecture_2_o"
+vers = "cc"
+condition = "sans modification|conforme"
+libelle = "Adopté sans modification : fin de la navette"
+
+[[transition]]
+de = "lecture_2_s"
+vers = "cc"
+condition = "sans modification|conforme"
+libelle = "Adopté sans modification : fin de la navette"
+
+[[transition]]
+de = "lecture_n"
+vers = "cc"
+condition = "sans modification|conforme"
+libelle = "Adopté sans modification : fin de la navette"
+
+# CMP sans accord : pas de vote sur ses conclusions.
+[[transition]]
+de = "cmp"
+vers = "nouvelle_lecture"
+condition = "^(?!\\s*accord)"
+libelle = "CMP sans accord : nouvelle lecture"
+
+# Conclusions de la CMP adoptées par les deux chambres : texte adopté.
+[[transition]]
+de = "conclusions_cmp"
+vers = "cc"
+condition = "^(?!.*rejet)"
+libelle = "Texte de la CMP adopté : fin de la navette"
+
+[[transition]]
+de = "lecture_definitive"
+vers = "fin"
+condition = "rejet"
+libelle = "Rejeté en lecture définitive"
+
+[[deviation]]
+cle = "procedure_acceleree"
+libelle = "Procédure accélérée"
+fondement = "Constitution, art. 45, al. 2 : CMP possible après une seule lecture dans chaque chambre"
+effet = "rejoint"
+
+[[deviation]]
+cle = "engagement_responsabilite"
+libelle = "Engagement de la responsabilité du Gouvernement (49.3)"
+fondement = "Constitution, art. 49, al. 3 : le vote est remplacé par une éventuelle motion de censure"
+effet = "rejoint"
+si = "motion adoptée"
+effet_si = "termine"
+issue = "rejete"

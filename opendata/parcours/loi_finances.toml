@@ -1,0 +1,21 @@
+# Lois de finances (de l'année, rectificative, de règlement ou d'approbation des comptes) :
+# parcours de la loi ordinaire, avec dépôt à l'AN d'abord, délais fixes et CMP de droit après
+# une lecture (art. 47) ; l'AN se prononce sur la première partie avant la seconde.
+
+cle = "loi_finances"
+version = 1
+herite = "loi_ordinaire"
+libelle = "Loi de finances"
+famille = "legislatif"
+juridiction = "FR"
+valide_du = 1958-10-04
+fondement = "Constitution, art. 39, al. 2 (dépôt à l'AN), 47 (40 jours à l'AN, 15 au Sénat, 70 au total, sinon ordonnance) ; loi organique relative aux lois de finances (LOLF)"
+types = [
+    "Projet de loi de finances de l'année", "Projet de loi de finances rectificative",
+    "Projet de loi relative aux résultats de la gestion et portant approbation des comptes",
+    "projet de loi de finances", "projet de loi de finances rectificative", "projet de loi de règlement",
+]
+
+[[etape]]
+cle = "depot"
+libelle = "Dépôt AN"

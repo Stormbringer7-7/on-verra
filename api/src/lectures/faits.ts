@@ -7,7 +7,7 @@ import type { CleFiltre, DemandeFaits, FiltresFaits, Regroupement, TypeFait } fr
 
 import type { FaitsRepository } from '../ports';
 import {
-  CASES,
+  cleEtapeFacultative,
   type Handlers,
   Introuvable,
   type LecturesDeps,
@@ -39,7 +39,7 @@ function filtresValides(f: unknown): FiltresFaits {
     const v = texteFacultatif(brut[cle], `Filtre ${cle}`);
     if (v !== undefined) filtres[cle] = v;
   }
-  const etape = parmiFacultatif(brut.etape, CASES, 'Étape');
+  const etape = cleEtapeFacultative(brut.etape, 'Étape');
   if (etape) {
     if (!filtres.dossier) throw new RequeteInvalide('Le filtre étape demande un dossier');
     filtres.etape = etape;

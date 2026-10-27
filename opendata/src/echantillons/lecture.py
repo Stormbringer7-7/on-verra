@@ -18,7 +18,7 @@ from xml.etree import ElementTree
 
 from ..adaptateurs.sources.senat.commun import C1_CP1252, encodage_dump, valeur_copy
 from ..inventaire.releve import decoder
-from .aplatir import texte_html
+from ..textes import texte_html
 
 GRAINE = 17
 

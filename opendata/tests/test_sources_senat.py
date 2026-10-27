@@ -10,6 +10,7 @@ from src.domaine import IdentiteNative, Systeme
 from src.domaine.objets import CasRevue, Objet
 from src.adaptateurs.sources.senat import debats, dossiers
 from src.adaptateurs.sources.senat.commun import document_ligne
+from src.textes import texte_html
 from src.domaine.objets import CasRevue
 
 CRI = """<?xml version="1.0" encoding="ISO-8859-1"?>
@@ -95,11 +96,32 @@ class Dump(unittest.TestCase):
 
 
 class Dossiers(unittest.TestCase):
+    LOI = {"loicod": "1", "signet": "ppl25-940", "loient": "Proposition de loi", "loitit": "visant à X ", "motclef": None,
+           "proaccdat": "2026-01-01", "typloilib": "proposition de loi", "etaloicod": "05", "lectures": [
+               {"lecidt": "L1", "typleccod": "1", "typlecord": "1", "typleclib": "Première lecture", "assemblees": [
+                   {"lecassidt": "LA1", "codass": "S", "textes": [
+                       {"texcod": "T1", "oritxtcod": "1", "txtoritxtdat": "2026-01-02 00:00:00", "texnum": "12",
+                        "oritxtlib": "déposé au Sénat"},
+                       # texte d'une étape précédente, repris comme base : daté d'avant le dépôt
+                       {"texcod": "T0", "oritxtcod": "11", "txtoritxtdat": "2025-12-01 00:00:00", "texnum": "3",
+                        "oritxtlib": "adopté par le Sénat"}],
+                    "rapports": [{"rapcod": "R1", "date_depot": "2026-01-10 00:00:00", "rapnum": "40"}],
+                    "seances": [{"code": "9", "date_s": "2026-01-15 00:00:00"}]}]}]}
+
     def test_titre(self):
-        d = document_ligne(dossiers.DOSLEG, "loi", "1", {"loicod": "1", "signet": "ppl25-940", "loient": "Proposition de loi",
-                                                         "loitit": "visant à X ", "motclef": None, "proaccdat": "2026-01-01"})
-        o = next(dossiers.dossier(d))
-        self.assertEqual((o.valeurs["titre"], o.valeurs["procedure_acceleree"]), ("Proposition de loi visant à X", True))
+        o = next(dossiers.dossier(document_ligne(dossiers.DOSLEG, "loi", "1", self.LOI)))
+        self.assertEqual((o.valeurs["titre"], o.valeurs["procedure_acceleree"], o.valeurs["type_procedure"],
+                          o.valeurs["statut"], str(o.valeurs["date_depot"])),
+                         ("Proposition de loi visant à X", True, "proposition de loi", "caduc", "2026-01-02"))
+
+    def test_etapes_telles_que_publiees(self):
+        etapes = [x.valeurs for x in list(dossiers.dossier(document_ligne(dossiers.DOSLEG, "loi", "1", self.LOI)))[1:]]
+        self.assertEqual([(e["code_source"], e["chambre"], e["lecture"], str(e["debut"])) for e in etapes], [
+            ("DOSLEG-PROCACC", None, "1", "2026-01-01"), ("DOSLEG-1", None, "1", "None"),
+            ("DOSLEG-1-S-TXT11-REPRIS", "SENAT", "1", "2025-12-01"), ("DOSLEG-1-S-TXT1", "SENAT", "1", "2026-01-02"),
+            ("DOSLEG-1-S-RAP", "SENAT", "1", "2026-01-10"), ("DOSLEG-1-S-SEANCE", "SENAT", "1", "2026-01-15"),
+            ("DOSLEG-ETAT-05", None, None, "None")])
+        self.assertEqual([e["ordre"] for e in etapes], list(range(7)))
 
 
 if __name__ == "__main__":
@@ -131,8 +153,9 @@ class Travaux(unittest.TestCase):
              "datdep": "2026-10-01 10:00:00", "dis": "<body><p>Alin&#233;a 3</p></body>", "obj": None}
         elements = list(self.module.amendement(document_ligne(self.module.AMELI, "amd", "A1", a), ref))
         v = elements[0].valeurs
-        self.assertEqual((v["dossier_id"].id_source, v["division"], v["sort"], v["dispositif"]),
-                         ("ppl25-940", "Article 3", "adopte", "<body><p>Alinéa 3</p></body>"))
+        # dispositif tel que publié : le chargement le nettoie (`textes.texte_html`)
+        self.assertEqual((v["dossier_id"].id_source, v["division"], v["sort"], texte_html(v["dispositif"])),
+                         ("ppl25-940", "Article 3", "adopte", "Alinéa 3"))
         self.assertEqual({l["emetteur"]: l["avis"] for l in elements[1].lignes},
                          {"commission": "favorable", "gouvernement": "defavorable"})
         self.assertEqual([l["vers_id"].id_source for l in elements[2].lignes], ["19683J"])     # rang 1

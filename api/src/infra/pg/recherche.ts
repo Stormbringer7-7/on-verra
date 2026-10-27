@@ -6,6 +6,7 @@
 // Les interventions (`canon.intervention.texte_recherche`) ne sont pas un type de résultat du contrat.
 
 import type { DeclinaisonRecherche, DemandeRecherche, NumeroOfficiel, ResultatRecherche, Trouve, TypeRecherche } from '@contrat/domain/model';
+import type { FiltresRecherche } from '@contrat/domain/familles';
 import { normaliser } from '@contrat/domain/texte';
 import type { Pagination, RechercheRepository, SqlDatabase, SqlParams } from '../../ports';
 import { PgFamilles } from './familles';
@@ -142,12 +143,16 @@ export class PgRecherche implements RechercheRepository {
     this.familles = new PgFamilles(db);
   }
 
-  compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[]) {
-    return this.familles.compter(q, declinaisons);
+  compterFamilles(q: string | null, declinaisons: DeclinaisonRecherche[], filtres?: FiltresRecherche) {
+    return this.familles.compter(q, declinaisons, filtres);
   }
 
-  chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination) {
-    return this.familles.chercher(q, declinaison, pagination);
+  chercherDeclinaison(q: string | null, declinaison: DeclinaisonRecherche, pagination: Pagination, filtres?: FiltresRecherche) {
+    return this.familles.chercher(q, declinaison, pagination, filtres);
+  }
+
+  nommerPersonne(id: string) {
+    return this.familles.personne(id);
   }
 
   candidatsNumero(numero: NumeroOfficiel, limite: number) {
