@@ -9,6 +9,7 @@ import { Platform, Share, StyleSheet, View } from 'react-native';
 import { useAller } from '../../navigation';
 import { Action, BoutonSecondaire, Carte, Segmente, T, TitreEcran, TitreSection } from '../components/base';
 import { Signaler } from '../components/commun/Signaler';
+import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { Interrupteur } from '../components/fondations';
 import { useReglages, type TailleTexte, type Theme } from '../hooks/reglages';
@@ -48,7 +49,7 @@ export function Reglages() {
   const [efface, setEfface] = useState(false);
 
   return (
-    <Ecran titre="Accessibilité et réglages" largeur="lecture">
+    <Ecran titre="Accessibilité et réglages" largeur="lecture" parents={[RACINES.actualite]}>
       <View style={styles.entete}>
         <TitreEcran>Accessibilité et réglages</TitreEcran>
         <T ton="inkSoft">Enregistrés sur cet appareil uniquement.</T>

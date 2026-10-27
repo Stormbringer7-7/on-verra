@@ -8,6 +8,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ListerDossiers, type DossierResume, type Facette, type FiltreDossiers } from '@/core';
 import { useAller } from '../../navigation';
 import { Label, Puce, T } from '../components/base';
+import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { PointsParcours } from '../components/dossiers/BarreDossier';
 import { Avertissement, Colonnes, Ligne, Pagination, Requete, TitreEcran } from '../components/dossiers/blocs';
@@ -25,7 +26,7 @@ export function Dossiers() {
     setFiltre((f) => ({ ...f, [cle]: valeur, page: undefined }));
 
   return (
-    <Ecran largeur="pleine">
+    <Ecran largeur="pleine" titre="Lois" parents={[RACINES.actualite]}>
       <View style={{ gap: space[1] }}>
         <TitreEcran>Dossiers législatifs</TitreEcran>
         <T ton="inkMuted">Chaque loi, du dépôt au Journal officiel. Amendements, votes et débats sont rangés dans leur dossier.</T>

@@ -26,7 +26,7 @@ export function Bienvenue() {
     aller.retour();
   };
   return (
-    <Ecran titre="Bienvenue" largeur="lecture" ariane={false}>
+    <Ecran titre="Bienvenue" largeur="lecture">
       <TitreEcran>Voir ce que font vos élus, simplement.</TitreEcran>
       <View style={styles.points}>
         {POINTS.map(([titre, suite]) => (

@@ -9,6 +9,7 @@ import { View } from 'react-native';
 import type { Pages } from '@/navigation';
 import { Segmente, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
+import { RACINES } from '../ariane';
 import { Ecran } from '@/ui/components/Ecran';
 import { Annuaire } from '@/ui/components/personnes/Annuaire';
 import { Classements } from '@/ui/components/personnes/Classements';
@@ -20,7 +21,7 @@ export function Personnes() {
   const [vue, setVue] = useState<Vue>(params?.vue ?? 'annuaire');
 
   return (
-    <Ecran largeur="pleine">
+    <Ecran largeur="pleine" titre="Les élus" parents={[RACINES.actualite]}>
       <View style={{ gap: 4 }}>
         <T variant="display" accessibilityRole="header" style={{ fontSize: 30, lineHeight: 34 }}>
           Personnes

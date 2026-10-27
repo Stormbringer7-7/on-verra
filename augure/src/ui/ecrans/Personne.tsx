@@ -13,7 +13,8 @@ import { useAller, type Pages } from '@/navigation';
 import { Action, Label, OngletsFiche, T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
 import { Source } from '@/ui/components/commun/Source';
-import { Chargement, Ecran, Erreur, Retour } from '@/ui/components/Ecran';
+import { RACINES } from '../ariane';
+import { Chargement, Ecran, Erreur } from '@/ui/components/Ecran';
 import { Avertissement, PuceFonction } from '@/ui/components/personnes/elements';
 import { Frise } from '@/ui/components/personnes/Frise';
 import { OngletChoix, OngletDeclarations, OngletDossiers } from '@/ui/components/personnes/OngletsPersonne';
@@ -35,12 +36,12 @@ export function Personne() {
   // Sans onglet choisi : l'entrée minimale (`{ id }`), le dépôt rend le parcours.
   const [onglet, setOnglet] = useState<OngletPersonne | undefined>(initial);
   const fiche = useCommand(ConsulterPersonne(onglet ? { id, onglet } : { id }));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
   const donnees = fiche.statut === 'erreur' ? undefined : fiche.donnees;
   const actif = onglet ?? 'parcours';
 
   return (
-    <Ecran>
-      <Retour libelle="PERSONNES" />
+    <Ecran titre={f?.entete.nom} parents={[RACINES.elus]}>
       {donnees && <Entete entete={donnees.entete} />}
       {donnees?.entete.identite !== 'fiche_rne' && (
         <OngletsFiche<OngletPersonne> label="Sections de la fiche" options={ONGLETS} valeur={actif} onChange={setOnglet} />

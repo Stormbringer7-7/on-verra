@@ -18,7 +18,8 @@ import { BarreDossierVue } from '../components/dossiers/BarreDossier';
 import { Avertissement, Carte, Colonnes, LienExterne, Ligne, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { ExtraitVue, ListeInterets } from '../components/dossiers/elements';
 import { AVERTISSEMENT_POURQUOI, faitsDuVote, POSITION } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { parentScrutin, RACINES, sousLeDossier } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
 import { couleurVote, usePalette } from '../theme/ThemeProvider';
@@ -27,9 +28,10 @@ import { space } from '../theme/tokens';
 export function PourquoiVote() {
   const { scrutin, personne } = useRoute<RouteProp<Pages, 'PourquoiVote'>>().params;
   const explication = useCommand(ExpliquerVote({ scrutin, personne }));
+  const f = explication.statut === 'erreur' ? undefined : explication.donnees;
+  const parents = f ? [...sousLeDossier(f.scrutin.dossier, f.scrutin.etape), parentScrutin(f.scrutin.id, `Scrutin n° ${f.scrutin.numero}`)] : [RACINES.lois];
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f?.personne.nom} parents={parents}>
       <Requete resultat={explication}>{(e) => <ContenuPourquoi explication={e} />}</Requete>
     </Ecran>
   );

@@ -24,6 +24,7 @@ import type {
   ScrutinResume,
   VoteDifferent,
   VoteNominatif,
+  DepartementRef,
   VoteIndividuel,
 } from '@contrat/domain/model';
 import { exprimes, majoritaire } from '@contrat/domain/votes';
@@ -317,10 +318,11 @@ export class PgScrutins implements ScrutinsRepository {
     if (!ligne) return null;
     const scrutin = resumeScrutin(ligne);
 
-    const [votes, sansVote, compteRendu] = await Promise.all([
+    const [votes, sansVote, compteRendu, departements] = await Promise.all([
       this.votes(id),
       this.absents(id),
       this.compteRendu(ligne.etape_id, ligne.date),
+      this.departements(scrutin.chambre, ligne.date, id),
     ]);
     const absents = new Map<string | null, number>();
     for (const a of sansVote) absents.set(a.groupe_id, (absents.get(a.groupe_id) ?? 0) + 1);
@@ -380,6 +382,7 @@ export class PgScrutins implements ScrutinsRepository {
         parDelegation: v.par_delegation,
         miseAuPoint: libelleMiseAuPoint(v.mise_au_point),
         siege: v.siege,
+        departement: departements.get(v.personne_id) ?? null,
       })),
       ...sansVote.map((a) => ({
         personne: { id: a.personne_id, nom: a.nom, fonction: null, groupe: avecGroupe(a.groupe_id) },
@@ -387,6 +390,7 @@ export class PgScrutins implements ScrutinsRepository {
         parDelegation: false,
         miseAuPoint: null,
         siege: null,
+        departement: departements.get(a.personne_id) ?? null,
       })),
     ].sort(ordreHemicycle(rangs));
 
@@ -419,6 +423,25 @@ export class PgScrutins implements ScrutinsRepository {
        ORDER BY p.nom, p.prenom`,
       { $scrutin: scrutin },
     );
+  }
+
+  /**
+   * Département du mandat de chaque parlementaire en mandat le jour du scrutin (votants et absents),
+   * tel que le publie sa chambre ; vide sans la projection des territoires.
+   */
+  private async departements(chambre: string, date: string, scrutin: string): Promise<Map<string, DepartementRef>> {
+    if (!(await this.projections.existe('lecture.elu_departement'))) return new Map();
+    const lignes = await this.db.all<{ personne_id: string; code: string; nom: string }>(
+      `SELECT DISTINCT ON (ed.personne_id) ed.personne_id, d.code, d.nom
+       FROM lecture.elu_departement ed
+       JOIN lecture.departement d ON d.code = ed.code
+       WHERE ed.chambre = $chambre AND $date::date BETWEEN ed.debut AND ed.fin
+         AND ed.personne_id IN (SELECT v.personne_id FROM canon.vote v WHERE v.scrutin_id = $scrutin::uuid
+                                UNION SELECT ps.personne_id FROM lecture.participation_scrutin ps WHERE ps.scrutin_id = $scrutin::uuid)
+       ORDER BY ed.personne_id, ed.debut DESC`,
+      { $chambre: chambre, $date: date, $scrutin: scrutin },
+    );
+    return new Map(lignes.map((l) => [l.personne_id, { code: l.code, nom: l.nom }]));
   }
 
   /** Parlementaires en mandat ce jour-là sans vote publié, avec leur groupe du jour (null : sans groupe). */

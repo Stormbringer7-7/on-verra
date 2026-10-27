@@ -7,7 +7,8 @@ import { ConsulterInstitution } from '@/core';
 import type { Pages } from '@/navigation';
 import { T } from '@/ui/components/base';
 import { Signaler } from '@/ui/components/commun/Signaler';
-import { Chargement, Ecran, Erreur, Retour } from '@/ui/components/Ecran';
+import { RACINES } from '../ariane';
+import { Chargement, Ecran, Erreur } from '@/ui/components/Ecran';
 import { InstitutionVue } from '@/ui/components/personnes/InstitutionVue';
 import { INSTITUTIONS } from '@/ui/components/personnes/regles';
 import { useCommand } from '@/ui/hooks/core';
@@ -18,8 +19,7 @@ export function Institution() {
   const titre = INSTITUTIONS.find((i) => i.cle === institution)?.libelle ?? 'Institution';
 
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={resultat.statut === 'pret' ? resultat.donnees.libelle : titre} parents={[RACINES.elus, RACINES.institutions]}>
       <T variant="display" accessibilityRole="header" style={{ fontSize: 30, lineHeight: 34 }}>
         {resultat.statut === 'pret' ? resultat.donnees.libelle : titre}
       </T>

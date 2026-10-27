@@ -10,6 +10,7 @@ import { useAller } from '../../navigation';
 import { Action, Carte, Label, Ligne, Pastille, T, TitreEcran, TitreSection } from '../components/base';
 import { BarreCompacte } from '../components/commun/BarreParcours';
 import { Requete } from '../components/dossiers/blocs';
+import { RACINES } from '../ariane';
 import { Colonnes, Ecran } from '../components/Ecran';
 import { dateLongue } from '../format';
 import { useCommand } from '../hooks/core';
@@ -52,7 +53,7 @@ export function Suivis() {
   const n = (k: number, un: string, plusieurs: string) => `${k} ${k > 1 ? plusieurs : un}`;
 
   return (
-    <Ecran titre="Mes suivis">
+    <Ecran titre="Mes suivis" parents={[RACINES.actualite]}>
       <View style={styles.entete}>
         <TitreEcran>Mes suivis</TitreEcran>
         <T ton="inkSoft">

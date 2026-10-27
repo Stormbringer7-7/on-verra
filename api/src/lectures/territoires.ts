@@ -2,9 +2,9 @@
 // Le dépôt donne les votes et les indicateurs déjà comparés ; le cœur calcule la valeur qui colore
 // chaque département, ajoute ce que la carte ne dit pas, et remplit les synthèses du scrutin.
 
-import type { Carte, Chambre, DemandeCarte, VotesDepartement } from '@contrat/domain/model';
+import type { Carte, Chambre, DemandeCarte, NiveauCarte, VotesDepartement } from '@contrat/domain/model';
 
-import { type Handlers, type LecturesDeps, Introuvable, RequeteInvalide, parmi, remplirPar, texte, trouve } from './commun';
+import { type Handlers, type LecturesDeps, Introuvable, RequeteInvalide, parmi, parmiFacultatif, remplirPar, texte, trouve } from './commun';
 import { REMPLIR } from './syntheses';
 
 const CHAMBRES: Record<Chambre, true> = { AN: true, SENAT: true };
@@ -15,6 +15,9 @@ const CODE = /^(\d{2}|2[AB]|9[78]\d)$/;
 export const LIMITES_CARTE = [
   'Le département d’un élu est celui que publie sa chambre ; les élus des Français établis hors de France n’ont pas de département et ne sont pas sur la carte.',
 ];
+export const LIMITE_CIRCONSCRIPTION =
+  'La circonscription d’un député est celle que publie l’Assemblée ; une circonscription sans député ce jour-là est dite vacante.';
+const NIVEAUX: Record<NiveauCarte, true> = { departement: true, circonscription: true };
 export const LIMITE_SCRUTIN = 'Seuls les scrutins publics sont nominatifs : un vote à main levée n’a pas de carte.';
 export const LIMITE_PRESENCE =
   'La participation compte les scrutins publics de l’année en cours, pour les élus actuels, comparée à celle du groupe de chaque élu sur les mêmes scrutins.';
@@ -33,15 +36,21 @@ export function lecturesTerritoires({ depots, synthetiseur }: LecturesDeps): Pic
     ConsulterCarte: async (demande: DemandeCarte) => {
       if (demande?.mesure === 'scrutin') {
         texte(demande.scrutin, 'Identifiant du scrutin');
+        const demandee = parmiFacultatif(demande.niveau, NIVEAUX, 'Niveau') ?? 'departement';
         const c = trouve(await territoires.carteScrutin(demande.scrutin), 'Scrutin');
+        // Les sénateurs sont élus par département : pas de circonscription au Sénat.
+        const niveau: NiveauCarte = demandee === 'circonscription' && c.scrutin.chambre === 'AN' ? 'circonscription' : 'departement';
+        const circonscriptions = niveau === 'circonscription' ? ((await territoires.circonscriptionsScrutin(demande.scrutin)) ?? []) : [];
         const carte: Carte = {
           demande,
+          niveau,
           chambre: c.scrutin.chambre,
           scrutin: c.scrutin,
           libelleValeur: 'Part des « pour » parmi les votes exprimés',
           departements: c.departements.map((d) => ({ departement: d.departement, valeur: partPour(d.votes), votes: d.votes, presence: null })),
+          circonscriptions,
           horsDepartement: c.horsDepartement,
-          limites: [...LIMITES_CARTE, LIMITE_SCRUTIN],
+          limites: [...LIMITES_CARTE, LIMITE_SCRUTIN, ...(niveau === 'circonscription' ? [LIMITE_CIRCONSCRIPTION] : [])],
         };
         return REMPLIR.ConsulterCarte(r, carte);
       }
@@ -52,10 +61,12 @@ export function lecturesTerritoires({ depots, synthetiseur }: LecturesDeps): Pic
       const c = await territoires.cartePresence(chambre);
       return {
         demande,
+        niveau: 'departement',
         chambre,
         scrutin: null,
         libelleValeur: 'Participation aux scrutins publics (année en cours)',
         departements: c.departements.map((d) => ({ departement: d.departement, valeur: d.presence.valeur, votes: null, presence: d.presence })),
+        circonscriptions: [],
         horsDepartement: c.horsDepartement,
         limites: [...LIMITES_CARTE, LIMITE_PRESENCE],
       };

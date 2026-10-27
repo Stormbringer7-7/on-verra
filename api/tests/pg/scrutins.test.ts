@@ -119,6 +119,13 @@ describe.skipIf(!URL_LECTURE)('PgScrutins (base réelle, lecture seule)', () => 
     const suite = f.votes.map((v) => (v.personne.groupe ? (rangs.get(v.personne.groupe.id) ?? 99) : 99));
     expect(suite).toEqual([...suite].sort((a, b) => a - b));
     for (const v of f.votes) if (v.position === 'absent') expect([v.siege, v.parDelegation]).toEqual([null, false]);
+    // Département publié par l'AN (lecture.elu_departement) : presque tous, sauf les Français de l'étranger.
+    const projete = (await db.first<{ ok: boolean }>(`SELECT to_regclass('lecture.elu_departement') IS NOT NULL AS ok`))?.ok;
+    if (projete) {
+      const localises = f.votes.filter((v) => v.departement);
+      expect(localises.length).toBeGreaterThan(f.votes.length - 20);
+      for (const v of localises) expect(v.departement!.code).toMatch(/^(\d{2,3}|2[AB])$/);
+    }
   });
 
   it('fiche Sénat 2025-325 : décompte et sort publiés, trois amendements identiques → objet non choisi', async () => {

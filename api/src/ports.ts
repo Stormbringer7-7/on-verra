@@ -31,6 +31,7 @@ import type {
   ResultatFamille,
   Chambre,
   DepartementRef,
+  ValeurCirconscription,
   FicheDepartement,
   VotesDepartement,
   CleFiltre,
@@ -667,6 +668,15 @@ export interface TerritoiresRepository {
     departements: { departement: DepartementRef; votes: VotesDepartement }[];
     horsDepartement: number;
   } | null>;
+
+  /**
+   * Un scrutin de l'Assemblée, circonscription par circonscription : chaque circonscription
+   * (département du COG + numéro publiés par l'AMO, lien `territoire` du mandat) connue depuis le
+   * découpage de 2010 (mandats finissant après le 20/06/2012), le député en mandat le jour du
+   * scrutin (le plus récent s'ils se chevauchent) et sa position (« absent » sans vote publié ;
+   * personne : vacant). null si le scrutin est inconnu ; liste vide hors projection ou au Sénat.
+   */
+  circonscriptionsScrutin(scrutin: string): Promise<ValeurCirconscription[] | null>;
 
   /** Participation des élus actuels de chaque département (année en cours de leur chambre). */
   cartePresence(chambre: Chambre): Promise<{ departements: { departement: DepartementRef; presence: Indicateur }[]; horsDepartement: number }>;

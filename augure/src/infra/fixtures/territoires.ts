@@ -15,16 +15,10 @@ import type {
   PersonneRef,
   VotesDepartement,
 } from '../../core/domain/model';
-import { P, comme } from './entites';
+import { DEP, P, comme } from './entites';
 import { S } from './scrutins';
 
-const DEP = {
-  '33': { code: '33', nom: 'Gironde' },
-  '44': { code: '44', nom: 'Loire-Atlantique' },
-  '59': { code: '59', nom: 'Nord' },
-  '69': { code: '69', nom: 'Rhône' },
-  '91': { code: '91', nom: 'Essonne' },
-} satisfies Record<string, DepartementRef>;
+
 
 const PERIODE = { debut: '2026-01-01', fin: '2026-10-24' };
 
@@ -70,12 +64,15 @@ const votes = (position: 'pour' | 'contre' | 'abstention'): VotesDepartement => 
 export const LIMITES_CARTE = [
   'Le département d’un élu est celui que publie sa chambre ; les élus des Français établis hors de France n’ont pas de département et ne sont pas sur la carte.',
 ];
+const LIMITE_CIRCONSCRIPTION =
+  'La circonscription d’un député est celle que publie l’Assemblée ; une circonscription sans député ce jour-là est dite vacante.';
 const LIMITE_SCRUTIN = 'Seuls les scrutins publics sont nominatifs : un vote à main levée n’a pas de carte.';
 const LIMITE_PRESENCE =
   'La participation compte les scrutins publics de l’année en cours, pour les élus actuels, comparée à celle du groupe de chaque élu sur les mêmes scrutins.';
 
 export const CARTE_SCRUTIN_1874: Carte = {
   demande: { mesure: 'scrutin', scrutin: S.an1874.id },
+  niveau: 'departement',
   chambre: 'AN',
   scrutin: S.an1874,
   libelleValeur: 'Part des « pour » parmi les votes exprimés',
@@ -85,8 +82,26 @@ export const CARTE_SCRUTIN_1874: Carte = {
     { departement: DEP['69'], valeur: 0, votes: votes('abstention'), presence: null },
     { departement: DEP['91'], valeur: 0, votes: votes('contre'), presence: null },
   ],
+  circonscriptions: [],
   horsDepartement: 0,
   limites: [...LIMITES_CARTE, LIMITE_SCRUTIN],
+};
+
+const circo = (dep: DepartementRef, numero: number) => ({ code: `${dep.code}-${String(numero).padStart(2, '0')}`, departement: dep, numero });
+
+/** Les mêmes votes, député par député ; la 7e circonscription de Gironde, vacante ce jour-là. */
+export const CARTE_SCRUTIN_1874_CIRCONSCRIPTIONS: Carte = {
+  ...CARTE_SCRUTIN_1874,
+  demande: { mesure: 'scrutin', scrutin: S.an1874.id, niveau: 'circonscription' },
+  niveau: 'circonscription',
+  circonscriptions: [
+    { circonscription: circo(DEP['33'], 2), depute: comme(P.hugo, 'Député · Gironde, 2e circ.'), position: 'pour' },
+    { circonscription: circo(DEP['33'], 7), depute: null, position: null },
+    { circonscription: circo(DEP['59'], 1), depute: comme(P.ines, 'Députée · Nord, 1re circ.'), position: 'contre' },
+    { circonscription: circo(DEP['69'], 3), depute: comme(P.louis, 'Député · Rhône, 3e circ.'), position: 'abstention' },
+    { circonscription: circo(DEP['91'], 4), depute: comme(P.camille, 'Députée · Essonne, 4e circ.'), position: 'contre' },
+  ],
+  limites: [...CARTE_SCRUTIN_1874.limites, LIMITE_CIRCONSCRIPTION],
 };
 
 const presenceDep = (d: DepartementRef, i: Indicateur) => ({ departement: d, valeur: i.valeur, votes: null, presence: i });
@@ -106,20 +121,24 @@ const PRESENCE = {
 
 export const CARTE_PRESENCE_AN: Carte = {
   demande: { mesure: 'presence', chambre: 'AN' },
+  niveau: 'departement',
   chambre: 'AN',
   scrutin: null,
   libelleValeur: 'Participation aux scrutins publics (année en cours)',
   departements: (['33', '59', '69', '91'] as const).map((c) => presenceDep(DEP[c], PRESENCE.AN[c])),
+  circonscriptions: [],
   horsDepartement: 0,
   limites: [...LIMITES_CARTE, LIMITE_PRESENCE],
 };
 
 export const CARTE_PRESENCE_SENAT: Carte = {
   demande: { mesure: 'presence', chambre: 'SENAT' },
+  niveau: 'departement',
   chambre: 'SENAT',
   scrutin: null,
   libelleValeur: 'Participation aux scrutins publics (année en cours)',
   departements: (['33', '44'] as const).map((c) => presenceDep(DEP[c], PRESENCE.SENAT[c])),
+  circonscriptions: [],
   horsDepartement: 0,
   limites: [...LIMITES_CARTE, LIMITE_PRESENCE],
 };

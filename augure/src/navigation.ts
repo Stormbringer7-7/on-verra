@@ -8,7 +8,7 @@ import { StackActions, useNavigation, type LinkingOptions, type NavigatorScreenP
 import * as Linking from 'expo-linking';
 import { useMemo } from 'react';
 
-import type { Chambre, CibleInterventions, CleCase, CleFiltre, DemandeFaits, OngletPersonne, Origine, RolePersonne, TypeInstitution } from './core/domain/model';
+import type { Chambre, NiveauCarte, CibleInterventions, CleCase, CleFiltre, DemandeFaits, OngletPersonne, Origine, RolePersonne, TypeInstitution } from './core/domain/model';
 import { paramsExplorer, type ParamsExplorer } from './ui/explorer';
 
 export type Onglets = {
@@ -19,8 +19,11 @@ export type Onglets = {
   Guide: undefined;
 };
 
-/** Carte : un scrutin (`/carte?scrutin=…`), sinon la présence d'une chambre (députés par défaut). */
-export type ParamsCarte = { scrutin?: string; chambre?: Chambre } | undefined;
+/**
+ * Carte : un scrutin (`/carte?scrutin=…`, `&niveau=circonscription` pour l'Assemblée député par
+ * député), sinon la présence d'une chambre (députés par défaut).
+ */
+export type ParamsCarte = { scrutin?: string; chambre?: Chambre; niveau?: NiveauCarte } | undefined;
 
 /** Liste des textes d'une file (« Où en sont les textes ») : mêmes filtres que `DemandeAvancement`. */
 export type ParamsTextes = { etape?: string; horsParlement?: boolean; origine?: Origine } | undefined;

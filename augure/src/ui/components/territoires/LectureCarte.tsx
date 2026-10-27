@@ -1,5 +1,6 @@
 // La carte d'une mesure (présence d'une chambre ou votes d'un scrutin) : en-tête du scrutin, vraie
-// carte des départements, élus sans département, et ce que la carte ne dit pas. Sans donnée, rien
+// carte des départements ou, pour un scrutin de l'Assemblée, des circonscriptions (un député
+// chacune), élus sans département, et ce que la carte ne dit pas. Sans donnée, rien
 // n'est dessiné et l'écran dit pourquoi.
 
 import { StyleSheet, View } from 'react-native';
@@ -9,10 +10,11 @@ import { dateLongue, resultatScrutin, titreScrutin } from '../../format';
 import { formaterPourcentage, texteHorsDepartement, valeursCarte } from '../../territoires';
 import { space } from '../../theme/tokens';
 import { T } from '../base';
+import { CarteCirconscriptions } from '../carte/CarteCirconscriptions';
 import { CarteDepartements } from '../carte/CarteDepartements';
 import { Avertissement } from '../fondations';
 
-export function LectureCarte({ carte, onDepartement }: { carte: Carte; onDepartement(code: string): void }) {
+export function LectureCarte({ carte, onDepartement, onPersonne }: { carte: Carte; onDepartement(code: string): void; onPersonne?(id: string): void }) {
   const hors = texteHorsDepartement(carte.horsDepartement, carte.chambre);
   return (
     <View style={styles.lecture}>
@@ -24,7 +26,9 @@ export function LectureCarte({ carte, onDepartement }: { carte: Carte; onDeparte
           <T variant="heading">{titreScrutin(carte.scrutin)}</T>
         </View>
       )}
-      {carte.departements.length ? (
+      {carte.niveau === 'circonscription' && carte.circonscriptions.length ? (
+        <CarteCirconscriptions circonscriptions={carte.circonscriptions} onPersonne={onPersonne} onDepartement={onDepartement} />
+      ) : carte.departements.length ? (
         <CarteDepartements valeurs={valeursCarte(carte)} titre={carte.libelleValeur} formater={formaterPourcentage} onDepartement={onDepartement} />
       ) : (
         <Avertissement type="info" titre="Rien à dessiner">

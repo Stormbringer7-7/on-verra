@@ -1,4 +1,4 @@
-// Socle de l'app : fil d'Ariane et onglet actif lus dans la pile, mise en forme, et ce que les
+// Socle de l'app : fil d'Ariane (place de l'objet) et onglet actif, mise en forme, et ce que les
 // écrans Accueil et Recherche lisent sur le FixturesBus.
 
 import { describe, expect, it } from 'vitest';
@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { ConsulterAccueil, Rechercher } from '../src/core';
 import { fixtures } from '../src/infra/fixtures';
 import { creerFixturesBus } from '../src/infra/FixturesBus';
-import { cheminAriane, ongletActif, ONGLETS, type EtatPile } from '../src/ui/ariane';
+import { monter, ongletActif, ONGLETS, RACINES, sousLeDossier, type EtatPile } from '../src/ui/ariane';
 import { dateLongue, nombre, resultatScrutin, texteSource, titreOfficielDistinct, titreScrutin, valeurIndicateur } from '../src/ui/format';
 import { natureDossier, statutDossier, suiteDossier } from '../src/ui/libelles';
 import { demandeRecherche } from '../src/ui/recherche';
@@ -14,29 +14,41 @@ import { demandeRecherche } from '../src/ui/recherche';
 const bus = creerFixturesBus({ debug: () => {}, warn: () => {} });
 
 describe("fil d'Ariane", () => {
+  const D = { id: 'dossier-energie', titre: 'Programmation énergétique' };
   const pile: EtatPile = {
     index: 3,
     routes: [
       { key: 'o', name: 'Onglets', state: { index: 1, routes: [{ name: 'Accueil' }, { name: 'Chiffres' }] } },
-      { key: 'd', name: 'Dossier' },
-      { key: 'e', name: 'Etape' },
-      { key: 'a', name: 'Amendement' },
+      { key: 'p', name: 'Personne', params: { id: 'camille-exemple' } },
+      { key: 'd', name: 'Dossier', params: { id: 'dossier-energie' } },
+      { key: 'a', name: 'Amendement', params: { id: 'amdt-ce123' } },
     ],
   };
 
-  it('part de l’onglet, ajoute chaque fiche avec son titre, et sait y revenir', () => {
-    const chemin = cheminAriane(pile, { d: 'Programmation énergétique', e: 'Commission AN', a: 'Amendement CE123' });
-    expect(chemin.map((m) => m.libelle)).toEqual(['Chiffres', 'Programmation énergétique', 'Commission AN', 'Amendement CE123']);
-    expect(chemin.map((m) => m.aller)).toEqual([
-      { type: 'onglet', onglet: 'Chiffres' },
-      { type: 'retirer', n: 2 },
-      { type: 'retirer', n: 1 },
-      { type: 'ici' },
+  it('la place de l’objet, pas le chemin suivi : Lois / dossier / étape', () => {
+    const fil = sousLeDossier(D, { cle: 'commission_1_o', libelle: 'Commission AN' });
+    expect(fil.map((m) => m.libelle)).toEqual(['Lois', 'Programmation énergétique', 'Commission AN']);
+    expect(fil.map((m) => m.cible)).toEqual([
+      { page: 'Dossiers', params: undefined },
+      { page: 'Dossier', params: { id: 'dossier-energie' } },
+      { page: 'Etape', params: { dossier: 'dossier-energie', cle: 'commission_1_o' } },
     ]);
+    // Venu d'une personne, l'amendement reste sous son dossier : la personne n'est pas dans le fil.
+    expect(sousLeDossier(null).map((m) => m.libelle)).toEqual(['Lois']);
+    expect(RACINES.elus.libelle).toBe('Élus');
   });
 
-  it('donne le nom générique d’une fiche sans titre', () => {
-    expect(cheminAriane({ ...pile, index: 2 }, {}).map((m) => m.libelle)).toEqual(['Chiffres', 'Dossier', 'Étape']);
+  it('toucher un maillon du fil : on remonte, on n’empile pas', () => {
+    const fil = sousLeDossier(D, { cle: 'commission_1_o', libelle: 'Commission AN' });
+    // Le dossier est dans la pile : simple retour (la personne, en dessous, reste).
+    expect(monter(pile, fil, 1)).toEqual({ type: 'pile', garder: 3, ajouter: [] });
+    // L'étape n'y est pas : garder jusqu'au dossier, puis ouvrir l'étape.
+    expect(monter(pile, fil, 2)).toEqual({ type: 'pile', garder: 3, ajouter: [fil[2].cible] });
+    // Lois n'est pas dans la pile, aucun ancêtre : repartir des onglets.
+    expect(monter(pile, fil, 0)).toEqual({ type: 'pile', garder: 1, ajouter: [RACINES.lois.cible] });
+    expect(monter(pile, [RACINES.carte], 0)).toEqual({ type: 'onglet', onglet: 'Carte' });
+    // Lien profond sans « Onglets » : la pile repart de rien.
+    expect(monter({ index: 0, routes: [{ key: 'a', name: 'Amendement' }] }, fil, 1)).toEqual({ type: 'pile', garder: 0, ajouter: [fil[0].cible, fil[1].cible] });
   });
 
   it('onglet actif : celui de la pile, sinon celui de la page ouverte par lien profond', () => {

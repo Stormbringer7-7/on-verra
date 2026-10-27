@@ -19,6 +19,7 @@ import type { BarreDossier } from './dossiers';
 import type { CleCase } from './parcours';
 import type { FonctionDatee } from './personnes';
 import type { DeclarationResume, LienInteret } from './transparence';
+import type { DepartementRef } from './territoires';
 
 /** Vote individuel publié. `absent` : en mandat ce jour-là, sans vote publié (participation). */
 export type Position = 'pour' | 'contre' | 'abstention' | 'non_votant' | 'absent';
@@ -97,6 +98,11 @@ export interface VoteNominatif {
    * vers la gauche) ; null si la source ne le publie pas (Sénat : seulement le siège actuel, absent).
    */
   siege: number | null;
+  /**
+   * Département du mandat ce jour-là, tel que le publie sa chambre (`lecture.elu_departement`) ;
+   * null pour les Français établis hors de France ou si la donnée manque.
+   */
+  departement: DepartementRef | null;
 }
 
 export interface FicheScrutin {

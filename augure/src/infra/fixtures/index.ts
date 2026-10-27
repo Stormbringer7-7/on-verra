@@ -32,7 +32,7 @@ import { ANNUAIRE, ANNUAIRE_ELUS_LOCAUX, CLASSEMENT_AN_ECARTS, PERSONNES } from 
 import { EXEMPLES_FAMILLES, rechercheFixture } from './familles';
 import { ACCUSE_SIGNALEMENT, RECHERCHE_ENERGIE, RECHERCHE_VIDE } from './recherche';
 import { EXPLICATION_CAMILLE_1874, FICHE_SCRUTIN_1874, FICHE_SCRUTIN_SENAT_297, S } from './scrutins';
-import { CARTE_PRESENCE_AN, CARTE_PRESENCE_SENAT, CARTE_SCRUTIN_1874, DEPARTEMENT_GIRONDE, DEPARTEMENT_GIRONDE_1874 } from './territoires';
+import { CARTE_PRESENCE_AN, CARTE_PRESENCE_SENAT, CARTE_SCRUTIN_1874, CARTE_SCRUTIN_1874_CIRCONSCRIPTIONS, DEPARTEMENT_GIRONDE, DEPARTEMENT_GIRONDE_1874 } from './territoires';
 
 type Definitions = typeof definitions;
 
@@ -141,6 +141,11 @@ export const fixtures: Fixtures = {
   ],
   ConsulterCarte: [
     { titre: 'Scrutin n° 1874, département par département', input: { mesure: 'scrutin', scrutin: S.an1874.id }, output: CARTE_SCRUTIN_1874 },
+    {
+      titre: 'Scrutin n° 1874, député par député (une circonscription vacante)',
+      input: { mesure: 'scrutin', scrutin: S.an1874.id, niveau: 'circonscription' },
+      output: CARTE_SCRUTIN_1874_CIRCONSCRIPTIONS,
+    },
     { titre: 'Présence des députés', input: { mesure: 'presence', chambre: 'AN' }, output: CARTE_PRESENCE_AN },
     { titre: 'Présence des sénateurs', input: { mesure: 'presence', chambre: 'SENAT' }, output: CARTE_PRESENCE_SENAT },
   ],

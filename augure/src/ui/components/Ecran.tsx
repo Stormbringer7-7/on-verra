@@ -1,17 +1,18 @@
 // Gabarit d'écran du design v4 : 5 onglets (en bas en portrait, indicateur rouge au-dessus du libellé ;
-// en en-tête en paysage, soulignés), fil d'Ariane « / » en paysage et barre de retour qui nomme la
-// page précédente en portrait, contenu défilant centré (1 200 px au plus), pied de page sur chaque
-// écran, colonnes principale / latérale, états de chargement et d'erreur.
+// en en-tête en paysage, soulignés) ; sur chaque page, « ‹ » revient à l'écran précédent et le fil
+// d'Ariane « / » remonte la hiérarchie de l'objet (sa place, pas le chemin suivi : ui/ariane.ts) ;
+// contenu défilant centré (1 200 px au plus), pied de page sur chaque écran, colonnes principale /
+// latérale, états de chargement et d'erreur.
 
-import { StackActions, useNavigation, useNavigationState, useRoute } from '@react-navigation/native';
+import { CommonActions, StackActions, useNavigation, useNavigationState, useRoute } from '@react-navigation/native';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAller, type Onglets } from '../../navigation';
-import { cheminAriane, estOnglet, ongletActif, ONGLETS, type EtatPile, type Maillon } from '../ariane';
-import { useTitrePage, useTitres } from '../hooks/ariane';
+import { estOnglet, monter, ongletActif, ONGLETS, type EtatPile, type Parent } from '../ariane';
+import { useTitrePage } from '../hooks/ariane';
 import { useCore } from '../hooks/core';
 import { useLarge } from '../hooks/miseEnPage';
 import { usePalette } from '../theme/ThemeProvider';
@@ -102,48 +103,79 @@ export function Navigation({ active, onNavigate }: { active: Section; onNavigate
   );
 }
 
-/** Fil d'Ariane (paysage) : miettes soulignées et cliquables, « / », page courante en `ink`. */
-export function FilAriane({ maillons, onAller }: { maillons: Maillon[]; onAller(m: Maillon): void }) {
+/** Fil d'Ariane : parents soulignés et cliquables (on y remonte), « / », l'objet affiché en `ink`. */
+export function FilAriane({ parents, ici, onMonter }: { parents: Parent[]; ici: string | undefined; onMonter(i: number): void }) {
   const p = usePalette();
   return (
     <View accessibilityRole="header" accessibilityLabel="Fil d’Ariane" style={styles.ariane}>
-      {maillons.map((m, i) => (
-        <View key={m.cle} style={styles.maillon}>
+      {parents.map((m, i) => (
+        <View key={`${i}:${m.libelle}`} style={styles.maillon}>
           {i > 0 && (
             <T variant="small" couleur={p.lineStrong} aria-hidden>
               /
             </T>
           )}
-          {m.aller.type === 'ici' ? (
-            <T variant="small" numberOfLines={1} style={styles.maillonIci}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Remonter à ${m.libelle}`}
+            onPress={() => onMonter(i)}
+            hitSlop={8}
+            style={[styles.maillonLien, { borderBottomColor: p.lineFaint }]}
+          >
+            <T variant="small" couleur={p.inkSoft} numberOfLines={1}>
               {m.libelle}
             </T>
-          ) : (
-            <Pressable accessibilityRole="link" onPress={() => onAller(m)} hitSlop={8} style={[styles.maillonLien, { borderBottomColor: p.lineFaint }]}>
-              <T variant="small" couleur={p.inkSoft} numberOfLines={1}>
-                {m.libelle}
-              </T>
-            </Pressable>
-          )}
+          </Pressable>
         </View>
       ))}
+      {ici ? (
+        <View style={styles.maillon}>
+          <T variant="small" couleur={p.lineStrong} aria-hidden>
+            /
+          </T>
+          <T variant="small" numberOfLines={1} style={styles.maillonIci} accessibilityState={{ selected: true }}>
+            {ici}
+          </T>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-/** Barre de retour (portrait) : « ‹ » et le nom de la page précédente. */
-export function BarreRetour({ maillon, onAller }: { maillon: Maillon; onAller(m: Maillon): void }) {
+/** « ‹ » : retour à l'écran précédent (l'historique, pas la hiérarchie). */
+function BoutonRetour({ onRetour }: { onRetour(): void }) {
   const p = usePalette();
   return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Retour à l’écran précédent" onPress={onRetour} hitSlop={8} style={styles.retourLien}>
+      <Svg width={20} height={20} viewBox="0 0 20 20" fill="none" stroke={p.ink} strokeWidth={1.8} aria-hidden>
+        <Path d="M12.5 4.5 7 10l5.5 5.5" />
+      </Svg>
+    </Pressable>
+  );
+}
+
+/**
+ * Barre du haut d'une page : « ‹ » revient à l'écran précédent ; le fil, à côté, remonte la
+ * hiérarchie (Lois / dossier / étape). Portrait : sur une ligne, défilant ; paysage : en tête du contenu.
+ */
+export function BarreRetour({ parents, ici, onRetour, onMonter, large }: { parents: Parent[]; ici: string | undefined; onRetour(): void; onMonter(i: number): void; large: boolean }) {
+  const p = usePalette();
+  if (large) {
+    return (
+      <View style={styles.barreLarge}>
+        <BoutonRetour onRetour={onRetour} />
+        {parents.length > 0 && <FilAriane parents={parents} ici={ici} onMonter={onMonter} />}
+      </View>
+    );
+  }
+  return (
     <View style={[styles.barreRetour, { borderBottomColor: p.line }]}>
-      <Pressable accessibilityRole="link" accessibilityLabel={`Retour : ${maillon.libelle}`} onPress={() => onAller(maillon)} style={styles.retourLien}>
-        <Svg width={20} height={20} viewBox="0 0 20 20" fill="none" stroke={p.ink} strokeWidth={1.8} aria-hidden>
-          <Path d="M12.5 4.5 7 10l5.5 5.5" />
-        </Svg>
-        <T variant="label" ton="ink" numberOfLines={1} style={{ flexShrink: 1 }}>
-          {maillon.libelle}
-        </T>
-      </Pressable>
+      <BoutonRetour onRetour={onRetour} />
+      {parents.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filPortrait}>
+          <FilAriane parents={parents} ici={undefined} onMonter={onMonter} />
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -190,21 +222,23 @@ function BandeauMaquette() {
  *
  * - Onglet (Actualité, Chiffres…) : la navigation est celle du navigateur d'onglets.
  * - Page empilée (Dossier, Étape…) : l'écran affiche lui-même la navigation principale (l'onglet
- *   d'origine actif), le fil d'Ariane en paysage ou la barre de retour en portrait ; `titre` est le
- *   dernier maillon de ce fil (et le titre de la fenêtre web), sinon le nom générique de la page.
+ *   d'origine actif), « ‹ » (retour à l'écran précédent) et le fil d'Ariane. Le fil, c'est la
+ *   place de l'objet : `parents` (Lois / dossier / étape…, construits par l'écran depuis ses
+ *   données) puis `titre`, l'objet lui-même (et le titre de la fenêtre web) ; toucher un maillon
+ *   y remonte (`monter`, ui/ariane.ts), sans empiler.
  * - `largeur` en paysage : « pleine » jusqu'à 1 200 px, « lecture » 880 px.
  */
 export function Ecran({
   children,
   titre,
+  parents = [],
   largeur = 'pleine',
-  ariane = true,
 }: {
   children: ReactNode;
   titre?: string;
+  /** Parents de l'objet affiché, du plus large au plus proche ; vide : ni fil ni retour. */
+  parents?: Parent[];
   largeur?: 'lecture' | 'pleine';
-  /** false : ni fil d'Ariane ni retour (page sans parent utile). */
-  ariane?: boolean;
 }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
@@ -212,26 +246,31 @@ export function Ecran({
   const route = useRoute();
   const navigation = useNavigation();
   const { source } = useCore();
-  const titres = useTitres();
   const etat = useNavigationState((s) => s as unknown as EtatPile);
   useTitrePage(route.key, titre);
 
   const fiche = !estOnglet(route.name);
   const active = fiche ? ongletActif(etat) : null;
   const versOnglet = (onglet: Section) => navigation.navigate('Onglets', { screen: onglet });
-  const maillons = fiche && ariane ? cheminAriane(etat, { ...titres, [route.key]: titre }) : [];
-  const allerAuMaillon = (m: Maillon) => {
-    if (m.aller.type === 'onglet') versOnglet(m.aller.onglet);
-    else if (m.aller.type === 'retirer') navigation.dispatch(StackActions.pop(m.aller.n));
+  const fil = fiche ? parents : [];
+  const monterA = (i: number) => {
+    const m = monter(etat, fil, i);
+    if (m.type === 'onglet') return versOnglet(m.onglet);
+    if (!m.ajouter.length) return navigation.dispatch(StackActions.pop(etat.index - m.garder + 1));
+    const gardees = m.garder > 0 ? etat.routes.slice(0, m.garder) : [{ name: 'Onglets' }];
+    const routes = [...gardees, ...m.ajouter.map((c) => ({ name: c.page, params: c.params ?? undefined }))];
+    navigation.dispatch(CommonActions.reset({ index: routes.length - 1, routes } as Parameters<typeof CommonActions.reset>[0]));
   };
-  const precedent = maillons.length > 1 ? maillons[maillons.length - 2] : null;
+  // Retour : l'écran précédent ; ouvert sans historique (lien profond), le parent le plus proche.
+  const retour = () => (navigation.canGoBack() ? navigation.goBack() : fil.length ? monterA(fil.length - 1) : versOnglet('Accueil'));
+  const barre = fiche;
 
   return (
     <View style={[styles.racine, { backgroundColor: p.surface }]}>
       {active && large && <Navigation active={active} onNavigate={versOnglet} />}
-      {!large && precedent && (
+      {!large && barre && (
         <View style={{ paddingTop: insets.top }}>
-          <BarreRetour maillon={precedent} onAller={allerAuMaillon} />
+          <BarreRetour parents={fil} ici={titre} onRetour={retour} onMonter={monterA} large={false} />
         </View>
       )}
       <ScrollView
@@ -240,12 +279,12 @@ export function Ecran({
           large && styles.contenuLarge,
           large && { maxWidth: largeur === 'pleine' ? LARGEUR_MAX : 880 },
           // Navigation en en-tête en large, barre de retour en portrait : elles prennent la marge du haut.
-          { paddingTop: (large || precedent ? 0 : insets.top) + space[large ? 8 : 5] },
+          { paddingTop: (large || barre ? 0 : insets.top) + space[large ? 8 : 5] },
         ]}
         keyboardShouldPersistTaps="handled"
       >
         {source === 'fixtures' && <BandeauMaquette />}
-        {large && maillons.length > 1 && <FilAriane maillons={maillons} onAller={allerAuMaillon} />}
+        {large && barre && <BarreRetour parents={fil} ici={titre} onRetour={retour} onMonter={monterA} large />}
         {children}
         <PiedDePage />
       </ScrollView>
@@ -280,20 +319,6 @@ export function Colonnes({ principale, laterale }: { principale: ReactNode; late
 /** Bloc vertical espacé (section d’écran). */
 export function Bloc({ children, gap = 3, style }: { children: ReactNode; gap?: keyof typeof space; style?: StyleProp<ViewStyle> }) {
   return <View style={[{ gap: space[gap] }, style]}>{children}</View>;
-}
-
-/** Lien retour : chevron + étiquette (« Retour »). */
-export function Retour({ libelle = 'Retour' }: { libelle?: string }) {
-  const p = usePalette();
-  const aller = useAller();
-  return (
-    <Pressable accessibilityRole="link" onPress={aller.retour} style={styles.retour}>
-      <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke={p.inkMuted} strokeWidth={1.5} aria-hidden>
-        <Path d="M10 3 5 8l5 5" />
-      </Svg>
-      <Label>{libelle}</Label>
-    </Pressable>
-  );
 }
 
 export function Chargement({ libelle = 'Chargement' }: { libelle?: string }) {
@@ -353,8 +378,10 @@ const styles = StyleSheet.create({
   maillon: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%' },
   maillonLien: { minHeight: 32, justifyContent: 'center', borderBottomWidth: 1 },
   maillonIci: { fontFamily: fonts.sansMedium, flexShrink: 1 },
-  barreRetour: { minHeight: 52, paddingHorizontal: space[2], paddingTop: space[1], justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
-  retourLien: { flexDirection: 'row', alignItems: 'center', gap: space[1], minHeight: 44, paddingHorizontal: space[2], alignSelf: 'flex-start', maxWidth: '100%' },
+  barreRetour: { minHeight: 52, paddingHorizontal: space[2], paddingTop: space[1], flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  barreLarge: { flexDirection: 'row', alignItems: 'center', gap: space[2], marginBottom: -space[2], marginLeft: -space[2] },
+  filPortrait: { alignItems: 'center', paddingRight: space[3] },
+  retourLien: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
   pied: { gap: 6, paddingTop: space[6], marginTop: space[2], borderTopWidth: StyleSheet.hairlineWidth },
   piedLarge: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space[6], rowGap: space[2] },
   piedLien: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center', borderBottomWidth: 1 },
@@ -362,6 +389,5 @@ const styles = StyleSheet.create({
   colonnes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: space[10] },
   principale: { flexGrow: 999, flexShrink: 1, flexBasis: 560, minWidth: 0 },
   laterale: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0, gap: space[6] },
-  retour: { flexDirection: 'row', alignItems: 'center', gap: space[1], minHeight: 44, alignSelf: 'flex-start' },
   etat: { gap: space[3], paddingVertical: space[6], alignItems: 'flex-start' },
 });

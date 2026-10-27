@@ -37,7 +37,8 @@ const AIDE = `Usage : npm run app -- <commande> [--env=<env>] …
                                               lance l'app sur la cible (Expo démarré si besoin) ;
                                               sans --device : choix dans la liste des appareils
   prebuild --env=<env> [ios|android]          régénère ios/ et android/
-  apply   --env=<env> version                 devpatch + 1, écrit la version (version.json, ios/, android/)
+  apply   --env=<env> version                 écrit la version et applique la version dans version.json
+  apply   --env=<env> patch                   devpatch + 1, écrit la version (version.json, ios/, android/)
   apply   --env=<env> minor                   mineure + 1, devpatch à 0
   apply   --env=<env> major                   majeure + 1, mineure et devpatch à 0
   build   --env=<env> <aab|apk|xcarchive|web>…
@@ -281,16 +282,25 @@ function appliquerVersion(v, env) {
 
 function apply(quoi, env) {
   const v = lireVersion();
-  const suivante = {
-    version: { ...v, devpatch: v.devpatch + 1 },
-    minor: { ...v, mineure: v.mineure + 1, devpatch: 0 },
-    major: { majeure: v.majeure + 1, mineure: 0, devpatch: 0 },
-  }[quoi];
-  if (!suivante) echec(`apply : « ${quoi ?? ''} » inconnu (version, minor ou major)`);
-  ecrireVersion(suivante);
-  console.log(`● version ${texteVersion(v)} → ${texteVersion(suivante)}`);
-  appliquerVersion(suivante, env);
-  return suivante;
+
+  if (!quoi || quoi === 'version') {
+    // Appliquer uniquement
+  } else {
+    if (quoi === 'patch') quoi = 'devpatch';
+    const suivante = {
+      devpatch: { ...v, devpatch: v.devpatch + 1 },
+      minor: { ...v, mineure: v.mineure + 1, devpatch: 0 },
+      major: { majeure: v.majeure + 1, mineure: 0, devpatch: 0 },
+    }[quoi];
+
+    if (!suivante) echec(`apply : « ${quoi ?? ''} » inconnu (version, minor ou major)`);
+    v = suivante;
+  }
+
+  ecrireVersion(v);
+  console.log(`● version ${texteVersion(v)} → ${texteVersion(v)}`);
+  appliquerVersion(v, env);
+  return v;
 }
 
 // ── Commandes ────────────────────────────────────────────────────────────────────────────────

@@ -31,7 +31,8 @@ import {
   personneOrateur,
   SORT,
 } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { RACINES } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date, titreOfficielDistinct } from '../format';
 import { useCommand } from '../hooks/core';
 import { usePalette } from '../theme/ThemeProvider';
@@ -54,10 +55,10 @@ export function Dossier() {
   const [sort, setSort] = useState<SortAmendement | null>(null);
   const [page, setPage] = useState(1);
   const fiche = useCommand(ConsulterDossier(entreeDossier(id, sort, page)));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
 
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f?.entete.titre} parents={[RACINES.lois]}>
       <Requete resultat={fiche}>
         {(f) => (
           <>

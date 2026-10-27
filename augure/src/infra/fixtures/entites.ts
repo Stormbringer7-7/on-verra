@@ -7,6 +7,7 @@ import type {
   ArticleRef,
   CaseCompacte,
   CleCase,
+  DepartementRef,
   DossierRef,
   EtatCase,
   GroupeRef,
@@ -90,6 +91,27 @@ export const P = {
 export const comme = (p: PersonneRef, fonction: string): PersonneRef => ({ ...p, fonction });
 
 export const orateur = (p: PersonneRef, qualite: string | null = null): Orateur => ({ type: 'personne', personne: p, qualite });
+
+// ---------- Départements ----------
+
+/** Départements des élus que connaît la maquette (codes du COG). */
+export const DEP = {
+  '33': { code: '33', nom: 'Gironde' },
+  '44': { code: '44', nom: 'Loire-Atlantique' },
+  '59': { code: '59', nom: 'Nord' },
+  '69': { code: '69', nom: 'Rhône' },
+  '91': { code: '91', nom: 'Essonne' },
+} satisfies Record<string, DepartementRef>;
+
+/** Département du mandat de chaque élu localisé (cf. fixtures Territoires) ; les autres : null. */
+export const DEPARTEMENT_DE: Record<string, DepartementRef> = {
+  'hugo-fictif': DEP['33'],
+  'paul-fictif': DEP['33'],
+  'ines-modele': DEP['59'],
+  'louis-prototype': DEP['69'],
+  'camille-exemple': DEP['91'],
+  'pierre-modele': DEP['44'],
+};
 
 // ---------- Dossiers ----------
 

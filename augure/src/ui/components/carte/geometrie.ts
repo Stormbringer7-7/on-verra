@@ -1,5 +1,5 @@
-// Carte des départements, sans React : tracés SVG, département sous un point (toucher), classes
-// d'une échelle séquentielle. Testé seul (tests/carte.test.ts).
+// Cartes (départements, circonscriptions), sans React : tracés SVG, contour sous un point (toucher),
+// classes d'une échelle séquentielle. Testé seul (tests/carte.test.ts).
 
 import { DEPARTEMENTS, type ContourDepartement } from './departements';
 
@@ -43,25 +43,32 @@ const boite = (anneaux: number[][]): Boite => {
   return b;
 };
 
-export interface Territoire extends ContourDepartement {
+/** Un contour prêt à dessiner : tracé SVG, boîte englobante et centre, calculés une fois. */
+export type Prepare<T extends { code: string; anneaux: number[][] }> = T & {
   d: string;
   boite: Boite;
   /** Centre de la boîte (repère, libellé). */
   centre: { x: number; y: number };
+};
+
+export function preparer<T extends { code: string; anneaux: number[][] }>(contours: T[]): Prepare<T>[] {
+  return contours.map((t) => {
+    const b = boite(t.anneaux);
+    return { ...t, d: chemin(t.anneaux), boite: b, centre: { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 } };
+  });
 }
 
+export type Territoire = Prepare<ContourDepartement>;
+
 /** Les territoires prêts à dessiner, calculés une fois. */
-export const TERRITOIRES: Territoire[] = DEPARTEMENTS.map((t) => {
-  const b = boite(t.anneaux);
-  return { ...t, d: chemin(t.anneaux), boite: b, centre: { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 } };
-});
+export const TERRITOIRES: Territoire[] = preparer(DEPARTEMENTS);
 
 /**
- * Code du territoire sous (x, y), ou null. `marge` (unités du cadre) rattrape un toucher tombé
- * juste à côté d'un petit territoire (Paris, îles) : le plus proche par sa boîte.
+ * Code du contour sous (x, y), ou null. `marge` (unités du cadre) rattrape un toucher tombé juste à
+ * côté d'un petit contour (Paris, îles) : le plus proche par sa boîte.
  */
-export function territoireSous(x: number, y: number, marge = 0): string | null {
-  for (const t of TERRITOIRES) {
+export function contourSous(liste: Prepare<{ code: string; anneaux: number[][] }>[], x: number, y: number, marge = 0): string | null {
+  for (const t of liste) {
     const b = t.boite;
     if (x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1) continue;
     if (t.anneaux.some((r) => dansAnneau(r, x, y))) return t.code;
@@ -69,13 +76,16 @@ export function territoireSous(x: number, y: number, marge = 0): string | null {
   if (marge <= 0) return null;
   let meilleur: string | null = null;
   let distance = marge;
-  for (const t of TERRITOIRES) {
+  for (const t of liste) {
     const b = t.boite;
     const d = Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1));
     if (d < distance) [meilleur, distance] = [t.code, d];
   }
   return meilleur;
 }
+
+/** Département sous (x, y) : voir `contourSous`. */
+export const territoireSous = (x: number, y: number, marge = 0) => contourSous(TERRITOIRES, x, y, marge);
 
 export interface Classe {
   min: number;

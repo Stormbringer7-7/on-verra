@@ -18,7 +18,8 @@ import { BarreDossierVue } from '../components/dossiers/BarreDossier';
 import { Carte, Colonnes, LienExterne, Ligne, ListeChiffres, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
 import { ExtraitVue, LigneScrutin, OrateurVue, OrigineVue } from '../components/dossiers/elements';
 import { casesVisibles, ETAT_CASE, LIEU, titreOrigine, TYPE_DOCUMENT } from '../components/dossiers/presentation';
-import { Ecran, Retour } from '../components/Ecran';
+import { sousLeDossier } from '../ariane';
+import { Ecran } from '../components/Ecran';
 import { date } from '../format';
 import { useCommand } from '../hooks/core';
 import { usePalette } from '../theme/ThemeProvider';
@@ -27,9 +28,9 @@ import { space } from '../theme/tokens';
 export function Etape() {
   const { dossier, cle } = useRoute<RouteProp<Pages, 'Etape'>>().params;
   const fiche = useCommand(ConsulterEtape({ dossier, cle }));
+  const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
   return (
-    <Ecran largeur="pleine">
-      <Retour />
+    <Ecran largeur="pleine" titre={f?.case.libelle} parents={sousLeDossier(f?.barre.dossier ?? { id: dossier, titre: 'Dossier' })}>
       <Requete resultat={fiche}>{(f) => <ContenuEtape fiche={f} />}</Requete>
     </Ecran>
   );

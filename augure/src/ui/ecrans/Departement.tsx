@@ -8,6 +8,7 @@ import { ConsulterDepartement } from '@/core';
 import type { Pages } from '../../navigation';
 import { Signaler } from '../components/commun/Signaler';
 import { Requete } from '../components/dossiers/blocs';
+import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { ContenuDepartement } from '../components/territoires/ContenuDepartement';
 import { useCommand } from '../hooks/core';
@@ -18,7 +19,7 @@ export function Departement() {
   const titre = resultat.statut === 'erreur' ? undefined : resultat.donnees?.departement.nom;
 
   return (
-    <Ecran titre={titre}>
+    <Ecran titre={titre} parents={[RACINES.carte]}>
       <Requete resultat={resultat}>{(f) => <ContenuDepartement fiche={f} />}</Requete>
       <Signaler cible={{ type: 'autre', id: null }} ecran="Departement" />
     </Ecran>
