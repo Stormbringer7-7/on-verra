@@ -22,6 +22,7 @@ export DATABASE_URL=postgres://big-brother:big-brother@127.0.0.1:5433/civictrace
 .venv/bin/python -m src projeter     # reconstruit le schéma lecture (barre de parcours, indicateurs)
 .venv/bin/python -m src controles    # vérifie les invariants « 100 % fiable » ; échoue sinon
 .venv/bin/python -m src revue rapport  # écrit docs/revue/rapport.md et un CSV par type de cas
+.venv/bin/python -m src echantillons  # échantillons 17e en SQLite, tous les champs et leur profil (data/echantillons/)
 ```
 
 Options de `canon` :

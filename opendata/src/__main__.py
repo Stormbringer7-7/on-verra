@@ -9,6 +9,7 @@ from . import compilation
 RACINE = Path(__file__).resolve().parent.parent
 BRUT = RACINE / "data" / "brut"
 INVENTAIRE = RACINE / "data" / "inventaire"
+ECHANTILLONS = RACINE / "data" / "echantillons"
 
 
 def cmd_migrer():
@@ -76,6 +77,11 @@ def cmd_inventaire(args):
         print(f"Inventaire écrit : {inventorier(nom, SOURCES[nom], BRUT, INVENTAIRE, args.forcer)}")
 
 
+def cmd_echantillons(args):
+    from .echantillons import construire
+    print(f"Échantillons écrits : {construire(BRUT, ECHANTILLONS, args.objets, args.reseau)} (rapport : {ECHANTILLONS / 'rapport.md'})")
+
+
 def main():
     p = argparse.ArgumentParser(prog="src", description="Chargement canonique CivicTrace : sources, projections, contrôles, revue.")
     sp = p.add_subparsers(required=True)
@@ -125,6 +131,11 @@ def main():
     c.add_argument("source", help="an, senat, legifrance, constit, hatvp, rne ou tout")
     c.add_argument("--forcer", action="store_true", help="re-télécharge même si le fichier est en cache")
     c.set_defaults(f=cmd_inventaire)
+
+    c = sp.add_parser("echantillons", help="échantillons de la 17e en SQLite, tous les champs, avec leur profil (cache seul)")
+    c.add_argument("objets", nargs="*", help="objets ou préfixes (an, an.amendement, senat.ameli…) ; rien : tout")
+    c.add_argument("--reseau", action="store_true", help="demande aux serveurs la date de publication de chaque fichier")
+    c.set_defaults(f=cmd_echantillons)
 
     args = p.parse_args()
     args.f(args)

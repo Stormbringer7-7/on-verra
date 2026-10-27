@@ -7,6 +7,20 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
 
 ## En cours
 
+- **Tout ingérer, objet par objet (décidé le 26/10/2026, 17e seulement)** : chaque objet de chaque
+  source avec tous ses champs, tous les statuts tels que publiés (regroupement plus tard). Puis
+  chronologie des amendements et cycle de vie des textes (modifications exactes reportées sur
+  articles et alinéas), puis LEGI.
+  - [x] Échantillons SQLite : `python -m src echantillons [objet…] [--reseau]` → `opendata/data/echantillons/17e.sqlite`
+    (une table par objet et par liste, `_objets`, `_champs`) et `rapport.md`. 230 objets, 4 978 champs, cache seul.
+  - [ ] **Validation par l'utilisateur, objet par objet** : source officielle, objet et famille, format,
+    livraison (stock complet ou incrémental) et fréquence, champs (type, remplissage, similarité).
+  - [ ] Fréquences : date de publication non lue pour RNE (data.gouv), INSEE et DILA (URL de dossier) ;
+    à lire dans l'API data.gouv et le listing DILA.
+  - [ ] Sénat : échantillons des tables liées (`amdsen`, `sub`, `intora`…) tirés indépendamment
+    de `amd` ; à tirer en cohérence (lignes des amendements retenus) si la validation le demande.
+  - [ ] Adaptateur de stockage SQLite (tests sans serveur) ; le staging reste Postgres.
+  - [ ] AN : le sous-état des amendements (motif d'irrecevabilité, retiré avant / après publication) est perdu dans `canon.amendement`.
 - Liste des médias sources (côté utilisateur) : voir « Intervenants et sources médiatiques ».
 - À relire et commiter (25/10/2026, branche `design-v4`) : design v4 (voir « Design v4 » ci-dessous), migrations 0018 à 0020 et projections 11, 12, 60, 61, 65, déjà appliquées à la base locale.
 - À commiter (25/10/2026) : liens des comptes rendus AN (migration 0017), chargement de l'app web
@@ -49,6 +63,21 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
 ### Liens et données manquants
 
 - [ ] Loi promulguée : stocks JORF et LEGI (renumérotation, versions consolidées).
+- [ ] **Généalogie des articles** (article → loi qui l'a créé → lois qui l'ont modifié, et
+  inversement) : un texte réécrit souvent des articles existants (codes, lois antérieures), et
+  sans leur histoire il manque l'essentiel du contexte. LEGI la publie en liens typés, vérifié le
+  26/10/2026 sur l'incrément du 23/10 : `LIEN@typelien` = `CREATION`/`CREE`,
+  `MODIFICATION`/`MODIFIE`, `ABROGATION`/`ABROGE`, `CODIFICATION`, `DEPLACE`, `TRANSPOSITION`,
+  `CITATION` (53 118 liens sur 55 929), avec `sens` (source ou cible), `cidtexte`, `numtexte`,
+  `naturetexte`, `datesignatexte` ; chaque version d'article a `DATE_DEBUT`, `DATE_FIN`, `ETAT`.
+  Identifiants officiels de bout en bout : entre dans `canon` sans revue.
+  - Lier un article suivi d'un dossier à son `LEGIARTI` (via la loi promulguée et son NOR), puis
+    remonter versions et liens jusqu'au texte d'origine ; descendre aussi : les textes qui ont
+    ensuite modifié ce que la loi a écrit.
+  - `CODIFICATION` : l'article de code qui reprend une loi antérieure, sans changer le fond.
+  - `TRANSPOSITION` : directive européenne à l'origine (rejoint « Données européennes »).
+  - Stock global à charger (plusieurs Go) : les incréments ne portent que les articles changés.
+  - Fiche Article : frise des versions avec le texte qui crée, modifie ou abroge chacune.
 - [ ] Questions au Gouvernement du Sénat (283 Mo, non téléchargées).
 - [ ] Comptes rendus des commissions du Sénat.
 - [ ] Membres du Gouvernement : rapprochement AN ↔ Sénat proposé en revue.
@@ -164,6 +193,13 @@ Relevé à l'intégration du 24/10/2026 ([contrat.md](contrat.md)).
   - [ ] Codes postaux → circonscriptions et `TrouverRepresentants` : source officielle à charger ; une commune partagée donne ses candidates.
   - [ ] Présence sur 12 mois glissants : index `(chambre, date)` sur `lecture.participation_scrutin` d'abord (aujourd'hui 2 min 24 s).
 - [ ] Autres écrans (puis leurs liens dans l'en-tête paysage), autres cartes de Chiffres (chacune avec ses données réelles), mise en page v4 des fiches ; README d'augure à mettre à jour.
+
+- [x] **Fil d'Ariane** (26/10/2026) : la place de l'objet, comme dans le canevas, pas le chemin suivi (`Lois / dossier / étape / Amendement`, `Élus / personne`, `Carte / département`). Chaque écran donne ses parents (`ui/ariane.ts`) ; en portrait, le retour nomme le parent ; toucher un parent y revient s'il est dans la pile, sinon l'ouvre.
+- [x] **Scrutin : répartition des voix** (26/10/2026) : liste nominative par position (filtres groupe, département, nom ; délégation, mise au point), tableau par groupe ou par département (participation, cohésion par rapport à la ligne du groupe), écarts regroupés par groupe, carte intégrée (part des « pour », participation, écarts au groupe ; toucher un département filtre la liste). `VoteNominatif.departement`.
+  - [ ] Hémicycle qui suit la sélection (groupe, département).
+- [x] **Carte d'un scrutin AN par circonscription** (26/10/2026) : 561 contours (506 Ko, même cadre que les départements), député et position par circonscription (lien `territoire` AMO), siège vacant dit comme tel ; sélecteur Départements / Circonscriptions sur l'écran Carte et sur le scrutin. 285 ms à froid, 22 ms ensuite.
+  - [x] Source des contours : fond officiel de l'INSEE (mai 2022, 558 circonscriptions, contours simplifiés), plus les territoires à circonscription unique (975, 977 + 978, 986) depuis leur contour administratif (26/10/2026).
+  - [ ] Pas de contour officiel pour la Nouvelle-Calédonie (2) et la Polynésie (3) : en liste. Fond INSEE de 2022 : à régénérer s'il est mis à jour (`node scripts/carte-circonscriptions.mjs`).
 
 **Règles de tous les écrans** (rappelées le 25/10/2026, souvent oubliées)
 - [x] **Tout groupe a une couleur** (25/10/2026) : projection `lecture.couleur_groupe` (officielle, sinon famille d'après une table relue, sinon couleur de secours stable), `GroupeRef.sourceCouleur`, contrôle `groupe_actif_couleur_arbitraire`. En base : les 20 groupes actuels du Sénat en famille, 28 anciens groupes en secours.
@@ -408,6 +444,27 @@ du bien d'un journal puis se contredit).
 - [ ] **Vérification**, du plus sûr au plus risqué :
   1. contre `canon` (votes, amendements, participation rapportée à un périmètre) ;
   2. contre la statistique publique (INSEE, Eurostat : série, période, millésime) ;
+     - **Depuis les interventions** : les chiffres se citent à l'oral, presque jamais dans un
+       texte. Relevé le 26/10/2026 sur `canon.intervention` (726 876) : 42 969 avec un
+       pourcentage, 30 486 avec un montant en millions ou milliards d'euros, 2 881 parlent de
+       chômage, 4 299 d'inflation, 1 340 citent l'INSEE. Exemple réel : « élue d'un territoire où
+       le taux de chômage atteint 13,9 % ».
+     - **Chaîne chiffre → série** : extrait exact (chiffre, unité, période, territoire) → série
+       BDM (`IDBANK`) → valeur **publiée à la date de l'intervention**, avec son statut
+       (`OBS_QUAL` provisoire ou définitif). Montrées côte à côte, sans verdict. BDM : API SDMX sans
+       clé (`bdm.insee.fr/series/sdmx/data/SERIES_BDM/<IDBANK>`, vérifié), mais seulement le
+       dernier millésime (`LAST_UPDATE`) : archiver chaque relevé avec son empreinte pour connaître
+       la valeur d'une date passée, ou s'appuyer sur les publications archivées (Informations
+       rapides).
+     - **Territoire implicite** (« mon territoire », « ma circonscription ») : orateur →
+       circonscription ou département (AMO, code officiel) → série locale (chômage localisé,
+       pauvreté Filosofi). Territoire nommé (« Mayotte », « Marseille ») → COG par le nom :
+       ambigu, en revue.
+     - Comparaisons internationales (« 15,3 % en moyenne européenne ») → Eurostat ; montants →
+       lois de finances (données budgétaires par mission, à inventorier).
+     - Repérage : pré-filtre par motif en code, puis extraction par le port `Modele` en
+       parallèle de la synthèse, et liaison aux statistiques par le code : voir
+       [debatron/PLAN.md](../debatron/PLAN.md) §6 ter. Lien « généré » jusqu'à la revue.
   3. contre les déclarations passées de la même personne.
 - [ ] Avant toute confiance dans le modèle :
   - un jeu de référence annoté à la main (quelques centaines de paires), qui sert à mesurer la
@@ -455,6 +512,18 @@ du bien d'un journal puis se contredit).
     périmètre.
   - Propriété des médias : la carte du Monde diplomatique et d'Acrimed est sur GitHub (exclu) ;
     équivalent officiel à trouver.
+  - **Ministère de la Justice** (data.gouv, 11 jeux, vérifié le 26/10/2026) :
+    - **NATINF** (licence ouverte, trimestriel, CSV cp1252 `;`) : 17 239 infractions en vigueur,
+      nature, qualification, articles qui la définissent et la répriment (abréviations :
+      `ART.227-3 AL.1 C.PENAL.`). Chaîne loi → article → infraction ; les versions trimestrielles
+      archivées datent l'apparition d'une infraction. Abréviation ambiguë → revue.
+    - **Condamnations** (casier judiciaire, annuel) : par infraction et peine ; sur data.gouv
+      jusqu'à 2020 seulement, fichiers `.csv` qui sont des xlsx. À vérifier : détail par NATINF.
+    - **Judilibre** (Cour de cassation, licence ouverte, API avec compte PISTE) : décisions
+      pseudonymisées, cours d'appel comprises ; comment un article voté est appliqué.
+    - Contexte seulement : population écrouée (mensuel), milieu fermé et ouvert (trimestriel),
+      juridictions compétentes par commune (Territoires).
+    - Rien sur les moments (comparutions ou poursuites liées à une mobilisation).
 
 ## Contexte et comparaison dans l'app — propositions du 24/10/2026
 

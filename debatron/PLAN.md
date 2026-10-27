@@ -190,6 +190,61 @@ Règles communes :
   repérer une phrase sortie de son contexte.
 - Les agents **citent** une personnalité, ils ne parlent jamais à sa place (§7).
 
+## 6 ter. Chiffres cités : extraction pendant la synthèse, puis liaison aux statistiques
+
+Les chiffres se citent surtout à l'oral, presque jamais dans un texte de loi : sur les 726 876
+interventions de CivicTrace (relevé du 26/10/2026), 42 969 contiennent un pourcentage et 30 486 un
+montant en millions ou milliards d'euros. Exemple réel : « élue d'un territoire où le taux de
+chômage atteint 13,9 % ».
+
+**1. Extraction, en parallèle de la synthèse d'un texte** (texte de loi, article, intervention,
+déclaration). Un second appel au port `Modele`, sur la même entrée (préfixe partagé, mis en
+cache), lancé en même temps que la synthèse et indépendant d'elle : l'échec de l'un ne bloque pas
+l'autre. Un pré-filtre en code (présence d'un chiffre) évite l'appel quand il n'y a rien à
+extraire. Sortie en JSON, validée par notre schéma (§8) ; un élément par chiffre :
+
+```json
+{
+  "extrait": "le taux de chômage atteint 13,9 %",
+  "valeur": 13.9,
+  "unite": "pourcent",
+  "grandeur": "taux de chômage",
+  "periode": { "telle_que_dite": null, "resolue": null },
+  "territoire": { "tel_que_dit": "un territoire où", "type": "territoire_de_l_orateur" },
+  "source_revendiquee": null,
+  "compare_a": null,
+  "pointe_vers": [
+    { "type": "insee_bdm", "identifiant": "<IDBANK pris dans le catalogue fourni>", "pourquoi": "taux de chômage localisé, département de l'orateur" }
+  ]
+}
+```
+
+- `extrait` : passage exact du texte ; le code vérifie qu'il y figure, sinon l'élément est rejeté.
+- `periode` : telle que dite (« l'année dernière »), puis résolue par rapport à la date du texte.
+- `territoire` : tel que dit ; « mon territoire » renvoie à l'orateur (circonscription ou
+  département, code officiel de CivicTrace) ; un nom (« Mayotte ») se résout dans le COG, en revue
+  s'il est ambigu.
+- `source_revendiquee` : ce que l'orateur dit de sa source (« selon l'INSEE »), gardé tel quel.
+- `pointe_vers` : une ou plusieurs sources candidates, **choisies dans un catalogue fermé** fourni
+  au modèle (séries BDM de l'INSEE, Eurostat, jeux data.gouv repérés, `canon` pour un vote ou un
+  montant de loi de finances). Un identifiant hors catalogue est rejeté : le modèle n'invente
+  jamais une série.
+
+**2. Puis, au passage : liaison aux statistiques.** Dans le même traitement, pour chaque élément
+retenu, le code (jamais le modèle) lit par le port `Statistiques` la valeur **publiée à la date du
+texte**, avec son statut (provisoire, définitive), son unité, son champ et son territoire. La BDM ne
+sert que le dernier millésime : le port archive chaque relevé avec son empreinte pour retrouver la
+valeur d'une date passée.
+
+- Le lien chiffre cité ↔ statistique est une affirmation « générée » jusqu'à la revue humaine.
+- Affichage : le chiffre cité et la valeur publiée côte à côte, datés et sourcés, **sans verdict**
+  (« vrai », « faux ») ; un écart de période, de champ ou de territoire est dit, pas tranché.
+- Dans un débat, le modérateur s'en sert comme outil de vérification (§3) ; dans l'app, la même
+  liaison enrichit l'intervention.
+- Avant toute confiance : un jeu de référence annoté à la main (quelques centaines d'extraits)
+  mesure la précision de l'extraction et du choix de la série, par modèle ; le coût est chiffré
+  sur un échantillon réel.
+
 ## 7. Garde-fous
 
 - Une simulation est **toujours affichée comme telle** et n'est jamais réinjectée dans CivicTrace
@@ -238,6 +293,8 @@ Règles communes :
 2. Port Sources CivicTrace (lecture) + dossier de contexte d'un texte.
 2 bis. Ports `Actualites`, `Statistiques` (INSEE), `Declarations`, `Temoignages` : contrats et
    adaptateurs factices, puis choix des sources réelles.
+2 ter. Extraction des chiffres en parallèle de la synthèse, puis liaison aux statistiques (§6 ter) :
+   schéma JSON, catalogue fermé des séries, archivage des relevés, jeu de référence annoté.
 3. Débatteur agent + modérateur agent (outils de vérification) : débat 100 % agent, sur plusieurs
    modèles.
 4. Public agent (panel, réactions structurées, agrégation).
@@ -258,5 +315,6 @@ Règles communes :
 | Actualités, déclarations : qui les collecte ? | **à décider** : le debatron à la demande, ou CivicTrace (couche `analytique`, puisque non « 100 % fiables ») pour les partager avec l'app |
 | Accès aux médias | **pari** : les médias ont intérêt à ce qu'on débatte avec leurs données (partenariats, accès aux articles payants) ; flux RSS pour le courant, API des médias pour l'historique |
 | Déclarations : sources repérées | **discours publics vie-publique.fr** (DILA, ouvert, métadonnées + texte sur la page) ; **INA** (data.ina.fr : radio et TV 2019-2024, transcriptions automatiques) **par convention** uniquement, les CGU interdisant l'extraction et la réutilisation sans accord écrit ; transcription automatique = à vérifier sur la source, jamais un verbatim certain |
+| Chiffres cités (§6 ter) | **extraits en parallèle de la synthèse**, en JSON validé, pointant vers un catalogue fermé de sources ; valeur publiée lue par le code, jamais par le modèle ; **qui l'exécute est à décider** (CivicTrace, couche `analytique`, pour servir aussi l'app ?) |
 | Agrégateurs de fact-checking (Google Fact Check Tools…) | **écartés** : qualité non contrôlable |
 | Démarrage | **pas avant que l'app soit prête** ; le langage se décidera à ce moment-là |
