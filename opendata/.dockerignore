@@ -1,4 +1,4 @@
-# Les images n'embarquent que src/ et docker/ : les données viennent des volumes.
+# Les images n'embarquent que src/, parcours/ (modèles) et docker/ : les données viennent des volumes.
 data/
 tests/
 **/__pycache__/
