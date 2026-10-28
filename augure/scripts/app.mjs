@@ -281,7 +281,8 @@ function appliquerVersion(v, env) {
 }
 
 function apply(quoi, env) {
-  const v = lireVersion();
+  const avant = lireVersion();
+  let v = avant;
 
   if (!quoi || quoi === 'version') {
     // Appliquer uniquement
@@ -298,7 +299,7 @@ function apply(quoi, env) {
   }
 
   ecrireVersion(v);
-  console.log(`● version ${texteVersion(v)} → ${texteVersion(v)}`);
+  console.log(`● version ${texteVersion(avant)} → ${texteVersion(v)}`);
   appliquerVersion(v, env);
   return v;
 }
