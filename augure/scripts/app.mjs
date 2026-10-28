@@ -281,7 +281,7 @@ function appliquerVersion(v, env) {
 }
 
 function apply(quoi, env) {
-  const v = lireVersion();
+  let v = lireVersion();
 
   if (!quoi || quoi === 'version') {
     // Appliquer uniquement
