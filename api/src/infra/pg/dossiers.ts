@@ -73,7 +73,7 @@ import type {
   VersionArticle,
 } from '@contrat/domain/model';
 import type { ActeSuivi, DossiersRepository, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
-import { groupe as groupeRef } from './personnes';
+import { groupe as groupeRef, titrePublie } from './personnes';
 
 // ---------- Vocabulaire ----------
 
@@ -598,7 +598,9 @@ export class PgDossiers implements DossiersRepository {
         l.groupe_id && (l.chambre === 'AN' || l.chambre === 'SENAT')
           ? groupeRef({ id: l.groupe_id, abrege: l.abrege ?? '', libelle: l.libelle ?? '', couleur: l.couleur, sourceCouleur: l.source_couleur, chambre: l.chambre })
           : null;
-      resultat.set(`${d.id}|${d.jour ?? ''}`, { id: l.id, nom: l.nom, fonction: mandat ?? l.gouvernement ?? null, groupe });
+      // Un député nommé ministre reste député un mois (code électoral, art. LO 153) : la fonction ministérielle prime.
+      const gouvernement = l.gouvernement ? titrePublie(l.gouvernement) : null;
+      resultat.set(`${d.id}|${d.jour ?? ''}`, { id: l.id, nom: l.nom, fonction: gouvernement ?? mandat ?? null, groupe });
       if (f) this.feminins.add(l.id);
     }
     return resultat;
