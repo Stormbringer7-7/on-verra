@@ -89,6 +89,14 @@ export const REMPLIR: Remplisseurs = {
     ...a,
     dossiers: await chacun(a.dossiers, (d) => dossierResume(r, d)),
     votes: await chacun(a.votes, (s) => scrutinResume(r, s)),
+    ...(a.jour && {
+      jour: {
+        ...a.jour,
+        decides: await chacun(a.jour.decides, (d) => dossierResume(r, d)),
+        avancent: await chacun(a.jour.avancent, (d) => dossierResume(r, d)),
+        votes: await chacun(a.jour.votes, (s) => scrutinResume(r, s)),
+      },
+    }),
   }),
 
   ListerDossiers: async (r, l) => ({
@@ -195,6 +203,7 @@ export const REMPLIR: Remplisseurs = {
   },
 
   ListerPersonnes: tel,
+  ConsulterQuestion: tel,
   ClasserPersonnes: tel,
 
   ConsulterPersonne: async (r, f) => {

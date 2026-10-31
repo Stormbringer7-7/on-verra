@@ -258,8 +258,10 @@ describe('RailParcours (parcours réels)', () => {
     const etape = lignes.find((l) => l.type === 'etape' && l.etape.cle === 'commission_1_o');
     expect(etape).toMatchObject({ quand: 'Du 08/04/2026 au 07/05/2026 · 4 semaines', trait: 'plein' });
     const t = texte(rail(PARCOURS_AGRICOLE));
-    expect(t).toContain('Parcours suivi Loi ordinaire');
-    expect(t).toContain('Comparer au droit commun');
+    // Rail v3 : « Seulement les décisions » plie les étapes intermédiaires (commissions, transmission).
+    expect(t).toContain('Seulement les décisions 3 étapes intermédiaires masquées');
+    expect(t).not.toContain('Commission AN');
+    expect(t).toContain('Procédure accélérée ›');
     expect(t).not.toContain('2e lecture AN');
     expect(rail(PARCOURS_AGRICOLE)).not.toMatch(/\p{Extended_Pictographic}/u);
   });

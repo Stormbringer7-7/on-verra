@@ -1,5 +1,6 @@
 // Adaptateur mémoire de DiscussionsRepository : « Qui intervient » des étapes, interventions
-// listées, extraits sous les amendements et avant les votes, tels que dans les fixtures.
+// listées, extraits sous les amendements, autour d'un scrutin et avant les votes, tels que dans les
+// fixtures.
 
 import type { CibleInterventions, CleCase } from '@contrat/domain/model';
 
@@ -34,5 +35,12 @@ export class DiscussionsMemoire implements DiscussionsRepository {
     const { exemples } = await this.donnees;
     const e = premier(exemples.ExpliquerVote, (x) => x.input.scrutin === scrutin && x.input.personne === personne)?.output;
     return (e?.interventionsAvant ?? []).slice(0, limite);
+  }
+
+  /** Celles de la fiche du scrutin des fixtures ; null si la fiche n'en relie aucune (ou n'existe pas). */
+  async duScrutin(scrutin: string, _amendement: string | null, limite: number) {
+    const { exemples } = await this.donnees;
+    const i = premier(exemples.ConsulterScrutin, (e) => e.input.id === scrutin)?.output.interventions;
+    return i ? { ...i, extraits: i.extraits.slice(0, limite) } : null;
   }
 }

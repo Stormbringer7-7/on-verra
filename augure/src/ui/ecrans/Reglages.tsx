@@ -1,10 +1,9 @@
-// Accessibilité et réglages (canevas v4, « Réglages ») : taille du texte, thème, contraste
-// renforcé, animations réduites, et vos données (exporter, tout effacer). Tout reste sur l'appareil.
-// Pas de « lecture facile » ni de thèmes : la première dépend d'une IA qui n'est pas branchée, les
-// seconds d'un classement par thème que les données n'ont pas encore (aucun élément affiché).
+// Accessibilité et réglages (canevas v4, « Réglages ») : taille du texte, thème de couleurs
+// (Themes.ts), contraste renforcé, animations réduites, et vos données (exporter, tout effacer). Tout
+// reste sur l'appareil. Pas de « lecture facile » : elle dépend d'une IA qui n'est pas branchée.
 
 import { useState } from 'react';
-import { Platform, Share, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAller } from '../../navigation';
 import { Action, BoutonSecondaire, Carte, Segmente, T, TitreEcran, TitreSection } from '../components/base';
@@ -12,8 +11,9 @@ import { Signaler } from '../components/commun/Signaler';
 import { RACINES } from '../ariane';
 import { Ecran } from '../components/Ecran';
 import { Interrupteur } from '../components/fondations';
-import { useReglages, type TailleTexte, type Theme } from '../hooks/reglages';
-import { usePalette } from '../theme/ThemeProvider';
+import { useReglages, type TailleTexte } from '../hooks/reglages';
+import { usePalette, useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/Themes';
 import { radius, space } from '../theme/tokens';
 
 const TAILLES: { cle: TailleTexte; libelle: string }[] = [
@@ -22,10 +22,6 @@ const TAILLES: { cle: TailleTexte; libelle: string }[] = [
   { cle: 'tres_grande', libelle: 'Très grande' },
 ];
 
-const THEMES: { cle: Theme; libelle: string }[] = [
-  { cle: 'sombre', libelle: 'Sombre' },
-  { cle: 'clair', libelle: 'Clair' },
-];
 
 /** « Exporter mes données » : un fichier JSON sur le web, la feuille de partage ailleurs. */
 export async function exporterDonnees(json: string): Promise<void> {
@@ -68,7 +64,7 @@ export function Reglages() {
 
       <View style={styles.section}>
         <TitreSection>Affichage</TitreSection>
-        <Segmente label="Thème" options={THEMES} valeur={reglages.theme} onChange={(theme) => modifier({ theme })} />
+        <ChoixTheme />
         <Interrupteur
           libelle="Contraste renforcé"
           aide="Textes plus blancs, traits plus nets, couleurs plus franches."
@@ -127,7 +123,62 @@ export function Reglages() {
   );
 }
 
+/** Choix du thème : chaque thème montré dans ses propres couleurs (fond, encre, signal, pour, contre). */
+function ChoixTheme() {
+  const { theme: actif, themes, choisir } = useTheme();
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel="Thème" style={styles.themes}>
+      {themes.map((t) => (
+        <ApercuTheme key={t.id} theme={t} choisi={t.id === actif.id} onPress={() => choisir(t.id)} />
+      ))}
+    </View>
+  );
+}
+
+function ApercuTheme({ theme, choisi, onPress }: { theme: Theme; choisi: boolean; onPress(): void }) {
+  const { reglages } = useReglages();
+  const t = reglages.contraste ? theme.contraste : theme.palette;
+  const p = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: choisi }}
+      accessibilityLabel={`${theme.nom}. ${theme.description}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.theme,
+        { backgroundColor: t.surface, borderColor: choisi ? p.signal : p.line, borderWidth: choisi ? 2 : 1 },
+        pressed && { transform: [{ scale: 0.97 }] },
+      ]}
+    >
+      <View style={styles.themeHaut}>
+        <T variant="heading" couleur={t.ink}>
+          {theme.nom}
+        </T>
+        <View aria-hidden style={[styles.radio, { borderColor: choisi ? t.signal : t.lineStrong }]}>
+          {choisi && <View style={[styles.radioPlein, { backgroundColor: t.signal }]} />}
+        </View>
+      </View>
+      <T variant="small" couleur={t.inkSoft}>
+        {theme.description}
+      </T>
+      <View aria-hidden style={styles.nuancier}>
+        {[t.surfaceRaised, t.ink, t.signal, t.votePour, t.voteContre].map((c, i) => (
+          <View key={i} style={[styles.nuance, { backgroundColor: c, borderColor: t.line }]} />
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  themes: { flexDirection: 'row', flexWrap: 'wrap', gap: space[3] },
+  theme: { flexGrow: 1, flexBasis: 150, gap: space[2], padding: space[4], borderRadius: radius.lg },
+  themeHaut: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
+  radio: { width: 20, height: 20, borderRadius: radius.full, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioPlein: { width: 10, height: 10, borderRadius: radius.full },
+  nuancier: { flexDirection: 'row', gap: space[1] },
+  nuance: { width: 22, height: 22, borderRadius: radius.full, borderWidth: 1 },
   entete: { gap: space[2] },
   section: { gap: space[4] },
   apercu: { gap: space[2], padding: space[4], borderWidth: 1, borderRadius: radius.lg },

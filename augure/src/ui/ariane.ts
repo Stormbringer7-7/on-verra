@@ -43,11 +43,13 @@ export const LIBELLES_PAGES: Record<Page, string> = {
   Article: 'Article',
   Amendement: 'Amendement',
   Scrutin: 'Scrutin',
+  VoteMainLevee: 'Vote à main levée',
   PourquoiVote: 'Pourquoi ce vote',
   Personne: 'Personne',
   Institution: 'Institution',
   Representant: 'Représentant d’intérêts',
   Departement: 'Département',
+  Question: 'Question',
 };
 
 // ---------- Maillons ----------
@@ -111,6 +113,7 @@ const ONGLET_DES_PAGES: Record<Page, Onglet> = {
   Article: 'Accueil',
   Amendement: 'Accueil',
   Scrutin: 'Accueil',
+  VoteMainLevee: 'Accueil',
   PourquoiVote: 'Accueil',
   Representant: 'Accueil',
   Textes: 'Chiffres',
@@ -124,6 +127,7 @@ const ONGLET_DES_PAGES: Record<Page, Onglet> = {
   Personne: 'Recherche',
   Institutions: 'Recherche',
   Institution: 'Recherche',
+  Question: 'Recherche',
 };
 
 /** Onglet actif : celui de la route « Onglets » de la pile, sinon celui de la première fiche. */

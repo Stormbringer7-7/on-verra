@@ -64,6 +64,7 @@ import type {
   DossierRef,
   DossierResume,
   ChangementDepuisLeDepot,
+  ComptesParSort,
   EnteteDossier,
   EntetePersonne,
   EtapeResume,
@@ -79,14 +80,17 @@ import type {
   Intervenant,
   Intervention,
   InterventionExtrait,
+  InterventionsDuScrutin,
   LienInteret,
   ListeDossiers,
   Page,
   Parcours,
   Provenance,
+  FicheQuestion,
   QuestionResume,
   ResultatRecherche,
   RoleDansLesDossiers,
+  ReunionsDuJour,
   ChoixTheme,
   Indicateur,
   ScrutinResume,
@@ -109,6 +113,15 @@ export interface SqlDatabase {
   first<T>(sql: string, params?: SqlParams): Promise<T | null>;
 }
 
+/**
+ * Filtres du calendrier de l'Accueil, vérifiés par le cœur : null = pas de filtre ; une liste vide
+ * de dossiers ne garde rien.
+ */
+export interface FiltreAccueil {
+  chambres: Chambre[] | null;
+  dossiers: string[] | null;
+}
+
 /** Pagination demandée, bornée par le cœur (page ≥ 1, 1 ≤ taille ≤ 100). */
 export interface Pagination {
   page: number;
@@ -127,6 +140,30 @@ export interface DossiersRepository {
    * En base au 24/10/2026 : projections parcours_* pas encore chargées (dans projections/55).
    */
   aSuivre(limite: number): Promise<DossierResume[]>;
+
+  /**
+   * Dossiers sans parent (pas d'événement rattaché à un autre) qui ont un acte du parcours daté de
+   * ce jour, publié ou inscrit : `decides` si l'un d'eux conclut une étape, `avancent` sinon. Ordre :
+   * le plus d'actes ce jour-là d'abord. Vide sans projection.
+   * Tables : lecture.parcours_acte (debut, categorie, conclusif, accompli), lecture.dossier_lien.
+   * Filtre (facultatif) : actes siégeant dans ces chambres (`chambre_seance`), de ces dossiers.
+   */
+  duJour(jour: string, limite: number, filtre?: FiltreAccueil): Promise<{ decides: DossierResume[]; avancent: DossierResume[] }>;
+
+  /**
+   * Jours (croissants) entre deux dates où un acte du parcours d'un dossier est daté, filtrés comme
+   * `duJour`. Tables : lecture.parcours_acte.
+   */
+  joursActifs(debut: string, fin: string, filtre?: FiltreAccueil): Promise<string[]>;
+
+  /**
+   * Réunions de commission et séances publiques du jour (jour de Paris), par chambre (AN puis Sénat,
+   * celles du filtre) ; un type de réunion qu'aucune ligne de la base ne porte pour la chambre
+   * (commissions du Sénat au 31/10/2026) : null, pas zéro. Filtre `dossiers` : réunions dont un
+   * point de l'ordre du jour traite l'un d'eux. Tables : canon.reunion (type, chambre, debut),
+   * canon.point_odj (dossier_id).
+   */
+  reunionsDuJour(jour: string, filtre?: FiltreAccueil): Promise<ReunionsDuJour[]>;
 
   /**
    * Dossiers filtrés, du dernier acte le plus récent au plus ancien, et facettes (nombres par état,
@@ -154,7 +191,11 @@ export interface DossiersRepository {
    * Barre complète (toutes les cases du gabarit, `sans_objet` compris) et prochaine échéance.
    * null hors du périmètre de la projection (résolution, loi constitutionnelle, sans 1re lecture).
    * Provenance de chaque case : les entite_id de `parcours_dossier.provenance` → canon.correspondance.
-   * Tables : lecture.parcours_dossier, lecture.parcours_dossier_synthese.
+   * Déviations : `effetSi` du modèle (canon.parcours_deviation). Rattachements (parent, enfants) :
+   * leurs scrutins publics (`DossierLie.scrutins`) : ceux du dossier rattaché et ceux des étapes sous
+   * l'acte du lien (`lecture.dossier_lien.acte_id` → canon.etape.parent_id → canon.scrutin.etape_id).
+   * Tables : lecture.parcours_dossier, lecture.parcours_dossier_synthese, lecture.parcours_deviation,
+   * canon.parcours_deviation, lecture.dossier_lien, canon.etape, canon.scrutin.
    */
   parcours(id: string): Promise<Parcours | null>;
 
@@ -184,21 +225,23 @@ export interface DossiersRepository {
   ceQuiAChange(id: string): Promise<ChangementDepuisLeDepot[]>;
 
   /**
-   * Amendements déposés et adoptés par case du parcours, et une page d'amendements (adoptés d'abord,
-   * puis par date de sort), filtrable par sort.
-   * Tables : canon.amendement (etape_id → lecture.parcours_acte.cle, sort, division, article_suivi_id),
-   * canon.lien (auteur, cosignataire), canon.personne.
+   * Amendements déposés et adoptés par case du parcours (et leurs comptes par sort publié), comptes
+   * du dossier entier par sort (`parSort`, facultatif), et une page d'amendements (adoptés d'abord,
+   * puis par date de sort, avec dates de dépôt et de sort), filtrable par sort.
+   * Tables : canon.amendement (etape_id → lecture.parcours_acte.cle, sort, date_depot, date_sort,
+   * division, article_suivi_id), canon.lien (auteur, cosignataire), canon.personne.
    */
   amendements(
     id: string,
     filtre: { sort?: SortAmendement },
     pagination: Pagination,
-  ): Promise<{ parEtape: StatAmendementsEtape[]; liste: Page<AmendementResume> }>;
+  ): Promise<{ parEtape: StatAmendementsEtape[]; parSort?: ComptesParSort; liste: Page<AmendementResume> }>;
 
   /**
    * Acteurs par rôle : auteur, Gouvernement (ministre qui porte le texte), rapporteurs, membres de
-   * la CMP, auteurs d'amendements les plus actifs, saisissants du Conseil, personnes auditionnées.
-   * Une personne auditionnée n'est une `personne` que si `canon.audition.personne_id` est posé
+   * la CMP, auteurs d'amendements les plus actifs, saisissants du Conseil, personnes auditionnées,
+   * membres d'une commission d'enquête ou d'une mission (fonctions publiées sur l'organe de ses
+   * étapes, `canon.organisation.type` commission_enquete ou mission). Une personne auditionnée n'est une `personne` que si `canon.audition.personne_id` est posé
    * (certain) ; sinon `nom_publie`.
    * Tables : canon.lien (auteur, initiateur, rapporteur), canon.fonction (membre_cmp, membre_gouvernement),
    * canon.amendement + canon.lien (auteurs actifs), canon.intervention (nombre d'interventions),
@@ -209,8 +252,10 @@ export interface DossiersRepository {
 
   /**
    * Chiffres clés : étapes franchies, amendements déposés et adoptés, scrutins publics,
-   * interventions en séance, durée d'examen (dépôt → dernière case faite).
-   * Tables : lecture.parcours_dossier_synthese, canon.amendement, canon.scrutin, canon.intervention.
+   * interventions en séance, durée d'examen (dépôt → dernière case faite), membres (commission
+   * d'enquête, mission : personnes ayant une fonction publiée dans son organe).
+   * Tables : lecture.parcours_dossier_synthese, canon.amendement, canon.scrutin, canon.intervention,
+   * canon.fonction.
    */
   chiffres(id: string): Promise<Chiffre[]>;
 
@@ -225,7 +270,10 @@ export interface DossiersRepository {
    * (DiscussionsRepository) et les votes (ScrutinsRepository). Changements article ← amendement : origine « amendement » vérifiée
    * si `modification_article.statut` = VERIFIED, à vérifier si NEEDS_REVIEW, REJECTED ignorée ;
    * « non_etablie » sinon. Documents : rapports, textes adoptés, étude d'impact, avis du CE,
-   * comptes rendus, saisine, décision.
+   * comptes rendus, saisine, décision. Modèle du parcours ; personnes de la case (cf.
+   * `FicheEtape.personnes`) : canon.lien rapporteur des actes de la case, canon.fonction de son organe
+   * (CMP, commission d'enquête, mission : président, membres titulaires, rapporteurs), initiateurs
+   * du dossier au dépôt, et à la déclaration du Gouvernement s'ils sont Premier ministre ce jour-là.
    * Tables : lecture.parcours_dossier, lecture.parcours_acte, canon.etape (organe_id),
    * canon.document (etape_id, type, numero, url), canon.amendement (chiffres), canon.reunion via
    * canon.lien nature 'reunion' (réunions), canon.version_article + canon.modification_article.
@@ -355,6 +403,18 @@ export interface DiscussionsRepository {
    * Tables : lecture.dit_et_vote (avant_le_vote, intervention_ids), canon.intervention.
    */
   avantLeVote(scrutin: string, personne: string, limite: number): Promise<InterventionExtrait[]>;
+
+  /**
+   * Interventions reliées à un scrutin par lien structurel sûr (jamais par l'heure ni le texte) :
+   * scrutin sur un amendement (`amendement` non null) : celles qui le discutent (comme
+   * `surAmendement`) ; sinon celles sur le dossier du scrutin dans la séance que cite son étape, le
+   * jour du vote (présidence de séance et didascalies exclues). null : aucun lien sûr (scrutin sans
+   * étape ni dossier, Sénat) ou scrutin inconnu.
+   * Tables : canon.scrutin (etape_id, dossier_id, date), canon.lien nature 'reunion' (acte → réunion),
+   * canon.reunion (type 'seance', debut), canon.intervention (dossier_id, amendement_id), canon.lien
+   * nature 'dossier' et 'amendement'.
+   */
+  duScrutin(scrutin: string, amendement: string | null, limite: number): Promise<InterventionsDuScrutin | null>;
 }
 
 // ---------- Scrutins ----------
@@ -367,6 +427,12 @@ export interface ScrutinsRepository {
    * En base au 24/10/2026 : Sénat depuis 2024 (724 scrutins), AN 9 097.
    */
   entre(debut: string, fin: string, limite: number): Promise<ScrutinResume[]>;
+
+  /**
+   * Jours (croissants) entre deux dates qui ont au moins un scrutin public ; filtre facultatif de
+   * l'Accueil (chambre du scrutin, dossier qu'il cite). Tables : canon.scrutin.
+   */
+  jours(debut: string, fin: string, filtre?: FiltreAccueil): Promise<string[]>;
 
   /** Scrutins d'un dossier, ou d'une case de son parcours. Tables : canon.scrutin, lecture.parcours_acte. */
   duDossier(dossier: string, cle?: CleCase): Promise<ScrutinResume[]>;
@@ -458,6 +524,17 @@ export interface PersonnesRepository {
 
   /** Questions posées, de la plus récente à la plus ancienne. Tables : canon.question (auteur_id). */
   questions(id: string, pagination: Pagination): Promise<Page<QuestionResume>>;
+
+  /**
+   * Fiche d'une question : textes de la question et de la réponse tels que publiés (balises
+   * retirées), ministère interrogé et attributaire publiés (jamais une personne), attributions au
+   * JO, clôture publiée, auteur et le groupe publié sur la question. Statut : réponse publiée (texte
+   * ou date) → repondue ; clôture publiée sans réponse → close ; sinon en_attente. null si inconnue
+   * ou retirée. Le jour de référence est ajouté par le handler.
+   * Tables : canon.question (texte_question, texte_reponse, cloture_libelle, publication_jo),
+   * canon.personne, canon.organisation (groupe_auteur_id), canon.correspondance.
+   */
+  question(id: string): Promise<Omit<FicheQuestion, 'jour'> | null>;
 
   /**
    * Ses actes sur un dossier (« Ce qu'elle a fait sur ce dossier ») : rapporteure, amendements

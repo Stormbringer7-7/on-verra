@@ -9,7 +9,7 @@ import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import type { Indicateur, Provenance } from '@contrat/domain/model';
-import { PgPersonnes, debutDouzeMois } from '../../src/infra/pg/personnes';
+import { PgPersonnes, debutDouzeMois, texteBrut } from '../../src/infra/pg/personnes';
 import type { SqlDatabase, SqlParams } from '../../src/ports';
 
 const URL_LECTURE = process.env.DATABASE_URL_LECTURE;
@@ -283,6 +283,52 @@ describe.skipIf(!URL_LECTURE)('PgPersonnes (base réelle, lecture seule)', () =>
     expect(dates).toEqual([...dates].sort().reverse());
   });
 
+  it('question : une de chaque type, textes sans balises, ministère tel que publié, statut lu dans la base', async () => {
+    const lignes = await db.all<{ id: string; type: string; reponse: boolean; cloture: boolean; auteur: string | null }>(
+      `SELECT DISTINCT ON (q.type, q.date_reponse IS NULL) q.entite_id::text AS id, q.type,
+              (q.date_reponse IS NOT NULL OR q.texte_reponse IS NOT NULL) AS reponse,
+              (q.cloture_libelle IS NOT NULL OR q.cloture IS NOT NULL) AS cloture, q.auteur_id::text AS auteur
+       FROM canon.question q
+       WHERE q.type IN ('QG', 'QE', 'QOSD')
+         AND EXISTS (SELECT 1 FROM canon.entite e WHERE e.entite_id = q.entite_id AND e.retiree_de_la_source_le IS NULL AND e.fusionnee_dans IS NULL)
+       ORDER BY q.type, q.date_reponse IS NULL, q.date DESC NULLS LAST`,
+    );
+    // canon.question vide avant le chargement des questions AN : rien à vérifier.
+    for (const l of lignes) {
+      const f = (await depot.question(l.id))!;
+      expect(f, l.id).not.toBeNull();
+      expect(f.type).toBe(l.type);
+      expect(f.statut).toBe(l.reponse ? 'repondue' : l.cloture ? 'close' : 'en_attente');
+      expect(f.provenance).toMatchObject({ systeme: 'AN', type: 'question' });
+      expect(f.provenance.idNatif).toMatch(/^QANR5L\d+Q/);
+      for (const t of [f.texteQuestion, f.texteReponse]) if (t) expect(t).not.toMatch(/<\/?[a-z][^>]*>/i);
+      if (l.auteur) expect(f.auteur?.id).toBe(l.auteur);
+      if (f.auteur?.groupe) expect(f.auteur.groupe.couleur).toBeTruthy();
+      for (const a of f.attributions) if (a.date) expect(a.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  }, LENT);
+
+  it('QG 1821 (08/10/2026) : les 10 autres QG du même jour, par numéro ; QE et QOSD : null', async () => {
+    const id = (await entite('AN', 'question', 'QANR5L17QG1821'))!;
+    const debut = Date.now();
+    const f = (await depot.question(id))!;
+    expect(Date.now() - debut).toBeLessThan(1_000);
+    expect(f).toMatchObject({ type: 'QG', numero: '1821', date: '2026-10-08' });
+    expect(f.memeSeance!.map((q) => q.numero)).toEqual(['1818', '1819', '1820', '1822', '1823', '1824', '1825', '1826', '1827', '1828']);
+    expect(f.memeSeance![0]).toMatchObject({
+      type: 'QG',
+      date: '2026-10-08',
+      titre: 'Mobilisation lycéenne',
+      auteur: { nom: 'Virginie Duby-Muller', fonction: null },
+      provenance: { systeme: 'AN', type: 'question', idNatif: 'QANR5L17QG1818' },
+    });
+    expect(f.memeSeance!.every((q) => q.date === f.date && q.id !== f.id)).toBe(true);
+    const autres = await db.all<{ id: string }>(
+      `SELECT DISTINCT ON (q.type) q.entite_id::text AS id FROM canon.question q WHERE q.type IN ('QE', 'QOSD') ORDER BY q.type, q.date DESC`,
+    );
+    for (const a of autres) expect((await depot.question(a.id))!.memeSeance).toBeNull();
+  });
+
   it('actes de Julien Dive sur DLR5L17N54085 : rapporteur, amendements, vote sur l’ensemble', async () => {
     const id = (await db.first<{ id: string }>(
       `SELECT p.entite_id::text AS id FROM canon.personne p WHERE p.nom = 'Dive' AND p.prenom = 'Julien'
@@ -331,6 +377,16 @@ describe.skipIf(!URL_LECTURE)('PgPersonnes (base réelle, lecture seule)', () =>
     expect(await depot.roles('nimporte quoi')).toEqual([]);
     expect(await depot.choix(inconnu)).toEqual({ indicateurs: [], note: null, themes: [] });
     expect((await depot.questions(inconnu, { page: 1, taille: 20 })).elements).toEqual([]);
+    expect(await depot.question(inconnu)).toBeNull();
+    expect(await depot.question('QANR5L17QE1')).toBeNull();
     expect(await depot.actesSurLeDossier(inconnu, inconnu)).toEqual([]);
+  });
+});
+
+describe('texteBrut : textes de questions publiés en HTML', () => {
+  it('balises retirées, paragraphes gardés, entités décodées, mots inchangés', () => {
+    expect(texteBrut('<p>M. le ministre,&nbsp;l&#8217;eau <b>potable</b>…</p><p>Merci.</p>')).toBe('M. le ministre, l’eau potable…\nMerci.');
+    expect(texteBrut('Texte simple')).toBe('Texte simple');
+    expect(texteBrut('a<br/>b &amp; c &inconnu;')).toBe('a\nb & c &inconnu;');
   });
 });

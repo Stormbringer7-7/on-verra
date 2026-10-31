@@ -9,6 +9,9 @@ import { REMPLIR } from './syntheses';
 /** Interventions de la personne avant le vote, au plus. */
 export const LIMITE_AVANT_LE_VOTE = 5;
 
+/** Extraits des interventions reliées au scrutin (amendement voté ou séance sur le texte), au plus. */
+export const LIMITE_INTERVENTIONS_SCRUTIN = 5;
+
 /**
  * La personne dans le contexte du vote : son nom, ses fonctions en cours telles que publiées et
  * son groupe le jour du vote (sinon son groupe actuel).
@@ -33,8 +36,13 @@ export function lecturesScrutins({ depots, synthetiseur }: LecturesDeps): Pick<H
       texte(id, 'Identifiant du scrutin');
       const fiche = trouve(await scrutins.fiche(id), 'Scrutin');
       const dossier = fiche.scrutin.dossier?.id;
-      const barre = dossier ? await barreDe(depots, dossier, fiche.scrutin.etape?.cle ?? null) : null;
-      return REMPLIR.ConsulterScrutin(r, { ...fiche, barre });
+      // Interventions par lien structurel seulement : l'amendement voté, sinon la séance de l'étape.
+      const amendement = fiche.objet.type === 'amendement' ? fiche.objet.amendement.id : null;
+      const [barre, interventions] = await Promise.all([
+        dossier ? barreDe(depots, dossier, fiche.scrutin.etape?.cle ?? null) : null,
+        discussions.duScrutin(id, amendement, LIMITE_INTERVENTIONS_SCRUTIN),
+      ]);
+      return REMPLIR.ConsulterScrutin(r, { ...fiche, barre, interventions });
     },
 
     ExpliquerVote: async ({ scrutin: idScrutin, personne: idPersonne }) => {

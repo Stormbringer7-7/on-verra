@@ -6,6 +6,7 @@ dans `compilation.py`, seul endroit qui les assemble.
 
 import uuid
 from contextlib import AbstractContextManager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Protocol
 
@@ -99,6 +100,14 @@ class Entrepot(Protocol):
 
     def cas_revue(self, type_: str | None = None, statut: str | None = None) -> list[dict]: ...
 
+    def cas(self, cle: str) -> dict | None: ...
+
+    def page_cas(self, type_: str | None, statut: str | None, limite: int, decalage: int = 0) -> list[dict]:
+        """Cas triés par priorité (`contexte.priorite`, 9 sans priorité) puis par clé."""
+
+    def compter_cas(self) -> list[tuple[str, str, int]]:
+        """(type, statut, nombre) pour tous les cas."""
+
     def decider(self, cle: str, decision: dict, par: str): ...
 
     def marquer_applique(self, cle: str): ...
@@ -106,6 +115,17 @@ class Entrepot(Protocol):
     def classer_caducs(self, prefixe: str, presents: set[str]) -> int:
         """Cas `A_REVOIR` dont la clé commence par `prefixe`, absents de `presents` : `CADUC`.
         Un cas caduc qui réapparaît repasse `A_REVOIR` ; un cas décidé n'est jamais touché."""
+
+    # Relecture des synthèses (banc de relecture) ----------------------------------------------
+    def juger_synthese(self, jugement: dict):
+        """Enregistre ou remplace le jugement d'une synthèse : {synthese_id, empreinte, lot, verdict
+        (fidele|infidele), commentaire, juge_par}."""
+
+    def jugements_syntheses(self) -> list[dict]: ...
+
+    def consommer_nonce(self, cle: str, nonce: str, expire_le: datetime) -> bool:
+        """Anti-rejeu des requêtes signées : True la première fois, False si ce nonce de cette clé a
+        déjà servi. Les nonces expirés sont oubliés."""
 
     def controles(self) -> list[dict]:
         """Invariants « données 100 % fiables » : [{nom, bloquant, explication, nombre, exemples}]."""

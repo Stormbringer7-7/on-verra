@@ -46,6 +46,35 @@ def cmd_controles(args):
     raise SystemExit(0 if ok else 1)
 
 
+CLES_REVUE = RACINE / "data" / "revue"             # cles.json et admins/*.asc : publics, jamais une clé privée
+CLES_PERSONNELLES = Path.home() / ".config" / "big-brother" / "revue"
+
+
+def admins_gpg() -> set[str]:
+    return {e.strip().upper() for e in os.environ.get("REVUE_ADMINS_GPG", "").split(",") if e.strip()}
+
+
+def cmd_cles(args):
+    import base64
+    from .banc import signature as sig
+    if args.action == "creer":
+        fichier = args.fichier or CLES_PERSONNELLES / f"{args.nom}.pem"
+        publique = sig.creer_paire(fichier)
+        print(f"Clé privée : {fichier} (lisible par vous seul, ne la copiez jamais sur le serveur)\n"
+              f"Clé publique : {sig.b64(publique)}\nEmpreinte : {sig.empreinte(publique)}\n"
+              f"À inscrire par un admin : python -m src revue cles inscrire --nom {args.nom} --role <role> "
+              f"--publique {sig.b64(publique)} --gpg <empreinte GPG de l'admin>")
+    elif args.action == "inscrire":
+        publique = base64.b64decode(args.publique, validate=True)
+        sig.inscrire(args.fichier, args.nom, args.role, publique, args.gpg)
+        print(f"Inscrite dans {args.fichier} : {args.nom} ({args.role}), empreinte {sig.empreinte(publique)}")
+    else:
+        cles = sig.charger_cles(args.fichier, sorted((args.fichier.parent / "admins").glob("*.asc")), admins_gpg())
+        for c in cles.values():
+            print(f"{c.nom:<20} {c.role:<10} {c.empreinte}  signée par {c.signee_par}")
+        print(f"{len(cles)} clé(s) valide(s) dans {args.fichier}")
+
+
 def cmd_revue(args):
     from . import revue
     from .identites import RegistreIdentites
@@ -57,6 +86,10 @@ def cmd_revue(args):
             print(f"{cas['cle']}  [{cas['statut']}]\n  {cas['constat']}")
             for i, c in enumerate(cas["candidats"]):
                 print(f"    [{i}] {c['libelle'] or c['identite']}  {c['indices']}")
+    elif args.action == "servir":
+        from .banc import Banc, charger_lots, servir
+        servir(Banc(entrepot, RegistreIdentites(entrepot), charger_lots(args.syntheses)), args.hote, args.port,
+               tuple(args.hote_public))
     elif args.action == "fusionner":
         from .domaine import IdentiteNative
         b, a = (IdentiteNative(*x.split(":", 2)) for x in (args.absorbee, args.absorbante))
@@ -107,7 +140,7 @@ def main():
     c = sp.add_parser("controles", help="vérifie que la base canonique ne contient que des données 100 %% fiables")
     c.set_defaults(f=cmd_controles)
 
-    c = sp.add_parser("revue", help="revue humaine des rapprochements (DATABASE_URL) : rapport, lister, decider, fusionner")
+    c = sp.add_parser("revue", help="revue humaine (DATABASE_URL) : rapport, lister, decider, fusionner, servir")
     rs = c.add_subparsers(dest="action", required=True)
     r = rs.add_parser("rapport", help="écrit docs/revue/rapport.md et un CSV complet par type de cas")
     r.add_argument("--dossier", type=Path, default=RACINE / "docs" / "revue")
@@ -119,6 +152,12 @@ def main():
     r.add_argument("--choix", required=True, help="indice du candidat, ou « aucun »")
     r.add_argument("--par", required=True, help="nom de la personne qui décide")
     r.add_argument("--motif")
+    r = rs.add_parser("servir", help="banc de revue (app interne) : rapprochements et synthèses, http://127.0.0.1:8084")
+    r.add_argument("--hote", default="127.0.0.1", help="adresse d'écoute (0.0.0.0 dans le conteneur seulement)")
+    r.add_argument("--port", type=int, default=8084)
+    r.add_argument("--hote-public", action="append", default=[], help="en-tête Host accepté en plus de 127.0.0.1")
+    r.add_argument("--syntheses", type=Path, default=RACINE / "data" / "relecture",
+                   help="dossier des lots de synthèses à juger (*.json)")
     r = rs.add_parser("fusionner", help="deux entités sont le même objet : fusionne la première dans la seconde")
     r.add_argument("absorbee", help="identité native de l'entité absorbée, ex. RNE:personne:<clé>")
     r.add_argument("absorbante", help="identité native de l'entité gardée, ex. AN:acteur:PA720614")
@@ -126,6 +165,21 @@ def main():
     r.add_argument("--par", required=True, help="nom de la personne qui décide")
     r.add_argument("--motif", required=True, help="preuve vérifiable que c'est le même objet")
     c.set_defaults(f=cmd_revue)
+    r = rs.add_parser("cles", help="clés Ed25519 du banc de revue : creer (sur votre poste), inscrire (admin, GPG), verifier")
+    ks = r.add_subparsers(dest="action", required=True)
+    k = ks.add_parser("creer", help="crée votre paire ; la clé privée reste sur ce poste")
+    k.add_argument("--nom", required=True)
+    k.add_argument("--fichier", type=Path, help=f"clé privée (défaut : {CLES_PERSONNELLES}/<nom>.pem)")
+    k = ks.add_parser("inscrire", help="admin : signe une clé publique avec sa clé GPG et l'ajoute au fichier du service")
+    k.add_argument("--nom", required=True)
+    k.add_argument("--role", required=True, choices=["admin", "relecteur", "poste"])
+    k.add_argument("--publique", required=True, help="clé publique (base64), donnée par « cles creer »")
+    k.add_argument("--gpg", required=True, help="empreinte de la clé GPG de l'admin qui signe")
+    k.add_argument("--fichier", type=Path, default=CLES_REVUE / "cles.json")
+    k = ks.add_parser("verifier", help="vérifie chaque clé du fichier (REVUE_ADMINS_GPG, admins/*.asc à côté)")
+    k.add_argument("--fichier", type=Path, default=CLES_REVUE / "cles.json")
+    for k in ks.choices.values():
+        k.set_defaults(f=cmd_cles)
 
     c = sp.add_parser("inventaire", help="télécharge un échantillon d'une source et relève sa structure")
     c.add_argument("source", help="an, senat, legifrance, constit, hatvp, rne ou tout")

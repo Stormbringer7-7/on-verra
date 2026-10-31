@@ -5,6 +5,7 @@
 // définitions : opendata/docs/indicateurs.md, « Parcours ».
 
 import type { DossierRef, Lieu, Provenance } from './commun';
+import type { NatureScrutin } from './scrutins';
 
 export type Procedure = 'acceleree' | 'normale';
 
@@ -43,6 +44,12 @@ export interface DeviationParcours {
   /** Conclusions publiées de ses actes (« Motion rejetée »), telles quelles. */
   conclusion: string | null;
   provenance: Provenance[];
+  /**
+   * Effet conditionnel défini par le modèle de parcours (`canon.parcours_deviation.effet_si`,
+   * opendata/parcours/*.toml : 49.3 → `termine` si une motion de censure est adoptée, motion de
+   * procédure → `remplace` si elle est adoptée) ; null : le modèle n'en définit pas ; absent : non fourni.
+   */
+  effetSi?: EffetDeviation | null;
 }
 
 /** Branche du droit commun prise par le dossier (« Adopté sans modification : fin de la navette »). */
@@ -59,6 +66,26 @@ export interface DossierLie {
   /** Étape du dossier parent où le lien a lieu, et son libellé (« Nouvelle lecture »). */
   etape: CleCase | null;
   etapeLibelle: string | null;
+  /**
+   * Scrutins publics du rattachement, du plus ancien au plus récent : ceux du dossier rattaché, et
+   * ceux des actes publiés sous l'acte qui fait le lien (motions de censure déposées sur un 49.3,
+   * hiérarchie `canon.etape.parent_id` depuis `lecture.dossier_lien.acte_id`). Absent : non fourni.
+   */
+  scrutins?: VoteRattache[];
+}
+
+/** Un scrutin public d'un rattachement, en bref : son issue publiée et ses voix. */
+export interface VoteRattache {
+  id: string;
+  numero: string;
+  date: string;
+  /** `motion_censure`, `motion`… tel que classé par la source ; `autre` sinon. */
+  nature: NatureScrutin;
+  /** Sort publié (« rejeté »), tel quel. */
+  sort: string | null;
+  adopte: boolean | null;
+  pour: number;
+  contre: number;
 }
 
 /**
@@ -135,4 +162,34 @@ export interface CaseCompacte {
   attendue: boolean;
   /** Une déviation a lieu à cette étape (`deviations[].etape`). */
   deviation: boolean;
+  /**
+   * Lieu de la case, comme `CaseParcours.lieu` (`lecture.parcours_dossier.chambre`) : AN, SENAT,
+   * CMP, CC, PR, JO ; null pour une case des deux chambres ou sans lieu publié. Absent : service
+   * antérieur (l'UI lit alors le libellé).
+   */
+  lieu?: Lieu | null;
+  /**
+   * Début de la case (`lecture.parcours_dossier.debut`), premier acte publié et daté ; null sans
+   * acte daté. Absent : service antérieur.
+   */
+  debut?: string | null;
+}
+
+/**
+ * Déviation, en version compacte pour les cartes des listes (`lecture.parcours_deviation`) : ce qui
+ * s'est produit et à quelle étape, sans ses actes.
+ */
+export interface DeviationCompacte {
+  /** `procedure_acceleree`, `engagement_responsabilite`, `motion_procedure`, `retrait`… */
+  cle: string;
+  /** Libellé du modèle (« Engagement de la responsabilité du Gouvernement (49.3) »). */
+  libelle: string;
+  /** Étape du parcours où elle a lieu. */
+  etape: CleCase;
+  /**
+   * Issue que le modèle attache à la déviation quand elle arrête le parcours (`retire` pour un
+   * retrait, `rejete` pour un 49.3 si la motion de censure est adoptée), null sinon. C'est une
+   * règle du modèle, pas un fait publié : l'issue du dossier est `DossierResume.etat`.
+   */
+  issue: string | null;
 }

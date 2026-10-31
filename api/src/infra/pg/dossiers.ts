@@ -30,7 +30,9 @@ import type {
   ChangementDepuisLeDepot,
   ChangementEtape,
   Chiffre,
+  ComptesParSort,
   CleCase,
+  DeviationCompacte,
   DeviationParcours,
   DocumentOfficiel,
   DossierLie,
@@ -45,6 +47,8 @@ import type {
   Facette,
   FamilleParcours,
   FicheAmendement,
+  LieuDeDiscussion,
+  VersionComparee,
   FicheArticle,
   FicheEtape,
   FiltreDossiers,
@@ -55,12 +59,14 @@ import type {
   Lieu,
   ListeDossiers,
   NatureEtape,
+  NatureScrutin,
   NatureTexte,
   Origine,
   OrigineModification,
   OrganisationRef,
   Page,
   Parcours,
+  PersonneEtape,
   PersonneRef,
   Provenance,
   SegmentDiff,
@@ -71,9 +77,13 @@ import type {
   TexteEnAttente,
   TypeDocument,
   VersionArticle,
+  VoteRattache,
+  ReunionsDuJour,
+  RolePersonneEtape,
 } from '@contrat/domain/model';
-import type { ActeSuivi, DossiersRepository, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
+import type { ActeSuivi, DossiersRepository, FiltreAccueil, Pagination, PositionTexte, SqlDatabase, SqlParams } from '../../ports';
 import { groupe as groupeRef, titrePublie } from './personnes';
+import { sqlCaseDeLEtape, sqlProvenance } from './scrutins';
 
 // ---------- Vocabulaire ----------
 
@@ -87,17 +97,43 @@ const estUuid = (id: string | null | undefined): id is string => !!id && UUID.te
 const vivant = (colonne: string) =>
   `NOT EXISTS (SELECT 1 FROM canon.entite x_ WHERE x_.entite_id = ${colonne} AND (x_.retiree_de_la_source_le IS NOT NULL OR x_.fusionnee_dans IS NOT NULL))`;
 
+/**
+ * Version d'article comparée (JSON { etape, date }) : la case du parcours de l'étape de son texte
+ * (projection du parcours chargée) et la date du texte ; null si la version n'existe pas (texte
+ * déposé, sans version précédente). Étape : `version_texte.etape_id`, sinon l'acte qui cite le
+ * document du texte (lien `texte`), seulement s'il désigne une seule case ; jamais par la date.
+ */
+const versionComparee = (version: string, parcours: boolean) =>
+  `(SELECT json_build_object('etape', ${
+    parcours
+      ? `CASE WHEN vt.etape_id IS NOT NULL THEN ${sqlCaseDeLEtape('vt.dossier_id', 'vt.etape_id')}
+              ELSE (SELECT CASE WHEN count(DISTINCT pa.cle) = 1 THEN json_build_object('cle', min(pa.cle), 'libelle', min(pd.libelle)) END
+                    FROM canon.lien l
+                    JOIN lecture.parcours_acte pa ON pa.etape_id = l.de_id AND pa.dossier_id = vt.dossier_id AND pa.cle IS NOT NULL
+                    JOIN lecture.parcours_dossier pd ON pd.dossier_id = pa.dossier_id AND pd.cle = pa.cle
+                    WHERE l.vers_id = vt.document_id AND l.nature = 'texte') END`
+      : 'NULL'
+  }, 'date', vt.date::text)
+    FROM canon.version_article va JOIN canon.version_texte vt ON vt.entite_id = va.version_texte_id
+    WHERE va.entite_id = ${version})`;
+
 const SYSTEMES: readonly Systeme[] = ['AN', 'SENAT', 'LEGIFRANCE', 'CONSTIT', 'HATVP', 'RNE', 'INSEE', 'CIVICTRACE'];
 const ETATS_DOSSIER: readonly EtatDossier[] = [
   'en_cours', 'adopte', 'promulgue', 'rejete', 'retire', 'caduc', 'fusionne', 'irrecevable', 'rapport_publie',
 ];
 const SORTS: readonly SortAmendement[] = ['adopte', 'rejete', 'retire', 'tombe', 'non_soutenu', 'irrecevable', 'en_attente'];
+/** Colonnes `s_<sort>` : nombre d'amendements `m` de chaque sort publié. */
+const COMPTES_SORTS = SORTS.map((s) => `count(*) FILTER (WHERE m.sort = '${s}')::int AS s_${s}`).join(', ');
+type LigneSorts = Record<`s_${SortAmendement}`, number>;
+const parSort = (l: LigneSorts): ComptesParSort =>
+  Object.fromEntries(SORTS.map((s) => [s, l[`s_${s}`] ?? 0])) as ComptesParSort;
 /** Clé d'étape d'un modèle de parcours (`canon.parcours_etape.cle`) : mot en minuscules et « _ ». */
 const cleEtape = (valeur: string | null | undefined): CleCase | null =>
   valeur != null && /^[a-z0-9_]+$/.test(valeur) ? valeur : null;
 const FAMILLES: readonly FamilleParcours[] = ['legislatif', 'resolution', 'controle', 'gouvernement', 'autre'];
 const NATURES: readonly NatureEtape[] = ['obligatoire', 'conditionnelle', 'facultative'];
 const EFFETS: readonly EffetDeviation[] = ['rejoint', 'termine', 'remplace', 'suspend'];
+const NATURES_SCRUTIN: readonly NatureScrutin[] = ['ensemble', 'article_unique', 'article', 'amendement', 'motion', 'motion_censure', 'autre'];
 const ETATS_CASE: readonly EtatCase[] = ['faite', 'en_cours', 'a_venir', 'sans_objet', 'inconnu'];
 const STATUTS_VERSION: readonly StatutVersionArticle[] = ['present', 'ajoute', 'supprime', 'conforme', 'non_modifie'];
 const LIEUX: readonly Lieu[] = ['AN', 'SENAT', 'CMP', 'CC', 'PR', 'JO', 'GOUVERNEMENT'];
@@ -279,6 +315,24 @@ function joursEntre(debut: string, fin: string): number {
   return Math.round((Date.parse(`${fin}T00:00:00Z`) - Date.parse(`${debut}T00:00:00Z`)) / 86_400_000);
 }
 
+/** Filtre de l'Accueil qui ne garde rien : une liste de dossiers suivis vide, ou aucune chambre. */
+const filtreVide = (f: FiltreAccueil | undefined) => f?.dossiers?.length === 0 || f?.chambres?.length === 0;
+
+/** Conditions SQL du filtre de l'Accueil sur les actes `a` de `lecture.parcours_acte`. */
+function filtreActes(f: FiltreAccueil | undefined): { sql: string; params: SqlParams } {
+  const sql: string[] = [];
+  const params: SqlParams = {};
+  if (f?.chambres) {
+    sql.push('AND a.chambre_seance = ANY($chambres::text[])');
+    params.chambres = [...f.chambres];
+  }
+  if (f?.dossiers) {
+    sql.push('AND a.dossier_id = ANY($dossiers::uuid[])');
+    params.dossiers = f.dossiers.filter(estUuid);
+  }
+  return { sql: sql.join(' '), params };
+}
+
 function compacte(c: LigneCase): CaseCompacte {
   return {
     cle: c.cle,
@@ -287,6 +341,8 @@ function compacte(c: LigneCase): CaseCompacte {
     courante: c.courante,
     attendue: c.attendue,
     deviation: c.deviation,
+    lieu: lieuDe(c.chambre),
+    debut: c.debut,
   };
 }
 
@@ -680,7 +736,7 @@ export class PgDossiers implements DossiersRepository {
   private async resumes(ids: string[]): Promise<DossierResume[]> {
     if (ids.length === 0) return [];
     const projection = await this.projection();
-    const [lignes, cases, syntheses] = await Promise.all([
+    const [lignes, cases, syntheses, deviations] = await Promise.all([
       this.db.all<
         LigneDossier & {
           etat_parcours: string | null;
@@ -724,6 +780,7 @@ export class PgDossiers implements DossiersRepository {
       ),
       this.cases(ids),
       this.syntheses(ids),
+      this.deviationsCompactes(ids),
     ]);
     const parId = new Map(lignes.map((l) => [l.id, l]));
     return ids.flatMap((id) => {
@@ -758,9 +815,29 @@ export class PgDossiers implements DossiersRepository {
                   etapeLibelle: d.parent_etape_libelle,
                 }
               : null,
+          deviations: deviations.get(id) ?? [],
         },
       ];
     });
+  }
+
+  /** Déviations de chaque dossier, dans l'ordre du parcours (`lecture.parcours_deviation`). */
+  private async deviationsCompactes(ids: string[]): Promise<Map<string, DeviationCompacte[]>> {
+    const resultat = new Map<string, DeviationCompacte[]>();
+    if (ids.length === 0 || !(await this.projection())) return resultat;
+    const lignes = await this.db.all<{ dossier_id: string; cle: string; libelle: string | null; etape_cle: string | null; issue: string | null }>(
+      `SELECT v.dossier_id, v.cle, v.libelle, v.etape_cle, v.issue
+       FROM lecture.parcours_deviation v WHERE v.dossier_id = ANY($ids::uuid[])
+       ORDER BY v.dossier_id, v.etape_rang, v.ordre, v.debut NULLS LAST, v.cle`,
+      { ids },
+    );
+    for (const l of lignes) {
+      const etape = cleEtape(l.etape_cle);
+      if (!etape) continue;
+      const d: DeviationCompacte = { cle: l.cle, libelle: l.libelle ?? l.cle, etape, issue: l.issue };
+      resultat.set(l.dossier_id, [...(resultat.get(l.dossier_id) ?? []), d]);
+    }
+    return resultat;
   }
 
   // ----- Listes -----
@@ -779,6 +856,65 @@ export class PgDossiers implements DossiersRepository {
       { limite: Math.max(0, Math.floor(limite)) },
     );
     return this.resumes(lignes.map((l) => l.id));
+  }
+
+  async duJour(jour: string, limite: number, filtre?: FiltreAccueil): Promise<{ decides: DossierResume[]; avancent: DossierResume[] }> {
+    if (!(await this.projection()) || filtreVide(filtre)) return { decides: [], avancent: [] };
+    const f = filtreActes(filtre);
+    const lignes = await this.db.all<{ id: string; decide: boolean }>(
+      `SELECT a.dossier_id AS id, bool_or(a.conclusif AND a.accompli) AS decide
+       FROM lecture.parcours_acte a JOIN canon.dossier d ON d.entite_id = a.dossier_id
+       WHERE a.debut = $jour::date AND a.categorie IN ('case', 'deviation') AND (a.accompli OR a.programme) ${f.sql}
+         AND d.legislature = '17' AND ${vivant('d.entite_id')}
+         AND NOT EXISTS (SELECT 1 FROM lecture.dossier_lien l WHERE l.enfant_id = a.dossier_id)
+       GROUP BY a.dossier_id
+       ORDER BY count(*) DESC, a.dossier_id`,
+      { jour, ...f.params },
+    );
+    const borne = Math.max(0, Math.floor(limite));
+    const [decides, avancent] = await Promise.all([
+      this.resumes(lignes.filter((l) => l.decide).slice(0, borne).map((l) => l.id)),
+      this.resumes(lignes.filter((l) => !l.decide).slice(0, borne).map((l) => l.id)),
+    ]);
+    return { decides, avancent };
+  }
+
+  async joursActifs(debut: string, fin: string, filtre?: FiltreAccueil): Promise<string[]> {
+    if (!(await this.projection()) || filtreVide(filtre)) return [];
+    const f = filtreActes(filtre);
+    const lignes = await this.db.all<{ jour: string }>(
+      `SELECT DISTINCT a.debut::text AS jour FROM lecture.parcours_acte a
+       WHERE a.debut BETWEEN $debut::date AND $fin::date AND a.categorie IN ('case', 'deviation') AND (a.accompli OR a.programme) ${f.sql}
+       ORDER BY 1`,
+      { debut, fin, ...f.params },
+    );
+    return lignes.map((l) => l.jour);
+  }
+
+  async reunionsDuJour(jour: string, filtre?: FiltreAccueil): Promise<ReunionsDuJour[]> {
+    const chambres = (['AN', 'SENAT'] as const).filter((c) => !filtre?.chambres || filtre.chambres.includes(c));
+    if (chambres.length === 0) return [];
+    // Jour de Paris : bornes en heure locale, l'index sur `debut` sert.
+    const lignes = await this.db.all<{ chambre: string; type: string; publie: boolean; nombre: number }>(
+      `SELECT c.chambre, t.type,
+              EXISTS (SELECT 1 FROM canon.reunion x WHERE x.chambre = c.chambre AND x.type = t.type) AS publie,
+              (SELECT count(*)::int FROM canon.reunion r
+               WHERE r.chambre = c.chambre AND r.type = t.type
+                 AND r.debut >= $jour::date::timestamp AT TIME ZONE 'Europe/Paris'
+                 AND r.debut < ($jour::date + 1)::timestamp AT TIME ZONE 'Europe/Paris'
+                 AND ${vivant('r.entite_id')}
+                 AND ($tous OR EXISTS (SELECT 1 FROM canon.point_odj o WHERE o.reunion_id = r.entite_id AND o.dossier_id = ANY($dossiers::uuid[])))
+              ) AS nombre
+       FROM unnest($chambres::text[]) AS c(chambre), (VALUES ('commission'), ('seance')) AS t(type)`,
+      { jour, chambres: [...chambres], tous: filtre?.dossiers == null, dossiers: (filtre?.dossiers ?? []).filter(estUuid) },
+    );
+    return chambres.map((chambre) => {
+      const de = (type: string) => {
+        const l = lignes.find((x) => x.chambre === chambre && x.type === type);
+        return l?.publie ? l.nombre : null;
+      };
+      return { chambre, commissions: de('commission'), seances: de('seance') };
+    });
   }
 
   async lister(filtre: FiltreDossiers, pagination: Pagination): Promise<Pick<ListeDossiers, 'facettes' | 'dossiers'>> {
@@ -1042,10 +1178,14 @@ export class PgDossiers implements DossiersRepository {
         { cle: lignes[0].modele, version: lignes[0].version },
       ),
       this.db.all<{ cle: string; libelle: string; fondement: string; etape_cle: string; effet: string; debut: string | null;
-                    conclusion: string | null; provenance: string[] }>(
-        `SELECT cle, libelle, fondement, etape_cle, effet, debut::text AS debut, conclusion, provenance::text[] AS provenance
-         FROM lecture.parcours_deviation WHERE dossier_id = $id ORDER BY ordre`,
-        { id },
+                    conclusion: string | null; provenance: string[]; effet_si: string | null }>(
+        // effet conditionnel : celui du modèle du dossier (canon.parcours_deviation.effet_si)
+        `SELECT v.cle, v.libelle, v.fondement, v.etape_cle, v.effet, v.debut::text AS debut, v.conclusion,
+                v.provenance::text[] AS provenance, m.effet_si
+         FROM lecture.parcours_deviation v
+         LEFT JOIN canon.parcours_deviation m ON m.modele = $modele AND m.version = $version AND m.cle = v.cle
+         WHERE v.dossier_id = $id ORDER BY v.ordre`,
+        { id, modele: lignes[0].modele, version: lignes[0].version },
       ),
       this.db.all<{ de: string; vers: string; libelle: string }>(
         `SELECT b.de, b.vers, b.libelle FROM lecture.parcours_branche b
@@ -1060,14 +1200,17 @@ export class PgDossiers implements DossiersRepository {
         titre_court: string | null;
         etape: string | null;
         etape_libelle: string | null;
+        enfant: string;
+        acte: string | null;
       }>(
         // libellé de l'étape : celle du dossier parent, où le lien a lieu
-        `SELECT 'parent' AS sens, d.entite_id AS id, d.titre, d.titre_court, l.etape_cle AS etape, p.libelle AS etape_libelle
+        `SELECT 'parent' AS sens, d.entite_id AS id, d.titre, d.titre_court, l.etape_cle AS etape, p.libelle AS etape_libelle,
+                l.enfant_id AS enfant, l.acte_id AS acte
          FROM lecture.dossier_lien l JOIN canon.dossier d ON d.entite_id = l.parent_id
          LEFT JOIN lecture.parcours_dossier p ON p.dossier_id = l.parent_id AND p.cle = l.etape_cle
          WHERE l.enfant_id = $id AND ${vivant('d.entite_id')}
          UNION ALL
-         SELECT 'enfant', d.entite_id, d.titre, d.titre_court, l.etape_cle, p.libelle
+         SELECT 'enfant', d.entite_id, d.titre, d.titre_court, l.etape_cle, p.libelle, l.enfant_id, l.acte_id
          FROM lecture.dossier_lien l JOIN canon.dossier d ON d.entite_id = l.enfant_id
          LEFT JOIN lecture.parcours_dossier p ON p.dossier_id = l.parent_id AND p.cle = l.etape_cle
          WHERE l.parent_id = $id AND ${vivant('d.entite_id')}
@@ -1076,7 +1219,10 @@ export class PgDossiers implements DossiersRepository {
       ),
     ]);
     if (!modele) return null;
-    const provenances = await this.provenances([...lignes.flatMap((c) => c.provenance ?? []), ...deviations.flatMap((d) => d.provenance)]);
+    const [provenances, votes] = await Promise.all([
+      this.provenances([...lignes.flatMap((c) => c.provenance ?? []), ...deviations.flatMap((d) => d.provenance)]),
+      this.votesRattaches(liens.map((l) => ({ enfant: l.enfant, acte: l.acte }))),
+    ]);
     const sources = (ids: string[] | null) =>
       (ids ?? []).flatMap((p) => {
         const v = provenances.get(p);
@@ -1103,6 +1249,7 @@ export class PgDossiers implements DossiersRepository {
       dossier: { id: l.id, titre: titreAffiche(l.titre, l.titre_court) },
       etape: cleEtape(l.etape),
       etapeLibelle: l.etape_libelle,
+      scrutins: votes.get(`${l.enfant}|${l.acte ?? ''}`) ?? [],
     });
     const parent = liens.find((l) => l.sens === 'parent');
     return {
@@ -1126,6 +1273,7 @@ export class PgDossiers implements DossiersRepository {
           debut: d.debut,
           conclusion: d.conclusion,
           provenance: sources(d.provenance),
+          effetSi: dans<EffetDeviation>(EFFETS, d.effet_si),
         }),
       ),
       branches: branches.map((b) => ({ de: b.de, vers: b.vers, libelle: b.libelle })),
@@ -1134,6 +1282,51 @@ export class PgDossiers implements DossiersRepository {
       dateReference: lignes[0].date_reference,
       prochaineEcheance: this.echeance(syntheses.get(id)),
     };
+  }
+
+  /**
+   * Scrutins publics de chaque rattachement (clé `${enfant}|${acte}`) : ceux du dossier rattaché, et
+   * ceux des étapes publiées sous l'acte qui fait le lien (`canon.etape.parent_id`, même dossier :
+   * déclaration du Gouvernement → motion de censure → décision sur la motion), du plus ancien au plus récent.
+   */
+  private async votesRattaches(liens: { enfant: string; acte: string | null }[]): Promise<Map<string, VoteRattache[]>> {
+    const resultat = new Map<string, VoteRattache[]>();
+    const valides = liens.filter((l) => estUuid(l.enfant));
+    if (valides.length === 0) return resultat;
+    const lignes = await this.db.all<{ cle: string; id: string; numero: string; date: string; nature: string | null; sort: string | null;
+                                       pour: number | null; contre: number | null }>(
+      `WITH RECURSIVE liens AS (
+         SELECT u.enfant::uuid AS enfant, NULLIF(u.acte, '')::uuid AS acte, u.enfant || '|' || u.acte AS cle
+         FROM unnest($enfants::text[], $actes::text[]) AS u(enfant, acte)
+       ), sous AS (
+         SELECT l.cle, e.entite_id, e.dossier_id FROM liens l JOIN canon.etape e ON e.entite_id = l.acte
+         UNION
+         SELECT s.cle, e.entite_id, e.dossier_id FROM sous s JOIN canon.etape e ON e.dossier_id = s.dossier_id AND e.parent_id = s.entite_id
+       ), votes AS (
+         SELECT s.cle, x.entite_id FROM sous s JOIN canon.scrutin x ON x.etape_id = s.entite_id
+         UNION
+         SELECT l.cle, x.entite_id FROM liens l JOIN canon.scrutin x ON x.dossier_id = l.enfant
+       )
+       SELECT v.cle, x.entite_id AS id, x.numero, x.date::text AS date, x.nature, x.sort, x.pour, x.contre
+       FROM votes v JOIN canon.scrutin x ON x.entite_id = v.entite_id
+       WHERE ${vivant('x.entite_id')}
+       ORDER BY v.cle, x.date, x.numero`,
+      { enfants: valides.map((l) => l.enfant), actes: valides.map((l) => (estUuid(l.acte) ? l.acte : '')) },
+    );
+    for (const l of lignes) {
+      const vote: VoteRattache = {
+        id: l.id,
+        numero: l.numero,
+        date: l.date,
+        nature: dans(NATURES_SCRUTIN, l.nature) ?? 'autre',
+        sort: l.sort,
+        adopte: l.sort == null ? null : /^adopt/i.test(l.sort) ? true : /^rejet/i.test(l.sort) ? false : null,
+        pour: l.pour ?? 0,
+        contre: l.contre ?? 0,
+      };
+      resultat.set(l.cle, [...(resultat.get(l.cle) ?? []), vote]);
+    }
+    return resultat;
   }
 
   async barre(id: string): Promise<{ dossier: DossierRef; cases: CaseCompacte[] } | null> {
@@ -1511,6 +1704,7 @@ export class PgDossiers implements DossiersRepository {
       division: string | null;
       sort: string | null;
       date_depot: string | null;
+      date_sort: string | null;
       auteur_id: string | null;
       auteur_type: string | null;
       auteur_nom: string | null;
@@ -1518,7 +1712,7 @@ export class PgDossiers implements DossiersRepository {
       cosignataires: number;
     }>(
       `SELECT m.entite_id AS id, m.numero, m.chambre, m.dossier_id, m.etape_id, m.article_suivi_id, m.division, m.sort,
-              m.date_depot::text AS date_depot, au.id AS auteur_id, au.type AS auteur_type, au.nom AS auteur_nom,
+              m.date_depot::text AS date_depot, (m.date_sort AT TIME ZONE 'Europe/Paris')::date::text AS date_sort, au.id AS auteur_id, au.type AS auteur_type, au.nom AS auteur_nom,
               au.type_organisation AS auteur_organisation,
               (SELECT count(*)::int FROM canon.lien c WHERE c.de_id = m.entite_id AND c.nature = 'cosignataire' AND ${vivant('c.vers_id')})
                 AS cosignataires
@@ -1561,6 +1755,8 @@ export class PgDossiers implements DossiersRepository {
         objet: null,
         auteur,
         cosignataires: l.cosignataires,
+        dateDepot: l.date_depot,
+        dateSort: l.date_sort,
       });
     }
     return resultat;
@@ -1570,14 +1766,14 @@ export class PgDossiers implements DossiersRepository {
     id: string,
     filtre: { sort?: SortAmendement },
     pagination: Pagination,
-  ): Promise<{ parEtape: StatAmendementsEtape[]; liste: Page<AmendementResume> }> {
+  ): Promise<{ parEtape: StatAmendementsEtape[]; parSort?: ComptesParSort; liste: Page<AmendementResume> }> {
     const vide = { parEtape: [], liste: page<AmendementResume>([], pagination, 0) };
     if (!(await this.dossierLigne(id))) return vide;
     const sort = filtre.sort ? dans(SORTS, filtre.sort) : null;
     if (filtre.sort && !sort) return vide;
     const where = `m.dossier_id = $id AND ${vivant('m.entite_id')} AND ($sort::text IS NULL OR m.sort = $sort)`;
     const params = { id, sort, taille: pagination.taille, decalage: (pagination.page - 1) * pagination.taille };
-    const [total, ids, parEtape] = await Promise.all([
+    const [total, ids, parEtape, dossier] = await Promise.all([
       this.db.first<{ n: number }>(`SELECT count(*)::int AS n FROM canon.amendement m WHERE ${where}`, params),
       this.db.all<{ id: string }>(
         `SELECT m.entite_id AS id FROM canon.amendement m WHERE ${where}
@@ -1587,8 +1783,8 @@ export class PgDossiers implements DossiersRepository {
       ),
       (async () =>
         (await this.projection())
-          ? this.db.all<{ cle: string; libelle: string; deposes: number; adoptes: number }>(
-              `SELECT p.cle, p.libelle, count(*)::int AS deposes, count(*) FILTER (WHERE m.sort = 'adopte')::int AS adoptes
+          ? this.db.all<{ cle: string; libelle: string; deposes: number; adoptes: number } & LigneSorts>(
+              `SELECT p.cle, p.libelle, count(*)::int AS deposes, count(*) FILTER (WHERE m.sort = 'adopte')::int AS adoptes, ${COMPTES_SORTS}
                FROM canon.amendement m
                JOIN lecture.parcours_acte a ON a.etape_id = m.etape_id AND a.categorie = 'case'
                JOIN lecture.parcours_dossier p ON p.dossier_id = a.dossier_id AND p.cle = a.cle
@@ -1597,13 +1793,15 @@ export class PgDossiers implements DossiersRepository {
               { id },
             )
           : [])(),
+      this.db.first<LigneSorts>(`SELECT ${COMPTES_SORTS} FROM canon.amendement m WHERE m.dossier_id = $id AND ${vivant('m.entite_id')}`, { id }),
     ]);
     const resumes = await this.resumesAmendements(ids.map((l) => l.id));
     return {
       parEtape: parEtape.flatMap((s) => {
         const cle = cleEtape(s.cle);
-        return cle ? [{ cle, libelle: s.libelle, deposes: s.deposes, adoptes: s.adoptes }] : [];
+        return cle ? [{ cle, libelle: s.libelle, deposes: s.deposes, adoptes: s.adoptes, parSort: parSort(s) }] : [];
       }),
+      ...(dossier ? { parSort: parSort(dossier) } : {}),
       liste: page(ids.flatMap((l) => resumes.get(l.id) ?? []), pagination, total?.n ?? 0),
     };
   }
@@ -1624,7 +1822,7 @@ export class PgDossiers implements DossiersRepository {
     ]);
     const resume = resumes.get(id);
     if (!resume || !ligne) return null;
-    const [cosignataires, avis, provenance, modification] = await Promise.all([
+    const [cosignataires, avis, provenance, modification, discussion] = await Promise.all([
       this.db.all<{ id: string }>(
         `SELECT l.vers_id AS id FROM canon.lien l JOIN canon.personne p ON p.entite_id = l.vers_id
          WHERE l.de_id = $id AND l.nature = 'cosignataire' AND ${vivant('l.vers_id')} ORDER BY l.ordre NULLS LAST, l.vers_id`,
@@ -1636,11 +1834,16 @@ export class PgDossiers implements DossiersRepository {
         { id },
       ),
       this.provenance(id),
-      // Effet sur l'article visé : seulement quand l'amendement est l'origine vérifiée d'une modification.
-      this.db.first<{ diff: LigneModification['diff'] }>(
-        `SELECT m.diff FROM canon.modification_article m WHERE m.amendement_id = $id AND m.statut = 'VERIFIED' AND m.diff IS NOT NULL LIMIT 1`,
-        { id },
+      // Effet sur l'article visé : seulement quand l'amendement est l'origine vérifiée d'une modification ;
+      // avec l'étape et la date des deux versions comparées (version précédente → version modifiée).
+      this.projection().then((parcours) =>
+        this.db.first<{ diff: LigneModification['diff']; avant: VersionComparee | null; apres: VersionComparee | null }>(
+          `SELECT m.diff, ${versionComparee('m.version_precedente_id', parcours)} AS avant, ${versionComparee('m.version_article_id', parcours)} AS apres
+           FROM canon.modification_article m WHERE m.amendement_id = $id AND m.statut = 'VERIFIED' AND m.diff IS NOT NULL LIMIT 1`,
+          { id },
+        ),
       ),
+      this.lieuxDeDiscussion(id),
     ]);
     const personnes = await this.personnes(cosignataires.map((c) => ({ id: c.id, jour: ligne.date_depot })));
     const refs = cosignataires.flatMap((c) => personnes.get(`${c.id}|${ligne.date_depot ?? ''}`) ?? []);
@@ -1656,14 +1859,50 @@ export class PgDossiers implements DossiersRepository {
       amendement: resume,
       dateDepot: ligne.date_depot,
       dateSort: ligne.date_sort,
-      dispositif: { texte: ligne.dispositif, diff: segmentsPublies(modification?.diff ?? null) },
+      dispositif: (() => {
+        const diff = segmentsPublies(modification?.diff ?? null);
+        return { texte: ligne.dispositif, diff, versions: diff && modification?.apres ? { avant: modification.avant, apres: modification.apres } : null };
+      })(),
       expose: ligne.expose,
       exposeEnClair: null,
       cosignataires: { total: resume.cosignataires, personnes: refs, groupes },
       avis: { publies: ligne.chambre === 'SENAT', liste: listeAvis },
       vote: resume.sort === 'adopte' || resume.sort === 'rejete' ? { type: 'main_levee' } : { type: 'sans_vote' },
+      discussion,
       provenance: prov,
     };
+  }
+
+  /**
+   * Où l'amendement a été discuté, par lien explicite seulement : en séance, la séance de discussion
+   * publiée (`amendement.seance_id`, AN), à défaut la 1re séance d'une intervention reliée à
+   * l'amendement (colonne ou lien) ; en commission, la 1re réunion de commission d'une intervention
+   * reliée. Jour à l'heure de Paris ; compte rendu : le document de la réunion, son adresse publiée.
+   */
+  private async lieuxDeDiscussion(id: string): Promise<NonNullable<FicheAmendement['discussion']>> {
+    const lignes = await this.db.all<{ type: 'seance' | 'commission'; jour: string | null; cr: string | null; url: string | null; provenance: Provenance | null }>(
+      `WITH reunions AS (
+         SELECT a.seance_id AS id, 0 AS rang FROM canon.amendement a WHERE a.entite_id = $id AND a.seance_id IS NOT NULL
+         UNION ALL
+         SELECT i.reunion_id, 1 FROM canon.intervention i
+         WHERE i.entite_id IN (SELECT entite_id FROM canon.intervention WHERE amendement_id = $id
+                               UNION SELECT de_id FROM canon.lien WHERE vers_id = $id AND nature = 'amendement')
+           AND ${vivant('i.entite_id')}
+       )
+       SELECT DISTINCT ON (r.type) r.type, to_char((r.debut AT TIME ZONE 'Europe/Paris')::date, 'YYYY-MM-DD') AS jour,
+              d.entite_id AS cr, d.url, CASE WHEN d.entite_id IS NOT NULL THEN ${sqlProvenance('d.entite_id', 'compte_rendu')} END AS provenance
+       FROM reunions x
+       JOIN canon.reunion r ON r.entite_id = x.id AND r.type IN ('seance', 'commission') AND ${vivant('r.entite_id')}
+       LEFT JOIN canon.document d ON d.entite_id = r.compte_rendu_id AND ${vivant('d.entite_id')}
+       ORDER BY r.type, x.rang, r.debut NULLS LAST, r.entite_id`,
+      { id },
+    );
+    const lieu = (type: 'seance' | 'commission'): LieuDeDiscussion | null => {
+      const l = lignes.find((x) => x.type === type);
+      if (!l) return null;
+      return { date: l.jour, compteRendu: l.cr && l.provenance ? { url: l.url, ancre: null, provenance: l.provenance } : null };
+    };
+    return { commission: lieu('commission'), seance: lieu('seance') };
   }
 
   // ----- Étape (une case de la barre) -----
@@ -1678,14 +1917,17 @@ export class PgDossiers implements DossiersRepository {
     const i = visibles.findIndex((x) => x.cle === cle);
     const voisine = (x: LigneCase | undefined) => (x ? { cle: x.cle as CleCase, libelle: x.libelle } : null);
     const d = details[0];
-    const [parcours, documents, changements] = await Promise.all([
+    const [parcours, documents, changements, personnes] = await Promise.all([
       this.parcours(dossier),
       this.documentsEtape(dossier, cle, c.provenance ?? []),
       this.changementsEtape(dossier, cle),
+      this.personnesEtape(dossier, cle, c.debut),
     ]);
     const caseParcours = parcours?.cases.find((x) => x.cle === cle);
     if (!caseParcours) return null;
     return {
+      modele: parcours!.modele,
+      personnes,
       case: caseParcours,
       numero: i + 1,
       organe: d?.organe_id && d.organe_nom ? { id: d.organe_id, nom: d.organe_nom } : null,
@@ -1698,6 +1940,73 @@ export class PgDossiers implements DossiersRepository {
       precedente: i > 0 ? voisine(visibles[i - 1]) : null,
       suivante: i >= 0 ? voisine(visibles[i + 1]) : null,
     };
+  }
+
+  /**
+   * Personnes d'une case, telles que publiées (mandat et groupe au début de la case) :
+   *   - rapporteurs nommés par les actes de la case (`canon.lien` rapporteur ; « pour avis » si
+   *     l'acte est celui d'une commission saisie pour avis, code AN « -AVIS- ») ;
+   *   - président, membres titulaires et rapporteurs de l'organe de la case quand c'est une CMP, une
+   *     commission d'enquête ou une mission (`canon.fonction` sur cet organe) ;
+   *   - au dépôt, les initiateurs du dossier (auteur) ; à la déclaration du Gouvernement, l'initiateur
+   *     seulement s'il est Premier ministre ce jour-là (`canon.fonction`).
+   */
+  private async personnesEtape(dossier: string, cle: CleCase, debut: string | null): Promise<PersonneEtape[]> {
+    const [rapporteurs, fonctions, initiateurs, depot] = await Promise.all([
+      this.db.all<{ id: string; avis: boolean; organe: string | null }>(
+        `SELECT DISTINCT ON (l.vers_id) l.vers_id AS id, COALESCE(e.code_source ~ '-AVIS-', false) AS avis, o.nom AS organe
+         FROM lecture.parcours_acte a JOIN canon.etape e ON e.entite_id = a.etape_id
+         JOIN canon.lien l ON l.de_id = e.entite_id AND l.nature = 'rapporteur'
+         JOIN canon.personne p ON p.entite_id = l.vers_id
+         LEFT JOIN canon.organisation o ON o.entite_id = e.organe_id
+         WHERE a.dossier_id = $dossier AND a.cle = $cle AND a.categorie = 'case' AND ${vivant('e.entite_id')} AND ${vivant('l.vers_id')}
+         ORDER BY l.vers_id, (e.code_source ~ '-AVIS-'), e.ordre, l.ordre NULLS LAST`,
+        { dossier, cle },
+      ),
+      this.db.all<{ id: string; qualite: string; titre: string; organe: string }>(
+        `SELECT DISTINCT ON (f.personne_id, f.qualite) f.personne_id AS id, f.qualite, split_part(f.titre, ' — ', 1) AS titre, o.nom AS organe
+         FROM canon.fonction f JOIN canon.organisation o ON o.entite_id = f.organisation_id
+         WHERE f.organisation_id IN (
+                 SELECT e.organe_id FROM lecture.parcours_acte a JOIN canon.etape e ON e.entite_id = a.etape_id
+                 WHERE a.dossier_id = $dossier AND a.cle = $cle AND a.categorie = 'case' AND e.organe_id IS NOT NULL)
+           AND o.type IN ('cmp', 'commission_enquete', 'mission')
+           AND f.qualite IN ('Président', 'Membre titulaire', 'Rapporteur')
+           AND ${vivant('f.entite_id')} AND ${vivant('f.personne_id')}
+         ORDER BY f.personne_id, f.qualite, f.debut`,
+        { dossier, cle },
+      ),
+      cle === 'depot' || cle === 'declaration' ? this.initiateurs(dossier) : Promise.resolve([]),
+      this.dossierLigne(dossier),
+    ]);
+    const jour = debut ?? depot?.date_depot ?? null;
+    const auteurs = initiateurs.filter((i) => i.type === 'personne');
+    const refs = await this.personnes([...rapporteurs, ...fonctions, ...auteurs].map((x) => ({ id: x.id, jour })));
+    const ref = (pid: string) => refs.get(`${pid}|${jour ?? ''}`) ?? null;
+    const accord = (pid: string, masculin: string, feminin: string) => (this.feminins.has(pid) ? feminin : masculin);
+    const detail = (p: PersonneRef, ...suite: (string | null)[]) => [p.fonction, p.groupe?.abrege ?? null, ...suite].filter(Boolean).join(' · ');
+    const resultat: PersonneEtape[] = [];
+    const vus = new Set<string>();
+    const ajouter = (role: RolePersonneEtape, pid: string, suite: (p: PersonneRef) => (string | null)[]) => {
+      const p = ref(pid);
+      if (!p || vus.has(`${role}|${pid}`)) return;
+      vus.add(`${role}|${pid}`);
+      resultat.push({ role, qui: { type: 'personne', personne: p, qualite: null }, detail: detail(p, ...suite(p)) });
+    };
+    for (const i of auteurs) {
+      if (cle === 'depot') ajouter('auteur', i.id, () => []);
+      else if (ref(i.id)?.fonction === 'Premier ministre') ajouter('premier_ministre', i.id, () => []);
+    }
+    for (const r of [...rapporteurs].sort((a, b) => Number(a.avis) - Number(b.avis)))
+      ajouter(r.avis ? 'rapporteur_avis' : 'rapporteur', r.id, () => [
+        r.avis ? accord(r.id, 'rapporteur pour avis', 'rapporteure pour avis') : accord(r.id, 'rapporteur', 'rapporteure'),
+        r.organe,
+      ]);
+    const rang = (q: string) => (q === 'Président' ? 0 : q === 'Rapporteur' ? 1 : 2);
+    for (const f of [...fonctions].sort((a, b) => rang(a.qualite) - rang(b.qualite) || (ref(a.id)?.nom ?? '').localeCompare(ref(b.id)?.nom ?? ''))) {
+      const role: RolePersonneEtape = f.qualite === 'Président' ? 'president' : f.qualite === 'Rapporteur' ? 'rapporteur' : 'membre';
+      ajouter(role, f.id, () => [f.titre, f.organe]);
+    }
+    return resultat;
   }
 
   private async documentsEtape(dossier: string, cle: CleCase, provenanceCase: string[]): Promise<DocumentOfficiel[]> {
@@ -1798,7 +2107,7 @@ export class PgDossiers implements DossiersRepository {
   async acteurs(id: string): Promise<GroupeActeurs[]> {
     const d = await this.dossierLigne(id);
     if (!d) return [];
-    const [initiateurs, interventions, rapporteurs, cmp, auteursAmendements, saisissants, auditions] = await Promise.all([
+    const [initiateurs, interventions, rapporteurs, cmp, auteursAmendements, saisissants, auditions, membres] = await Promise.all([
       this.initiateurs(id),
       this.db.all<{ id: string; n: number }>(
         `SELECT i.orateur_id AS id, count(*)::int AS n FROM canon.intervention i
@@ -1848,13 +2157,16 @@ export class PgDossiers implements DossiersRepository {
          ORDER BY a.reunion_id, a.ordre`,
         { id },
       ),
+      this.membresOrgane(id),
     ]);
     // Chaque personne est montrée avec son mandat et son groupe au moment de son rôle : dépôt pour
-    // les initiateurs, nomination pour les rapporteurs, réunion de la CMP, aujourd'hui sinon.
+    // les initiateurs, nomination pour les rapporteurs, réunion de la CMP, entrée dans la commission
+    // d'enquête ou la mission, aujourd'hui sinon.
     const jourDe = new Map<string, string | null>();
     for (const i of initiateurs) jourDe.set(`initiateur:${i.id}`, d.date_depot);
     for (const r of rapporteurs) jourDe.set(`rapporteur:${r.id}`, r.jour ?? d.date_depot);
     for (const c of cmp) jourDe.set(`cmp:${c.id}`, c.debut);
+    for (const m of membres) jourDe.set(`membre:${m.id}`, m.debut);
     const jour = (contexte: string, pid: string) => jourDe.get(`${contexte}:${pid}`) ?? null;
     const demandes = [
       ...initiateurs.filter((i) => i.type === 'personne').map((i) => ({ id: i.id, jour: jour('initiateur', i.id) })),
@@ -1862,6 +2174,7 @@ export class PgDossiers implements DossiersRepository {
       ...cmp.map((c) => ({ id: c.id, jour: jour('cmp', c.id) })),
       ...[...auteursAmendements, ...saisissants].map((a) => ({ id: a.id, jour: null })),
       ...auditions.flatMap((a) => (a.personne_id ? [{ id: a.personne_id, jour: null }] : [])),
+      ...membres.map((m) => ({ id: m.id, jour: jour('membre', m.id) })),
     ];
     const personnes = await this.personnes(demandes);
     const ref = (pid: string, contexte = '') => personnes.get(`${pid}|${jour(contexte, pid) ?? ''}`) ?? null;
@@ -1918,13 +2231,37 @@ export class PgDossiers implements DossiersRepository {
       ];
     });
     ajouter({ role: 'auditionnes', libelle: 'Personnes auditionnées', acteurs: auditionnes, total: auditionnes.length });
+    const rangMembre = (q: string[]) =>
+      q.some((x) => /^pr[ée]sident/i.test(x)) ? 0 : q.some((x) => /rapporteur/i.test(x)) ? 1 : q.some((x) => /^vice/i.test(x)) ? 2 : q.some((x) => /^secr/i.test(x)) ? 3 : 4;
+    const lesMembres = [...membres]
+      .sort((a, b) => rangMembre(a.qualites) - rangMembre(b.qualites) || (ref(a.id, 'membre')?.nom ?? '').localeCompare(ref(b.id, 'membre')?.nom ?? ''))
+      .flatMap((m) => acteur(m.id, 'membre', (p) => role(p, [...m.qualites].sort().join(', ')), null));
+    ajouter({ role: 'membres', libelle: 'Membres', acteurs: lesMembres, total: lesMembres.length });
     return groupes;
+  }
+
+  /**
+   * Membres de la commission d'enquête ou de la mission du dossier : personnes qui ont une fonction
+   * publiée sur l'organe de ses étapes (`canon.etape.organe_id` de type commission_enquete ou
+   * mission → `canon.fonction`), qualités publiées (« Président », « Rapporteure »…), première entrée.
+   */
+  private async membresOrgane(id: string): Promise<{ id: string; qualites: string[]; debut: string | null }[]> {
+    return this.db.all<{ id: string; qualites: string[]; debut: string | null }>(
+      `SELECT f.personne_id AS id, array_agg(DISTINCT split_part(f.titre, ' — ', 1)) AS qualites, min(f.debut)::text AS debut
+       FROM canon.fonction f
+       WHERE f.organisation_id IN (
+               SELECT e.organe_id FROM canon.etape e JOIN canon.organisation o ON o.entite_id = e.organe_id
+               WHERE e.dossier_id = $id AND o.type IN ('commission_enquete', 'mission') AND ${vivant('e.entite_id')})
+         AND ${vivant('f.entite_id')} AND ${vivant('f.personne_id')}
+       GROUP BY f.personne_id`,
+      { id },
+    );
   }
 
   async chiffres(id: string): Promise<Chiffre[]> {
     const d = await this.dossierLigne(id);
     if (!d) return [];
-    const [comptes, syntheses, cases] = await Promise.all([
+    const [comptes, syntheses, cases, membres] = await Promise.all([
       this.db.first<{ deposes: number; adoptes: number; scrutins: number; interventions: number }>(
         `SELECT (SELECT count(*)::int FROM canon.amendement m WHERE m.dossier_id = $id AND ${vivant('m.entite_id')}) AS deposes,
                 (SELECT count(*)::int FROM canon.amendement m WHERE m.dossier_id = $id AND m.sort = 'adopte' AND ${vivant('m.entite_id')}) AS adoptes,
@@ -1935,8 +2272,11 @@ export class PgDossiers implements DossiersRepository {
       ),
       this.syntheses([id]),
       this.cases([id]),
+      this.membresOrgane(id),
     ]);
     const resultat: Chiffre[] = [];
+    // Commission d'enquête, mission : membres publiés de son organe (au fil des travaux).
+    if (membres.length > 0) resultat.push({ libelle: 'Membres', valeur: membres.length, detail: 'personnes ayant une fonction publiée dans l’organe' });
     const s = syntheses.get(id);
     if (s) resultat.push({ libelle: 'Étapes franchies', valeur: s.cases_faites, detail: `sur ${s.cases_affichees} étapes` });
     if (comptes) {

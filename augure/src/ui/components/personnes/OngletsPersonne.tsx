@@ -4,7 +4,7 @@
 // restent des nombres ; les déclarations reprennent les rubriques HATVP telles que publiées, avec
 // le lien vers le document original.
 
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ChoixTheme, DeclarationHatvp, Indicateur, Page, QuestionResume, RoleDansLesDossiers, ScrutinResume } from '@/core';
 import { useAller } from '@/navigation';
@@ -154,14 +154,17 @@ const TYPES_QUESTION: Record<QuestionResume['type'], string> = {
 };
 
 function Questions({ questions }: { questions: Page<QuestionResume> }) {
+  const aller = useAller();
   return (
     <View style={{ gap: space[2] }}>
       <TitreSection>Questions au Gouvernement</TitreSection>
       {questions.total !== null && <Label>{`${nombre(questions.total)} questions publiées`}</Label>}
       {questions.elements.map((q) => (
         <View key={q.id} style={styles.question}>
-          <Label>{`${TYPES_QUESTION[q.type]} n° ${q.numero}${q.date ? ` · ${jour(q.date)}` : ''}`}</Label>
-          <T variant="heading">{q.titre ?? 'Analyse non publiée'}</T>
+          <Pressable accessibilityRole="link" accessibilityLabel={`Voir la question n° ${q.numero}`} onPress={() => aller.question(q.id)} style={{ gap: 2 }}>
+            <Label>{`${TYPES_QUESTION[q.type]} n° ${q.numero}${q.date ? ` · ${jour(q.date)}` : ''}`}</Label>
+            <T variant="heading">{q.titre ?? 'Analyse non publiée'}</T>
+          </Pressable>
           <T variant="caption" ton="inkMuted">
             {[q.rubrique, q.ministere, q.dateReponse ? `réponse le ${jour(q.dateReponse)}` : 'sans réponse publiée'].filter(Boolean).join(' · ')}
           </T>

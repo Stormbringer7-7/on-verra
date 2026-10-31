@@ -91,6 +91,32 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Banc de revue (app interne) : rapprochements à décider, synthèses à juger. À la demande et
+  # depuis la machine seulement, jamais exposé par Caddy :
+  #   docker compose --profile admin up -d revue   → http://127.0.0.1:8084
+  # Depuis un autre poste : ssh -L 8084:127.0.0.1:8084 <serveur>, puis http://127.0.0.1:8084.
+  # Lots de synthèses : opendata/data/relecture/*.json (privé, non versionné).
+  # Clés (étape 2 du banc, docs/TODO.md) : opendata/data/revue/cles.json (clés publiques Ed25519,
+  # signées en GPG) et opendata/data/revue/admins/*.asc (clés publiques GPG des admins) ;
+  # REVUE_ADMINS_GPG : empreintes GPG des admins de confiance. Aucune clé privée sur le serveur.
+  revue:
+    build:
+      context: ./opendata
+      dockerfile: Dockerfile
+    profiles: [admin]
+    command: ["python", "-m", "src", "revue", "servir", "--hote", "0.0.0.0", "--port", "8084"]
+    environment:
+      DATABASE_URL: *postgres-url
+      REVUE_ADMINS_GPG: ${REVUE_ADMINS_GPG:-}
+    ports:
+      - "127.0.0.1:8084:8084"
+    volumes:
+      - ./opendata/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: ./augure

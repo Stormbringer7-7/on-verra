@@ -6,8 +6,14 @@ mènent toujours. App Expo (iOS, Android, web), sans base ni SQL : elle envoie c
 l'[API](../api), qui lit Postgres (schémas `canon` et `lecture`).
 
 Design : canevas [Panoptique v2 — Parcours législatifs](https://claude.ai/artifact/R33Yw8dE34vLyY9rbaRhDC)
-et design system [Panoptique](https://claude.ai/artifact/4Qygft6thDASUWogZkYcHD). Tous les tokens
-sont dans `src/ui/theme/tokens.ts`.
+et design system [Panoptique](https://claude.ai/artifact/4Qygft6thDASUWogZkYcHD) ; écrans, icônes et
+mouvement de la [maquette v3](https://claude.ai/artifact/2zeVRjfihwHAcztEWmhEnL). Typo, espacements et
+rayons dans `src/ui/theme/tokens.ts` ; couleurs et styles réutilisés dans `src/ui/theme/Themes.ts`.
+
+Thèmes (Réglages, gardés sur l'appareil, chacun avec son contraste renforcé) : **Oppression** (par
+défaut : noir, signal rouge), **Vigilance** (ardoise, signal jaune, plus lisible pour les
+daltoniens), **Propre** (clair, signal vert sapin), **Techno** (indigo, signal menthe). Un écran
+prend le thème actif avec `useTheme()` (palette, styles, `choisir`), `usePalette()` ou `useStyles()`.
 
 ## Sources de données
 
@@ -91,7 +97,7 @@ src/
       dossiers/          composants des écrans du dossier
       personnes/         composants des écrans personnes et institutions
     hooks/               useCommand (useRequete), useEnvoi, CoreProvider, titres du fil d'Ariane
-    theme/               tokens, palette
+    theme/               tokens (typo, espacements), Themes (palettes, styles), ThemeProvider (useTheme)
     format.ts            dates, nombres, sources, indicateurs (fonctions pures)
 ```
 

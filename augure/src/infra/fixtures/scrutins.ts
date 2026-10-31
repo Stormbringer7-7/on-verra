@@ -11,6 +11,7 @@ import type {
   PositionExprimee,
   ScrutinResume,
 } from '../../core/domain/model';
+import { INTERVENTIONS_SEANCE_1203, extrait } from './discussions';
 import { A, ART, BARRE_ENERGIE, BARRE_LOCATION, D, G, P, comme, lienFictif, orateur, prov } from './entites';
 import { DECLARATIONS_CAMILLE, FONCTIONS, resumes } from './fonctions';
 import { INTERETS } from './interets';
@@ -135,7 +136,8 @@ const positions = (lignes: [GroupeRef, number, number, number, number][]): Posit
 export const FICHE_SCRUTIN_1874: FicheScrutin = {
   barre: { dossier: D.energie, cases: BARRE_ENERGIE, ici: 'seance_1_o' },
   scrutin: S.an1874,
-  objet: { type: 'amendement', amendement: A.n1876, article: ART.e5 },
+  // Le 1876 avance l'échéance : ce n'est pas un amendement de suppression.
+  objet: { type: 'amendement', amendement: A.n1876, article: ART.e5, suppression: false },
   sens: { pour: 'Avancer à 2040 la mise en service de six nouveaux réacteurs', contre: 'Garder l’échéance de 2045' },
   nonVotants: 0,
   absents: 40,
@@ -160,6 +162,8 @@ export const FICHE_SCRUTIN_1874: FicheScrutin = {
     ancre: 'p-1874',
     provenance: prov('AN', 'compte_rendu', 'CRSANR5L17S2026O1N180'),
   },
+  // Scrutin sur un amendement : les interventions qui discutent le 1876 (lien explicite).
+  interventions: { portee: 'amendement', extraits: INTERVENTIONS_SEANCE_1203.map((i) => extrait(i)), total: 3, reunion: null },
   provenance: prov('AN', 'scrutin', 'VTANR5L17V1874', lienFictif('an/scrutin/1874')),
 };
 
@@ -187,6 +191,8 @@ export const FICHE_SCRUTIN_SENAT_297: FicheScrutin = {
     new Map(),
   ),
   compteRendu: null,
+  // Le Sénat ne publie pas l'étape d'un scrutin : aucune séance reliée, aucune intervention.
+  interventions: null,
   provenance: prov('SENAT', 'scrutin', '2025-297', lienFictif('senat/scrutin/2025-297')),
 };
 

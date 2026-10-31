@@ -51,6 +51,7 @@ open data (AN, Sénat, DILA, HATVP, RNE, INSEE)
 | `web` | `augure/` (`docker/nginx.conf`) | app web ; `/api` relaie le service `api` |
 | `caddy` | `caddy/Caddyfile` | HTTPS automatique (Let's Encrypt) sur `$DOMAINE` |
 | `pgadmin` (profil `admin`) | `pgadmin/servers.json` | administration de Postgres, `http://127.0.0.1:8083`, jamais exposé |
+| `revue` (profil `admin`) | `opendata/src/banc/` | banc de revue (app interne), `http://127.0.0.1:8084`, jamais exposé |
 
 Schémas de la base :
 
@@ -195,6 +196,47 @@ tracée (qui, quand, motif) et rejouée à chaque chargement.
 ```
 
 Procédure et types de cas : [rapprochements.md](../opendata/docs/rapprochements.md).
+
+### Banc de revue (app interne)
+
+Une page pour les deux revues humaines, servie par `opendata/src/banc/` :
+
+- **Rapprochements** : les cas `A_REVOIR` par type, triés par priorité ; choisir un candidat ou
+  « aucun », avec un motif. La décision passe par `revue.decider` : enregistrée et appliquée
+  aussitôt, comme en ligne de commande.
+- **Synthèses** : une synthèse du modèle face au texte officiel (dispositif et exposé des motifs
+  pour un amendement, texte initial ou final pour un dossier) ; oui (fidèle) ou non (fausse,
+  inversée, trompeuse), avec un commentaire. Les lots sont des fichiers JSON déposés dans
+  `opendata/data/relecture/` (format du banc : `id`, `lot`, `type`, `synthese`, `empreinte`…).
+  Un jugement vaut pour l'empreinte de la synthèse (`analytique.relecture_synthese`) : une
+  synthèse réécrite est à juger de nouveau.
+
+```bash
+docker compose --profile admin up -d revue                     # http://127.0.0.1:8084
+DATABASE_URL=… .venv/bin/python -m src revue servir            # même chose, hors Docker
+ssh -L 8084:127.0.0.1:8084 <serveur>                           # depuis un autre poste
+```
+
+Privé : il écoute la machine seule, n'est jamais derrière Caddy, refuse un en-tête Host
+étranger et toute écriture venue d'une autre origine. Pas de compte : chaque réponse porte le
+nom saisi dans la page (`decide_par`, `juge_par`).
+
+**Clés** (`opendata/src/banc/signature.py` ; l'API signée qui s'en sert vient ensuite, voir
+TODO). Chaque personne a une paire Ed25519 pour signer ses requêtes ; un admin l'inscrit au
+service en signant sa clé publique avec sa clé GPG. Le service ne garde que des clés publiques :
+`opendata/data/revue/cles.json` (Ed25519 et signature GPG), `opendata/data/revue/admins/*.asc`
+(GPG des admins) et `REVUE_ADMINS_GPG` (empreintes GPG des admins de confiance, `.env`).
+
+```bash
+python -m src revue cles creer --nom <nom>          # sur le poste de la personne : ~/.config/big-brother/revue/<nom>.pem
+python -m src revue cles inscrire --nom <nom> --role admin|relecteur|poste --publique <base64> --gpg <empreinte GPG admin>
+REVUE_ADMINS_GPG=<empreinte> python -m src revue cles verifier
+```
+
+Une requête signée porte `X-Revue-Cle`, `X-Revue-Date` (±5 min), `X-Revue-Nonce` (une seule
+fois) et `X-Revue-Signature` (méthode, chemin, date, nonce, sha256 du corps). Retirer une
+personne : retirer sa ligne de `cles.json`.
+
 
 ## Historique du dépôt
 

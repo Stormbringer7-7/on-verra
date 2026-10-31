@@ -202,7 +202,36 @@ describe.skipIf(!URL_LECTURE)('PgDiscussions (base réelle, lecture seule)', () 
     expect(dates).toEqual([...dates].sort().reverse());
   });
 
+  it('scrutin 8693 (ensemble, 12/10/2026) : interventions de la séance de l’étape sur ce texte, sans la présidence', async () => {
+    const s8693 = await entite('AN', 'scrutin', 'VTANR5L17V8693');
+    const debut = Date.now();
+    const d = (await depot.duScrutin(s8693, null, 3))!;
+    expect(Date.now() - debut).toBeLessThan(1_000);
+    expect(d).toMatchObject({ portee: 'seance', total: 216 });
+    expect(d.extraits).toHaveLength(3);
+    expect(d.extraits.map((e) => e.date)).toEqual(['2026-10-12', '2026-10-12', '2026-10-12']);
+    expect(d.extraits[0].orateur).toMatchObject({ qualite: 'rapporteur de la commission des affaires sociales' });
+    expect(d.extraits[1].orateur.qualite).toMatch(/^ministre des petites et moyennes entreprises/);
+    expect(d.extraits[0].compteRendu.provenance).toMatchObject({ systeme: 'AN', type: 'intervention' });
+    expect(d.extraits[0].compteRendu.provenance.idNatif).toMatch(/^CRSANR5L17S2027O1N018/);
+    const reunion = await db.first<{ id: string }>(
+      `SELECT r.entite_id AS id FROM canon.reunion r JOIN canon.document d ON d.entite_id = r.compte_rendu_id WHERE d.numero = 'CRSANR5L17S2027O1N018'`,
+    );
+    expect(d.reunion).toBe(reunion!.id);
+  });
+
+  it('scrutin 1992 (amendement 52) : celles qui discutent l’amendement ; Sénat 2025-325 (sans étape) : null', async () => {
+    const s1992 = await entite('AN', 'scrutin', 'VTANR5L17V1992');
+    const amendement = (await db.first<{ id: string }>('SELECT amendement_id AS id FROM canon.scrutin WHERE entite_id = $s::uuid', { $s: s1992 }))!.id;
+    const d = (await depot.duScrutin(s1992, amendement, 5))!;
+    expect(d).toMatchObject({ portee: 'amendement', total: 2, reunion: null });
+    expect(d).toMatchObject(await depot.surAmendement(amendement, 5));
+    expect(await depot.duScrutin(await entite('SENAT', 'scrutin', '2025-325'), null, 5)).toBeNull();
+  });
+
   it('identifiant inconnu : null ou liste vide (G5)', async () => {
+    expect(await depot.duScrutin(INCONNU, null, 5)).toBeNull();
+    expect(await depot.duScrutin('x', null, 5)).toBeNull();
     expect(await depot.interventions({ type: 'reunion', id: 'x' }, { page: 1, taille: 5 })).toBeNull();
     expect(await depot.interventions({ type: 'reunion', id: INCONNU }, { page: 1, taille: 5 })).toBeNull();
     expect(await depot.interventions({ type: 'amendement', id: INCONNU }, { page: 1, taille: 5 })).toBeNull();

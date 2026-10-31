@@ -106,8 +106,13 @@ describe('répartition : rendu', () => {
   });
 
   it('carte du scrutin et écarts par groupe', () => {
-    const c = texte(renderToStaticMarkup(<CarteScrutin chambre={f.scrutin.chambre} parCirconscription={null} votes={f.votes} groupes={f.groupes} mesure="pour" choisirMesure={() => {}} onDepartement={() => {}} />));
+    // Sénat : par département seulement ; AN : circonscriptions par défaut (requête, ici le nœud fourni).
+    const c = texte(renderToStaticMarkup(<CarteScrutin chambre="SENAT" parCirconscription={null} votes={f.votes} groupes={f.groupes} mesure="pour" choisirMesure={() => {}} onDepartement={() => {}} />));
     expect(c).toContain('Part des « pour » parmi les votes exprimés');
+    const an = texte(renderToStaticMarkup(<CarteScrutin chambre="AN" parCirconscription={<p>circonscriptions</p>} votes={f.votes} groupes={f.groupes} mesure="pour" choisirMesure={() => {}} mode="representation" choisirMode={() => {}} onDepartement={() => {}} />));
+    expect(an).toContain('circonscriptions');
+    expect(an).toContain('Représentation');
+    expect(an).not.toContain('Part des « pour »');
     expect(c).toContain('sans département');
     const e = texte(renderToStaticMarkup(<EcartsParGroupe votes={f.votes} groupes={f.groupes} onPersonne={() => {}} />));
     expect(e).toMatch(/\d+ sur \d+ exprimés/);

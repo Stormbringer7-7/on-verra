@@ -239,4 +239,6 @@ export type TypeCible =
   | 'personne'
   | 'institution'
   | 'representant'
+  /** Question écrite, orale ou au Gouvernement (`canon.question`). */
+  | 'question'
   | 'autre';

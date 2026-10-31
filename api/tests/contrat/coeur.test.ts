@@ -13,7 +13,7 @@ import { positionnels } from '../../src/infra/PgDatabase';
 import { gaucheDroite } from '../../src/infra/pg/personnes';
 import { SansSynthese } from '../../src/infra/SansSynthese';
 import { borner, limiter } from '../../src/lectures/commun';
-import { semaineDe } from '../../src/lectures/dossiers';
+import { fenetreDe, filtreAccueil, jourFacultatif, semaineDe } from '../../src/lectures/dossiers';
 import { coreDeTest } from '../support';
 
 describe('bus de commandes', () => {
@@ -75,6 +75,29 @@ describe('dates', () => {
     expect(semaineDe('2026-10-19')).toEqual({ debut: '2026-10-19', fin: '2026-10-25' });
     expect(semaineDe('2026-10-25')).toEqual({ debut: '2026-10-19', fin: '2026-10-25' });
     expect(semaineDe('2027-01-01')).toEqual({ debut: '2026-12-28', fin: '2027-01-03' });
+  });
+
+  it('calendrier de l’Accueil : trois semaines avant celle du jour, trois après', () => {
+    expect(fenetreDe('2026-10-24')).toEqual({ debut: '2026-09-28', fin: '2026-11-15' });
+    expect(fenetreDe('2026-12-30')).toEqual({ debut: '2026-12-07', fin: '2027-01-24' });
+  });
+
+  it('jour de l’Accueil : facultatif, « AAAA-MM-JJ » et date réelle, sinon 400', () => {
+    expect(jourFacultatif(undefined)).toBeUndefined();
+    expect(jourFacultatif('2026-10-14')).toBe('2026-10-14');
+    for (const faux of ['2026-02-30', '14/10/2026', '2026-1-4', 20261014, '']) {
+      expect(() => jourFacultatif(faux), String(faux)).toThrow(expect.objectContaining({ statut: 400 }));
+    }
+  });
+
+  it('filtres de l’Accueil : chambres du vocabulaire, dossiers suivis (50 au plus), sinon 400', () => {
+    expect(filtreAccueil({})).toEqual({ chambres: null, dossiers: null });
+    expect(filtreAccueil({ chambres: ['SENAT', 'AN', 'SENAT'], dossiers: [] })).toEqual({ chambres: ['SENAT', 'AN'], dossiers: [] });
+    expect(filtreAccueil({ dossiers: ['a', 'a', 'b'] })).toEqual({ chambres: null, dossiers: ['a', 'b'] });
+    const faux: unknown[] = [{ chambres: ['CMP'] }, { chambres: 'AN' }, { dossiers: [''] }, { dossiers: Array.from({ length: 51 }, (_, i) => `d${i}`) }];
+    for (const f of faux) {
+      expect(() => filtreAccueil(f as never), JSON.stringify(f)).toThrow(expect.objectContaining({ statut: 400 }));
+    }
   });
 
   it('horloge système : jour civil AAAA-MM-JJ', () => {

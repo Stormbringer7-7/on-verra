@@ -1,12 +1,13 @@
-// Gabarit d'écran du design v4 : 5 onglets (en bas en portrait, indicateur rouge au-dessus du libellé ;
+// Gabarit d'écran du design v4 : 5 onglets (en bas en portrait, icône et libellé, indicateur signal qui
+// glisse au-dessus ;
 // en en-tête en paysage, soulignés) ; sur chaque page, « ‹ » revient à l'écran précédent et le fil
 // d'Ariane « / » remonte la hiérarchie de l'objet (sa place, pas le chemin suivi : ui/ariane.ts) ;
 // contenu défilant centré (1 200 px au plus), pied de page sur chaque écran, colonnes principale /
 // latérale, états de chargement et d'erreur.
 
 import { CommonActions, StackActions, useNavigation, useNavigationState, useRoute } from '@react-navigation/native';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,9 +16,12 @@ import { estOnglet, monter, ongletActif, ONGLETS, type EtatPile, type Parent } f
 import { useTitrePage } from '../hooks/ariane';
 import { useCore } from '../hooks/core';
 import { useLarge } from '../hooks/miseEnPage';
+import { useAnimationsReduites } from '../hooks/reglages';
 import { usePalette } from '../theme/ThemeProvider';
 import { fonts, LARGEUR_MAX, radius, space } from '../theme/tokens';
 import { BoutonSecondaire, Label, T } from './base';
+import { Icone, type NomIcone } from './Icone';
+import { COURBE, DUREES } from './mouvement';
 
 /** Nom affiché de l'app (en-tête large), comme dans le canevas. */
 export const NOM_APP = 'Nos politiques ont du talent';
@@ -88,17 +92,39 @@ export function Navigation({ active, onNavigate }: { active: Section; onNavigate
       accessibilityLabel="Navigation principale"
       style={[styles.nav, { borderTopColor: p.line, backgroundColor: p.surfaceRaised, paddingBottom: insets.bottom }]}
     >
+      <IndicateurGlissant rang={Math.max(0, ONGLETS.findIndex((o) => o.cle === active))} nombre={ONGLETS.length} couleur={p.signal} />
       {ONGLETS.map((o) => {
         const actif = o.cle === active;
         return (
           <Pressable key={o.cle} accessibilityRole="tab" accessibilityState={{ selected: actif }} onPress={() => onNavigate(o.cle)} style={styles.onglet}>
-            <View style={[styles.indicateur, { backgroundColor: actif ? p.signal : 'transparent' }]} />
+            <Icone nom={ICONE_ONGLET[o.cle]} couleur={actif ? p.ink : p.inkMuted} taille={22} />
             <T variant="caption" couleur={actif ? p.ink : p.inkMuted} style={actif ? styles.ongletActif : undefined} numberOfLines={1}>
               {o.libelle}
             </T>
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+const ICONE_ONGLET: Record<Section, NomIcone> = { Accueil: 'actu', Chiffres: 'chiffres', Carte: 'carte', Recherche: 'recherche', Guide: 'guide' };
+
+/** Trait signal au-dessus de l'onglet actif, qui glisse d'un onglet à l'autre (220 ms). */
+function IndicateurGlissant({ rang, nombre, couleur }: { rang: number; nombre: number; couleur: string }) {
+  const reduites = useAnimationsReduites();
+  const [largeur, setLargeur] = useState(0);
+  const [x] = useState(() => new Animated.Value(rang));
+  useEffect(() => {
+    if (reduites) return x.setValue(rang);
+    Animated.timing(x, { toValue: rang, duration: DUREES.etat, easing: COURBE, useNativeDriver: Platform.OS !== 'web' }).start();
+  }, [rang, reduites, x]);
+  const pas = largeur / nombre;
+  return (
+    <View pointerEvents="none" aria-hidden style={styles.piste} onLayout={(e) => setLargeur(e.nativeEvent.layout.width)}>
+      <Animated.View
+        style={[styles.indicateur, { backgroundColor: couleur, left: pas / 2 - 9, transform: [{ translateX: Animated.multiply(x, pas) }] }]}
+      />
     </View>
   );
 }
@@ -371,8 +397,9 @@ const styles = StyleSheet.create({
   ongletsLarges: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space[8] },
   ongletLarge: { minHeight: 64, justifyContent: 'center', borderBottomWidth: 3 },
   nav: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  onglet: { flex: 1, minHeight: 60, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  indicateur: { width: 18, height: 3, borderRadius: 2, marginBottom: space[1] },
+  onglet: { flex: 1, minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
+  piste: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
+  indicateur: { position: 'absolute', top: 0, width: 18, height: 3, borderRadius: 2 },
   ongletActif: { fontFamily: fonts.sansSemiBold },
   ariane: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 2, marginBottom: -space[2] },
   maillon: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%' },

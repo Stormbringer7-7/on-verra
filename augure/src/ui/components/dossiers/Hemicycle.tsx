@@ -2,13 +2,15 @@
 // contre, abstention, non-votant, absent), de la gauche vers la droite (groupe `rang`, puis siège
 // publié), zoomable et cliquable (HemicycleZoom). Un siège touché montre la personne et mène à sa
 // fiche. Sans votes nominatifs (décomptes seuls), un siège met son groupe en avant. La place d'un
-// point suit l'ordre des sièges publiés, pas le plan exact de la salle.
+// point suit l'ordre des sièges publiés, pas le plan exact de la salle. `mode` : couleur de la
+// position (par défaut), du groupe, ou du groupe pour qui a pris part au vote (scrutin/Modes).
 
 import { memo, useMemo } from 'react';
 
-import type { Position, PositionDeGroupe, VoteNominatif } from '@/core';
-import { couleurVote, usePalette } from '../../theme/ThemeProvider';
+import type { GroupeRef, Position, PositionDeGroupe, VoteNominatif } from '@/core';
+import { usePalette } from '../../theme/ThemeProvider';
 import { HemicycleZoom, type SiegeHemicycle } from '../hemicycle/HemicycleZoom';
+import { couleurSelonMode, type ModeCouleur } from '../scrutin/Modes';
 import { partLigne, POSITION, siegesScrutin } from './presentation';
 
 /** Ce que dit le siège d'un vote : position, délégation, mise au point publiée. */
@@ -21,21 +23,23 @@ export const Hemicycle = memo(function Hemicycle({
   votes = [],
   onPersonne,
   largeurMax = 560,
+  mode = 'pour_contre',
 }: {
   groupes: PositionDeGroupe[];
   votes?: VoteNominatif[];
   onPersonne?: (id: string) => void;
   largeurMax?: number;
+  mode?: ModeCouleur;
 }) {
   const p = usePalette();
   const { sieges, positions } = useMemo(() => {
-    const couleur = (pos: Position) => (pos === 'absent' ? p.line : pos === 'non_votant' ? p.lineStrong : couleurVote(p, pos));
+    const couleur = (pos: Position, g: GroupeRef | null) => couleurSelonMode(p, mode, g, pos);
     if (votes.length)
       return {
         positions: votes.map((v) => v.position),
         sieges: votes.map(
           (v): SiegeHemicycle => ({
-            couleur: couleur(v.position),
+            couleur: couleur(v.position, v.personne.groupe),
             groupe: v.personne.groupe,
             personne: { id: v.personne.id, nom: v.personne.nom },
             detail: detailVote(v),
@@ -45,9 +49,9 @@ export const Hemicycle = memo(function Hemicycle({
     const parGroupe = siegesScrutin(groupes);
     return {
       positions: parGroupe.map((s) => s.position),
-      sieges: parGroupe.map((s): SiegeHemicycle => ({ couleur: couleur(s.position), groupe: s.groupe, detail: POSITION[s.position] })),
+      sieges: parGroupe.map((s): SiegeHemicycle => ({ couleur: couleur(s.position, s.groupe), groupe: s.groupe, detail: POSITION[s.position] })),
     };
-  }, [groupes, votes, p]);
+  }, [groupes, votes, p, mode]);
 
   const total = (pos: Position) => positions.filter((x) => x === pos).length;
   const libelle = `Hémicycle : ${total('pour')} pour, ${total('contre')} contre, ${total('abstention')} abstentions, ${total('non_votant')} non-votants, ${total('absent')} absents`;

@@ -200,12 +200,12 @@ def fusionner(entrepot, registre, type_: str, absorbee: IdentiteNative, absorban
     with registre.transaction():
         signaler(entrepot, registre, cas, None)
         decider(entrepot, registre, cas.cle, 0, par, motif)
-    return next(c for c in entrepot.cas_revue("fusion_entites") if c["cle"] == cas.cle)
+    return entrepot.cas(cas.cle)
 
 
 def decider(entrepot, registre, cle: str, choix: int | None, par: str, motif: str | None = None):
     """Enregistre la décision d'une personne et l'applique aussitôt."""
-    cas = next((c for c in entrepot.cas_revue() if c["cle"] == cle), None)
+    cas = entrepot.cas(cle)
     if cas is None:
         raise KeyError(f"cas inconnu : {cle}")
     if choix is not None and not 0 <= choix < len(cas["candidats"]):
@@ -214,8 +214,7 @@ def decider(entrepot, registre, cle: str, choix: int | None, par: str, motif: st
         raise ValueError(f"{cle} : cas de constat, rien à choisir (choix « aucun »)")
     with registre.transaction():
         entrepot.decider(cle, {"choix": choix, "motif": motif}, par)
-        cas = next(c for c in entrepot.cas_revue() if c["cle"] == cle)
-        appliquer(entrepot, registre, cas)
+        appliquer(entrepot, registre, entrepot.cas(cle))
 
 
 # Rapport --------------------------------------------------------------------------------------

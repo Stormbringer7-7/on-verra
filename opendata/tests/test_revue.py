@@ -110,6 +110,35 @@ class ContratRevue:
         (c,) = self.entrepot.cas_revue("reference_inconnue")
         self.assertIn("AN:acteur:PA404", c["constat"])
 
+    def test_page_triee_par_priorite_et_comptes(self):
+        for cle, priorite in (("elu_local:b", 2), ("elu_local:a", None), ("elu_local:c", 1)):
+            ecrire(self.ctx, CasRevue("elu_local", cle, "constat", "x",
+                                      contexte={"priorite": priorite} if priorite else {}), self.source, None)
+        self.assertEqual([c["cle"] for c in self.entrepot.page_cas("elu_local", "A_REVOIR", 2)], ["elu_local:c", "elu_local:b"])
+        self.assertEqual([c["cle"] for c in self.entrepot.page_cas(None, None, 5, 2)], ["elu_local:a"])
+        revue.decider(self.entrepot, self.registre, "elu_local:a", None, "relecteur")
+        self.assertEqual(sorted(self.entrepot.compter_cas()), [("elu_local", "APPLIQUE", 1), ("elu_local", "A_REVOIR", 2)])
+        self.assertEqual(self.entrepot.cas("elu_local:a")["decide_par"], "relecteur")
+        self.assertIsNone(self.entrepot.cas("elu_local:z"))
+
+    def test_jugement_de_synthese_remplace_pour_la_meme_empreinte(self):
+        j = {"synthese_id": "lot1-a", "empreinte": "e1", "lot": "lot1", "verdict": "fidele", "commentaire": "", "juge_par": "x"}
+        self.entrepot.juger_synthese(j)
+        self.entrepot.juger_synthese({**j, "verdict": "infidele", "commentaire": "inversé"})
+        self.entrepot.juger_synthese({**j, "empreinte": "e2"})     # synthèse réécrite : jugement à part
+        jugements = {(x["empreinte"], x["verdict"], x["commentaire"]) for x in self.entrepot.jugements_syntheses()}
+        self.assertEqual(jugements, {("e1", "infidele", "inversé"), ("e2", "fidele", "")})
+
+    def test_nonce_une_seule_fois(self):
+        from datetime import datetime, timedelta, timezone
+        dans_10_min = datetime.now(timezone.utc) + timedelta(minutes=10)
+        self.assertTrue(self.entrepot.consommer_nonce("cle-a", "nonce-1", dans_10_min))
+        self.assertFalse(self.entrepot.consommer_nonce("cle-a", "nonce-1", dans_10_min))
+        self.assertTrue(self.entrepot.consommer_nonce("cle-b", "nonce-1", dans_10_min))   # par clé
+        # expiré : oublié au passage suivant, le nonce ne bloque pas indéfiniment la table
+        self.assertTrue(self.entrepot.consommer_nonce("cle-a", "nonce-2", datetime.now(timezone.utc) - timedelta(seconds=1)))
+        self.assertTrue(self.entrepot.consommer_nonce("cle-a", "nonce-2", dans_10_min))
+
     def test_rapport_complet(self):
         ecrire(self.ctx, self.cas, self.source, None)
         with tempfile.TemporaryDirectory() as d:

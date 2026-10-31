@@ -1,5 +1,6 @@
 // Composants de base du design system Panoptique : typographie (`T`, `Label`, titres), cartes,
-// puces, onglets de fiche, barres de répartition, icônes. Aucune donnée métier ici.
+// puces, onglets de fiche, barres de répartition, icônes. Aucune donnée métier ici. Formes et
+// couleurs : styles du thème actif (`useStyles`, Themes.ts).
 
 import type { ReactNode } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -7,7 +8,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type
 
 import type { Decompte } from '@/core';
 import { useLarge } from '../hooks/miseEnPage';
-import { aLEchelle, useEchelle, usePalette } from '../theme/ThemeProvider';
+import { aLEchelle, useEchelle, usePalette, useStyles } from '../theme/ThemeProvider';
 import { radius, space, type, type TypeVariant } from '../theme/tokens';
 
 type Ton = 'ink' | 'inkSoft' | 'inkMuted' | 'signal' | 'caution';
@@ -69,12 +70,9 @@ export function Carte({
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const p = usePalette();
+  const s = useStyles();
   const large = useLarge();
-  const fond: ViewStyle = contour
-    ? { borderWidth: 1, borderColor: p.line, backgroundColor: 'transparent' }
-    : { backgroundColor: p.surfaceRaised };
-  const forme = [styles.carte, { padding: large ? space[7] : space[5] }, fond, style];
+  const forme = [contour ? s.carteContour : s.carte, large && { padding: space[7] }, style];
   if (!onPress) return <View style={forme}>{children}</View>;
   return (
     <Pressable
@@ -90,8 +88,7 @@ export function Carte({
 
 /** Ligne de liste (64 px au moins, filet `line` en bas), cliquable si `onPress`. */
 export function Ligne({ children, onPress, accessibilityLabel }: { children: ReactNode; onPress?: () => void; accessibilityLabel?: string }) {
-  const p = usePalette();
-  const forme = [styles.ligne, { borderBottomColor: p.line }];
+  const forme = useStyles().ligne;
   if (!onPress) return <View style={forme}>{children}</View>;
   return (
     <Pressable accessibilityRole="link" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [forme, pressed && { opacity: 0.8 }]}>
@@ -102,9 +99,8 @@ export function Ligne({ children, onPress, accessibilityLabel }: { children: Rea
 
 /** Pastille de chambre « AN » / « SÉNAT » (cadre `line-strong`). */
 export function PastilleChambre({ libelle }: { libelle: string }) {
-  const p = usePalette();
   return (
-    <View style={[styles.chambre, { borderColor: p.lineStrong }]}>
+    <View style={useStyles().chambre}>
       <Label ton="ink">{libelle}</Label>
     </View>
   );
@@ -223,17 +219,15 @@ export function Action({ children, onPress, accessibilityLabel }: { children: Re
 
 /** Bouton secondaire bordé `line-strong`. */
 export function BoutonSecondaire({ children, onPress, accessibilityLabel }: { children: ReactNode; onPress(): void; accessibilityLabel?: string }) {
-  const p = usePalette();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={[styles.secondaire, { borderColor: p.lineStrong }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={useStyles().boutonSecondaire}>
       <Label ton="ink">{children}</Label>
     </Pressable>
   );
 }
 
 export function Panneau({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const p = usePalette();
-  return <View style={[styles.panneau, { backgroundColor: p.surfaceRaised }, style]}>{children}</View>;
+  return <View style={[useStyles().panneau, style]}>{children}</View>;
 }
 
 /**
@@ -360,23 +354,17 @@ export function PuceRetirable({ libelle, onRetirer, couleur }: { libelle: string
 }
 
 export function Separateur() {
-  const p = usePalette();
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.line }} />;
+  return <View style={useStyles().separateur} />;
 }
 
 const styles = StyleSheet.create({
   titreAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
-  carte: { borderRadius: radius.lg, gap: 14, minWidth: 0 },
-  ligne: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  chambre: { minWidth: 52, minHeight: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.full, paddingHorizontal: space[2] },
   barre: { flexDirection: 'row', gap: 2, overflow: 'hidden', borderRadius: radius.full },
   segmente: { flexDirection: 'row', borderRadius: radius.md, padding: space[1], gap: space[1] },
   segmenteLarge: { alignSelf: 'flex-start', maxWidth: '100%' },
   segment: { flexGrow: 1, flexBasis: 0, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   segmentTexte: { fontSize: 15 },
   action: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  secondaire: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: radius.full, paddingHorizontal: space[4] },
-  panneau: { borderRadius: radius.lg, padding: space[5], gap: space[3] },
   puce: { flexShrink: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: space[4], borderWidth: 1, borderRadius: radius.full },
   retirable: { flexDirection: 'row', alignItems: 'center', gap: space[2], flexShrink: 1, maxWidth: '100%' },
   ongletFiche: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2 },

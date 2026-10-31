@@ -1,99 +1,88 @@
-// Rail vertical du parcours d'un dossier (fiche Dossier, canevas « 11 · Parcours : le rail du
-// dossier » à « 13 · Dossiers rattachés ») : en tête, le modèle suivi et son fondement (dépliable),
-// l'interrupteur « Comparer au droit commun » ; puis chaque étape du modèle reliée par un trait
-// (plein jusqu'à la dernière étape établie, pointillé ensuite), l'attente entre deux étapes, les
-// déviations décrochées d'un seul niveau (icône dessinée, jamais un emoji), les branches du droit
-// commun prises, les dossiers rattachés dépliables sous leur étape. Les étapes sans objet ne
-// paraissent qu'en comparant, barrées. Rien n'est jamais un échec : « Donnée non publiée ».
-// Lignes : `lignesRail` (statuts.ts), testées sous Node.
+// Rail vertical du parcours d'un dossier (maquette v3, planches « Dossier » et « DossierTypes ») :
+// en tête, l'interrupteur « Seulement les décisions » (les réunions et séances intermédiaires se
+// plient, pli animé) ; puis un nœud par étape, l'icône de son lieu dans un cercle d'état (fait,
+// actuel avec halo, terminal en aplat, à venir en bordure prévue / si… / facultative), relié au
+// suivant par un trait (plein jusqu'à la dernière étape établie, pointillé ensuite). Chaque nœud
+// ouvre l'écran Étape ; un événement (49.3, retrait…) est une étiquette qui ouvre sa feuille ; les
+// dossiers rattachés sont des blocs sous leur étape, qui mènent à leur fiche, avec leurs motions
+// (nombre, issue, voix pour : `resumeRattache`). Les étapes sans objet
+// sont masquées. Rien n'est jamais un échec : « Donnée non publiée ». Nœuds : `noeudsRail`
+// (dossiers/parcoursVue.ts), testés sous Node.
 
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 
 import type { CleCase, DeviationParcours, EtapeResume, Parcours } from '@/core';
 import { date } from '../../format';
+import { useAnimationsReduites } from '../../hooks/reglages';
 import { usePalette } from '../../theme/ThemeProvider';
-import { radius, space, type Palette } from '../../theme/tokens';
-import { IconeDeviation, Label, T } from '../base';
-import { CHAMBRE_COURTE } from '../dossiers/presentation';
-import { lignesRail, nombreRattaches, type LigneRail, type TraitRail } from './statuts';
+import { fonts, radius, space, type Palette } from '../../theme/tokens';
+import { Label, T } from '../base';
+import { groupesRail, noeudsRail, resumeRattache, sousTitreDecisions, type NoeudRail } from '../dossiers/parcoursVue';
+import { Icone } from '../Icone';
+import { animerMiseEnPage, Appui, Halo } from '../mouvement';
 
 type Props = {
   parcours: Parcours;
-  /** Étapes de la fiche (organe de chaque étape), par clé. */
+  /** Étapes de la fiche (chiffres de chaque étape), par clé. */
   etapes?: EtapeResume[];
   onEtape(cle: CleCase): void;
   onDeviation(d: DeviationParcours): void;
   onDossier(id: string): void;
 };
 
-/** Largeur de la colonne du rail (trait, points, coude des déviations). */
-const RAIL = 40;
+/** Diamètre du cercle d'un nœud. */
+const CERCLE = 30;
+const MINEUR = 22;
 
 export function RailParcours({ parcours, etapes = [], onEtape, onDeviation, onDossier }: Props) {
   const p = usePalette();
-  const [comparer, setComparer] = useState(false);
-  const [fondement, setFondement] = useState(false);
-  const [deplie, setDeplie] = useState<CleCase | null>(null);
-  const lignes = lignesRail(parcours, comparer);
-  const organes = new Map(etapes.map((e) => [e.cle, e.organe?.nom ?? null]));
+  const reduites = useAnimationsReduites();
+  const [decisions, setDecisions] = useState(true);
+  const noeuds = noeudsRail(parcours, etapes);
+  const groupes = groupesRail(noeuds);
+  const pliables = noeuds.some((n) => n.intermediaire);
   const echeance = parcours.prochaineEcheance;
-  const sautees = parcours.cases.filter((c) => c.etat === 'sans_objet').length;
+  const basculer = (v: boolean) => {
+    animerMiseEnPage(reduites);
+    setDecisions(v);
+  };
 
   return (
     <View style={styles.bloc}>
-      <View style={[styles.entete, { backgroundColor: p.surfaceRaised, borderColor: p.line }]}>
-        <View style={styles.ligneEntete}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <T variant="caption" ton="inkMuted">Parcours suivi</T>
-            <T variant="heading">{parcours.modele.libelle}</T>
+      {pliables && (
+        <View style={[styles.filtre, { backgroundColor: p.surfaceRaised }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <T variant="small" style={styles.gras}>Seulement les décisions</T>
+            <T variant="caption" ton="inkMuted">{sousTitreDecisions(noeuds, decisions)}</T>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fondement du parcours"
-            accessibilityState={{ expanded: fondement }}
-            onPress={() => setFondement(!fondement)}
-            style={[styles.info, { borderColor: p.inkSoft }]}
-          >
-            <Label ton="ink">i</Label>
-          </Pressable>
-        </View>
-        {fondement && <T variant="small" ton="inkSoft">{parcours.modele.fondement}</T>}
-        <View style={[styles.ligneEntete, styles.separe, { borderTopColor: p.line }]}>
-          <T variant="heading" style={{ flex: 1 }}>Comparer au droit commun</T>
           <Switch
-            accessibilityLabel="Comparer au droit commun"
-            value={comparer}
-            onValueChange={setComparer}
+            accessibilityLabel="Seulement les décisions"
+            value={decisions}
+            onValueChange={basculer}
             trackColor={{ false: p.lineFaint, true: p.ink }}
-            thumbColor={comparer ? p.surface : p.inkSoft}
+            thumbColor={decisions ? p.surface : p.inkMuted}
           />
         </View>
-        {comparer && (
-          <T variant="small" ton="inkSoft">
-            {sautees
-              ? `Les ${sautees} étapes du droit commun que ce dossier n’a pas eues sont montrées barrées.`
-              : 'Ce dossier a suivi toutes les étapes du droit commun.'}
-          </T>
+      )}
+
+      <View accessibilityRole="list" accessibilityLabel="Parcours">
+        {groupes.map((g, i) =>
+          g.type === 'noeud' ? (
+            <Noeud key={g.noeud.cas.cle} noeud={g.noeud} onEtape={onEtape} onDeviation={onDeviation} onDossier={onDossier} />
+          ) : (
+            !decisions && (
+              <View key={`pli-${i}`}>
+                {g.noeuds.map((n) => (
+                  <Noeud key={n.cas.cle} noeud={n} mineur onEtape={onEtape} onDeviation={onDeviation} onDossier={onDossier} />
+                ))}
+              </View>
+            )
+          ),
         )}
       </View>
 
-      <View accessibilityRole="list" accessibilityLabel="Parcours">
-        {lignes.map((l, i) => (
-          <LigneDuRail
-            key={i}
-            ligne={l}
-            organe={l.type === 'etape' ? (organes.get(l.etape.cle) ?? null) : null}
-            ouvert={l.type === 'enfants' && deplie === l.etape}
-            onEtape={onEtape}
-            onDeviation={onDeviation}
-            onDossier={onDossier}
-            onDeplier={(cle) => setDeplie(deplie === cle ? null : cle)}
-          />
-        ))}
-      </View>
-
-      <Legende comparer={comparer} />
+      <Legende p={p} />
       {echeance && (
         <T variant="small">
           Prochaine échéance : {echeance.libelle} le {date(echeance.date)}
@@ -104,273 +93,153 @@ export function RailParcours({ parcours, etapes = [], onEtape, onDeviation, onDo
   );
 }
 
-/** Trait vertical du rail, dans la colonne de gauche. */
-function Trait({ trait, haut = 0, p }: { trait: TraitRail; haut?: number; p: Palette }) {
-  if (trait === 'aucun') return null;
-  return (
-    <View
-      style={[
-        styles.trait,
-        { top: haut },
-        trait === 'plein'
-          ? { backgroundColor: p.lineStrong }
-          : { borderLeftWidth: 2, borderStyle: 'dashed', borderColor: p.lineFaint, backgroundColor: 'transparent' },
-      ]}
-    />
-  );
+/** Bordure du cercle selon la nature d'une étape qui n'a pas encore eu lieu. */
+const BORDURE = { obligatoire: 'solid', conditionnelle: 'dashed', facultative: 'dotted' } as const;
+
+function styleCercle(n: NoeudRail, p: Palette) {
+  if (n.devie) return { backgroundColor: p.surface, borderColor: p.signal, borderStyle: 'solid' as const, icone: p.signalHover };
+  switch (n.rendu) {
+    case 'actuel':
+    case 'terminal':
+      return { backgroundColor: p.ink, borderColor: p.ink, borderStyle: 'solid' as const, icone: p.surface };
+    case 'attendu':
+      return { backgroundColor: p.surface, borderColor: p.ink, borderStyle: BORDURE[n.nature], icone: p.ink };
+    case 'fait':
+      return { backgroundColor: p.surfaceSoft, borderColor: p.lineStrong, borderStyle: 'solid' as const, icone: p.ink };
+    case 'inconnu':
+      return { backgroundColor: p.surface, borderColor: p.lineFaint, borderStyle: 'solid' as const, icone: p.inkMuted };
+    case 'a_venir':
+      return { backgroundColor: p.surface, borderColor: p.lineStrong, borderStyle: BORDURE[n.nature], icone: p.inkSoft };
+  }
 }
 
-/** Point d'une étape : plein (faite), signal (en cours), creux (à venir), pointillé (inconnu), tirets (sans objet), cerclé (attendue). */
-function Point({ etat, attendue, p }: { etat: string; attendue: boolean; p: Palette }) {
-  const style = attendue
-    ? { backgroundColor: p.surface, borderWidth: 2, borderColor: p.ink }
-    : etat === 'faite'
-      ? { backgroundColor: p.inkSoft }
-      : etat === 'en_cours'
-        ? { backgroundColor: p.signal }
-        : etat === 'inconnu'
-          ? { backgroundColor: p.surface, borderWidth: 2, borderStyle: 'dotted' as const, borderColor: p.inkSoft }
-          : etat === 'sans_objet'
-            ? { backgroundColor: p.surface, borderWidth: 2, borderStyle: 'dashed' as const, borderColor: p.lineFaint }
-            : { backgroundColor: p.surface, borderWidth: 2, borderColor: p.lineStrong };
-  return <View style={[styles.point, style]} />;
-}
+const MARQUE: Partial<Record<NoeudRail['rendu'], string>> = { actuel: 'étape actuelle', attendu: 'étape attendue', terminal: 'dernière étape' };
 
-function LigneDuRail(props: {
-  ligne: LigneRail;
-  organe: string | null;
-  ouvert: boolean;
+function Noeud({
+  noeud: n,
+  mineur = false,
+  onEtape,
+  onDeviation,
+  onDossier,
+}: {
+  noeud: NoeudRail;
+  mineur?: boolean;
   onEtape(cle: CleCase): void;
   onDeviation(d: DeviationParcours): void;
   onDossier(id: string): void;
-  onDeplier(cle: CleCase): void;
 }) {
-  const { ligne: l, organe, ouvert } = props;
   const p = usePalette();
-
-  if (l.type === 'etape') {
-    const c = l.etape;
-    const sansObjet = c.etat === 'sans_objet';
-    const marque = c.courante ? 'Étape actuelle' : c.attendue ? 'Étape attendue' : null;
-    const lieu = c.lieu ? CHAMBRE_COURTE[c.lieu] : null;
-    const contenu = (
-      <>
-        <View style={styles.titreEtape}>
-          <T
-            variant="heading"
-            couleur={sansObjet ? p.lineStrong : c.etat === 'a_venir' && !c.attendue ? p.inkSoft : p.ink}
-            style={sansObjet ? { textDecorationLine: 'line-through' } : undefined}
-          >
-            {c.libelle}
-          </T>
-          {lieu && (
-            <View style={[styles.lieu, { borderColor: p.lineFaint }]}>
-              <Label style={{ fontSize: 11 }}>{lieu}</Label>
-            </View>
-          )}
-          {l.nature && <Label ton="inkMuted">{l.nature}</Label>}
-        </View>
-        {marque && (
-          <View style={[styles.marque, { backgroundColor: p.ink }]}>
-            <Label couleur={p.surface}>{marque}</Label>
-          </View>
-        )}
-        <T variant="small" couleur={c.etat === 'en_cours' ? p.signalHover : c.attendue ? p.ink : sansObjet ? p.lineStrong : p.inkMuted}>
-          {l.quand}
-        </T>
-        {organe && !sansObjet && <T variant="caption" ton="inkMuted">{organe}</T>}
-        {c.conclusion && !sansObjet && (
-          <View style={[styles.conclusion, { backgroundColor: p.surfaceSoft }]}>
-            <T variant="small">{c.conclusion}</T>
-          </View>
-        )}
-      </>
-    );
-    return (
-      <View style={styles.rangee} accessibilityRole="none">
-        <View style={styles.colonne}>
-          <Trait trait={l.trait} haut={12} p={p} />
-          <Point etat={c.etat} attendue={c.attendue} p={p} />
-        </View>
-        {sansObjet ? (
-          <View style={[styles.corps, { opacity: 0.8 }]}>{contenu}</View>
-        ) : (
-          <Pressable accessibilityRole="link" accessibilityLabel={`Étape ${c.libelle}, ${l.quand}`} onPress={() => props.onEtape(c.cle)} style={styles.corps}>
-            {contenu}
-          </Pressable>
-        )}
-      </View>
-    );
-  }
-
-  if (l.type === 'attente') {
-    return (
-      <View style={styles.rangee}>
-        <View style={styles.colonne}>
-          <Trait trait={l.trait} p={p} />
-        </View>
-        <T variant="caption" ton="inkMuted" style={styles.attente}>
-          {l.libelle}
-        </T>
-      </View>
-    );
-  }
-
-  if (l.type === 'deviation') {
-    const d = l.deviation;
-    return (
-      <View style={styles.rangee}>
-        <View style={styles.colonne}>
-          <Trait trait={l.trait} p={p} />
-          {/* détour : le coude part du rail (première déviation), y revient si le parcours reprend */}
-          <View style={[styles.voie, { backgroundColor: p.ink, top: l.premiere ? 10 : 0, bottom: l.derniere ? 14 : 0 }]} />
-          {l.premiere && <View style={[styles.coudeHaut, { borderColor: p.ink }]} />}
-          {l.derniere && d.effet !== 'termine' && <View style={[styles.coudeBas, { borderColor: p.ink }]} />}
-          <View style={[styles.pastilleDeviation, { backgroundColor: p.surface, borderColor: p.ink }]}>
-            <IconeDeviation couleur={p.ink} taille={12} />
-          </View>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Voir la déviation : ${d.libelle}`}
-          onPress={() => props.onDeviation(d)}
-          style={[styles.carteDeviation, { borderColor: p.lineFaint, backgroundColor: p.surfaceRaised }]}
-        >
-          <View style={styles.entreDeux}>
-            <T variant="heading" style={{ flex: 1, fontSize: 15, lineHeight: 21 }}>
-              {d.libelle}
-            </T>
-            <T variant="caption" ton="inkMuted">{d.debut ? date(d.debut) : 'Date non publiée'}</T>
-          </View>
-          {d.conclusion && <T variant="small" ton="inkSoft">{d.conclusion}</T>}
-          <T variant="caption" ton="inkMuted">{`${l.effet} · détails`}</T>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (l.type === 'branche') {
-    return (
-      <View style={styles.rangee}>
-        <View style={styles.colonne}>
-          <Trait trait={l.trait} p={p} />
-          <View style={[styles.raccourci, { borderColor: p.inkMuted }]} />
-        </View>
-        <View style={styles.texteBranche}>
-          <T variant="small" ton="inkSoft">{l.libelle}</T>
-          <T variant="small" ton="inkMuted">{l.vers}</T>
-        </View>
-      </View>
-    );
-  }
-
+  const c = styleCercle(n, p);
+  const taille = mineur ? MINEUR : CERCLE;
+  const aVenir = n.rendu === 'a_venir' || n.rendu === 'inconnu';
+  const description = [n.cas.libelle, MARQUE[n.rendu], n.lignes[0], n.date].filter(Boolean).join(', ');
   return (
     <View style={styles.rangee}>
       <View style={styles.colonne}>
-        <Trait trait={l.trait} p={p} />
-        <View style={[styles.branchement, { backgroundColor: p.inkMuted }]} />
+        <View style={[styles.cercleZone, { width: CERCLE, height: CERCLE }]}>
+          {n.rendu === 'actuel' && <Halo couleur={p.signal} taille={CERCLE} />}
+          <View
+            style={[
+              styles.cercle,
+              { width: taille, height: taille, backgroundColor: c.backgroundColor, borderColor: c.borderColor, borderStyle: c.borderStyle },
+            ]}
+          >
+            <Icone nom={n.icone} couleur={c.icone} taille={mineur ? 12 : 14} />
+          </View>
+        </View>
+        {n.trait !== 'aucun' && (
+          <View
+            style={[
+              styles.trait,
+              n.trait === 'plein'
+                ? { backgroundColor: p.lineStrong }
+                : { borderLeftWidth: 2, borderStyle: 'dashed', borderColor: p.lineFaint, backgroundColor: 'transparent' },
+            ]}
+          />
+        )}
       </View>
-      <View style={styles.enfants}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: ouvert }}
-          onPress={() => props.onDeplier(l.etape)}
-          style={[styles.deplier, { borderColor: p.lineStrong }]}
-        >
-          <Label ton="ink">{`${ouvert ? 'Replier' : 'Déplier'} : ${nombreRattaches(l.dossiers.length)}`}</Label>
-        </Pressable>
-        {ouvert &&
-          l.dossiers.map((k) => (
-            <Pressable
-              key={k.dossier.id}
-              accessibilityRole="link"
-              accessibilityLabel={`Dossier rattaché : ${k.dossier.titre}`}
-              onPress={() => props.onDossier(k.dossier.id)}
-              style={[styles.enfant, { backgroundColor: p.surfaceRaised }]}
-            >
-              <T variant="heading" style={{ fontSize: 15, lineHeight: 21 }}>
-                {k.dossier.titre}
-              </T>
-              <T variant="caption" ton="inkMuted">Lien établi par un document cité par les deux dossiers</T>
-            </Pressable>
-          ))}
+      <View style={[styles.corps, n.trait === 'aucun' && { paddingBottom: 0 }]}>
+        <Appui accessibilityRole="link" accessibilityLabel={`Étape ${description}`} onPress={() => onEtape(n.cas.cle)} style={styles.titreZone}>
+          <T
+            variant={mineur ? 'small' : 'heading'}
+            couleur={mineur || aVenir ? p.inkMuted : p.ink}
+            style={[{ flex: 1 }, mineur ? { fontSize: 15 } : { fontSize: 16, lineHeight: 22 }]}
+          >
+            {n.cas.libelle}
+          </T>
+          <T variant="data" ton="inkMuted" style={styles.date}>{n.date}</T>
+        </Appui>
+        {n.evenements.map((e) => (
+          <Appui
+            key={e.cle}
+            accessibilityRole="button"
+            accessibilityLabel={`Voir l’événement : ${e.deviation.libelle}`}
+            onPress={() => onDeviation(e.deviation)}
+            style={[styles.etiquette, { backgroundColor: p.signalSoft }]}
+          >
+            <Icone nom={e.icone} couleur={p.signalHover} taille={12} />
+            <Label couleur={p.signalHover} style={styles.etiquetteTexte}>{`${e.libelle} ›`}</Label>
+          </Appui>
+        ))}
+        {n.lignes.map((l, i) => (
+          <T key={i} variant="small" ton={i === 0 && n.cas.conclusion ? 'inkSoft' : 'inkMuted'}>{l}</T>
+        ))}
+        {n.enfants.map((k) => (
+          <Appui
+            key={k.dossier.id}
+            accessibilityRole="link"
+            accessibilityLabel={`Dossier rattaché : ${k.dossier.titre}${resumeRattache(k) ? `. ${resumeRattache(k)}` : ''}`}
+            onPress={() => onDossier(k.dossier.id)}
+            style={[styles.enfant, { borderColor: p.line }]}
+          >
+            <T variant="small" style={styles.gras}>{k.dossier.titre}</T>
+            {resumeRattache(k) && <T variant="caption" ton="inkSoft">{resumeRattache(k)}</T>}
+            <T variant="caption" ton="inkMuted">{`Dossier rattaché${k.etapeLibelle ? ` · ${k.etapeLibelle}` : ''} ›`}</T>
+          </Appui>
+        ))}
       </View>
     </View>
   );
 }
 
-function Legende({ comparer }: { comparer: boolean }) {
-  const p = usePalette();
-  const items: [string, string, boolean][] = [
-    ['faite', 'Faite', false],
-    ['en_cours', 'En cours', false],
-    ['a_venir', 'À venir', false],
-    ['attendue', 'Attendue', true],
-    ['inconnu', 'Donnée non publiée', false],
-    ...(comparer ? ([['sans_objet', 'Sans objet ici', false]] as [string, string, boolean][]) : []),
+function Legende({ p }: { p: Palette }) {
+  const items: [string, 'solid' | 'dashed' | 'dotted'][] = [
+    ['prévue', 'solid'],
+    ['si…', 'dashed'],
+    ['facultative', 'dotted'],
   ];
   return (
     <View style={styles.legende}>
-      {items.map(([etat, libelle, attendue]) => (
-        <View key={etat} style={styles.itemLegende}>
-          <View style={styles.pointLegende}>
-            <Point etat={etat} attendue={attendue} p={p} />
-          </View>
-          <T variant="caption" ton="inkSoft">{libelle}</T>
+      {items.map(([libelle, bordure]) => (
+        <View key={libelle} style={styles.itemLegende}>
+          <View style={[styles.pointLegende, { borderColor: p.lineStrong, borderStyle: bordure }]} />
+          <T variant="caption" ton="inkMuted">{libelle}</T>
         </View>
       ))}
       <View style={styles.itemLegende}>
-        <IconeDeviation couleur={p.ink} taille={14} />
-        <T variant="caption" ton="inkSoft">Déviation</T>
+        <View style={[styles.pointLegende, { borderColor: p.signal }]} />
+        <T variant="caption" ton="inkMuted">événement</T>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bloc: { gap: space[4] },
-  entete: { gap: space[3], padding: 14, borderRadius: radius.md, borderWidth: 1 },
-  ligneEntete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3] },
-  separe: { paddingTop: space[3], borderTopWidth: StyleSheet.hairlineWidth },
-  info: { width: 36, height: 36, borderRadius: radius.full, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  rangee: { flexDirection: 'row', minWidth: 0 },
-  colonne: { width: RAIL, position: 'relative' },
-  trait: { position: 'absolute', left: 9, width: 2, bottom: 0 },
-  point: { position: 'absolute', left: 2, top: 4, width: 16, height: 16, borderRadius: radius.full },
-  corps: { flex: 1, minWidth: 0, gap: space[1], paddingBottom: 22 },
-  titreEtape: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: space[2] },
-  lieu: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 6 },
-  marque: { alignSelf: 'flex-start', paddingHorizontal: space[2], borderRadius: radius.full },
-  conclusion: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.sm },
-  attente: { paddingBottom: 18, marginTop: -10, fontStyle: 'italic' },
-  voie: { position: 'absolute', left: 29, width: 2 },
-  coudeHaut: {
-    position: 'absolute', left: 9, top: -6, width: 21, height: 18,
-    borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: 12,
-  },
-  coudeBas: {
-    position: 'absolute', left: 9, bottom: 0, width: 21, height: 16,
-    borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: 12,
-  },
-  pastilleDeviation: {
-    position: 'absolute', left: 18, top: 10, width: 24, height: 24, borderRadius: radius.full, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  carteDeviation: { flex: 1, minWidth: 0, marginLeft: 10, marginBottom: 14, gap: space[1], padding: space[3], borderRadius: radius.md, borderWidth: 1 },
-  entreDeux: { flexDirection: 'row', justifyContent: 'space-between', gap: space[2] },
-  raccourci: {
-    position: 'absolute', left: 10, top: 2, width: 20, height: 14,
-    borderTopWidth: 1, borderRightWidth: 1, borderTopRightRadius: 10,
-  },
-  texteBranche: { flex: 1, minWidth: 0, gap: 2, paddingLeft: 10, paddingBottom: 18 },
-  branchement: { position: 'absolute', left: 10, top: 22, width: 20, height: 1 },
-  enfants: { flex: 1, minWidth: 0, gap: space[2], paddingLeft: 10, paddingBottom: 18 },
-  deplier: {
-    alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 14,
-    borderRadius: radius.full, borderWidth: 1, borderStyle: 'dashed',
-  },
-  enfant: { gap: space[1], padding: space[3], borderRadius: radius.md },
-  legende: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, columnGap: space[4] },
+  bloc: { gap: space[3] },
+  filtre: { flexDirection: 'row', alignItems: 'center', gap: space[3], paddingVertical: 10, paddingHorizontal: space[3], borderRadius: radius.lg },
+  gras: { fontFamily: fonts.sansSemiBold },
+  rangee: { flexDirection: 'row', gap: space[3], minWidth: 0 },
+  colonne: { width: CERCLE, alignItems: 'center' },
+  cercleZone: { alignItems: 'center', justifyContent: 'center' },
+  cercle: { borderRadius: radius.full, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  trait: { flex: 1, width: 2, minHeight: 14 },
+  corps: { flex: 1, minWidth: 0, gap: 3, paddingTop: 4, paddingBottom: space[4] },
+  titreZone: { flexDirection: 'row', alignItems: 'flex-start', gap: space[2], minHeight: 28 },
+  date: { paddingTop: 3, textAlign: 'right' },
+  etiquette: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28, paddingHorizontal: 7, borderRadius: 2 },
+  etiquetteTexte: { fontSize: 12, lineHeight: 16, fontFamily: fonts.sansSemiBold },
+  enfant: { alignSelf: 'stretch', gap: 2, marginTop: 6, paddingVertical: space[2], paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, minHeight: 44 },
+  legende: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 6, columnGap: 14 },
   itemLegende: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pointLegende: { width: 20, height: 24, position: 'relative' },
+  pointLegende: { width: 12, height: 12, borderRadius: radius.full, borderWidth: 1.5 },
 });

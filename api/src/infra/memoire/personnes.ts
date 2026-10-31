@@ -71,6 +71,14 @@ export class PersonnesMemoire implements PersonnesRepository {
     return paginer(elements, pagination, Math.max(q?.total ?? 0, elements.length));
   }
 
+  async question(id: string) {
+    const { exemples } = await this.donnees;
+    const fiche = premier(exemples.ConsulterQuestion, (e) => e.output.id === id)?.output;
+    if (!fiche) return null;
+    const { jour: _jour, ...question } = fiche;
+    return question;
+  }
+
   async actesSurLeDossier(personne: string, dossier: string) {
     const { exemples } = await this.donnees;
     const e = premier(exemples.ExpliquerVote, (x) => x.input.personne === personne && x.output.scrutin.dossier?.id === dossier)?.output;

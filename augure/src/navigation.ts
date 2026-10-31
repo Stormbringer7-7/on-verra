@@ -53,11 +53,14 @@ export type Pages = {
   Article: { article: string; version?: string; comparaison?: 'precedente' | 'depose' };
   Amendement: { id: string };
   Scrutin: { id: string };
+  /** Vote à main levée d'un amendement (non nominatif : variante de l'écran Scrutin). */
+  VoteMainLevee: { amendement: string };
   PourquoiVote: { scrutin: string; personne: string };
   Personne: { id: string; onglet?: OngletPersonne };
   Institution: { institution: TypeInstitution };
   Representant: { id: string };
   Departement: { code: string; scrutin?: string };
+  Question: { id: string };
 };
 
 declare global {
@@ -99,11 +102,13 @@ export const liens: LinkingOptions<Pages> = {
       Article: 'article/:article',
       Amendement: 'amendement/:id',
       Scrutin: 'scrutin/:id',
+      VoteMainLevee: 'amendement/:amendement/vote',
       PourquoiVote: 'scrutin/:scrutin/pourquoi/:personne',
       Personne: 'personne/:id',
       Institution: 'institution/:institution',
       Representant: 'representant/:id',
       Departement: 'departement/:code',
+      Question: 'question/:id',
     },
   },
 };
@@ -136,11 +141,13 @@ export function useAller() {
         empiler('Article', { article, ...options }),
       amendement: (id: string) => empiler('Amendement', { id }),
       scrutin: (id: string) => empiler('Scrutin', { id }),
+      voteMainLevee: (amendement: string) => empiler('VoteMainLevee', { amendement }),
       pourquoiVote: (scrutin: string, personne: string) => empiler('PourquoiVote', { scrutin, personne }),
       personne: (id: string, onglet?: OngletPersonne) => empiler('Personne', onglet ? { id, onglet } : { id }),
       institution: (institution: TypeInstitution) => empiler('Institution', { institution }),
       representant: (id: string) => empiler('Representant', { id }),
       departement: (code: string, scrutin?: string) => empiler('Departement', scrutin ? { code, scrutin } : { code }),
+      question: (id: string) => empiler('Question', { id }),
       onglet: <O extends keyof Onglets>(screen: O, params?: Onglets[O]) =>
         navigation.navigate('Onglets', { screen, params } as NavigatorScreenParams<Onglets>),
       retour: () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Onglets', { screen: 'Accueil' })),

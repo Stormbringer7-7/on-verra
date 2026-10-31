@@ -216,6 +216,14 @@ describe.skipIf(!URL_LECTURE)('PgScrutins (base réelle, lecture seule)', () => 
     expect(f1992.objet).toMatchObject({ type: 'amendement', amendement: { id: amendement!.id, chambre: 'AN' } });
   });
 
+  it('suppression : 9083 (amendement 719 « Supprimer cet article. », art. 15, rejeté) ; 9067 (« Supprimer l’alinéa 1. ») : non', async () => {
+    const f = (await depot.fiche(await entite('AN', 'scrutin', 'VTANR5L17V9083')))!;
+    expect(f.scrutin).toMatchObject({ numero: '9083', date: '2026-10-23', sort: 'rejeté', adopte: false });
+    expect(f.objet).toMatchObject({ type: 'amendement', amendement: { numero: '719' }, article: { numero: '15' }, suppression: true });
+    const alinea = (await depot.fiche(await entite('AN', 'scrutin', 'VTANR5L17V9067')))!;
+    expect(alinea.objet).toMatchObject({ type: 'amendement', amendement: { numero: '712' }, suppression: false });
+  });
+
   it('derniers écarts : votes à l’inverse du groupe, du plus récent au plus ancien', async () => {
     const soc = (await depot.fiche(s7259))!.votesDifferents.personnes.find((p) => p.personne.groupe?.abrege === 'SOC')!;
     const ecarts = await depot.derniersEcarts(soc.personne.id, 50);
@@ -233,5 +241,24 @@ describe.skipIf(!URL_LECTURE)('PgScrutins (base réelle, lecture seule)', () => 
     expect(await depot.surAmendement(INCONNU)).toBeNull();
     expect(await depot.duDossier('x')).toEqual([]);
     expect(await depot.derniersEcarts(INCONNU, 5)).toEqual([]);
+  });
+
+  it('jours avec un scrutin public : croissants, dans la période, ceux de entre()', async () => {
+    const jours = await depot.jours('2025-10-01', '2025-10-31');
+    expect(jours).toEqual([...new Set(jours)].sort());
+    expect(jours.every((j) => j >= '2025-10-01' && j <= '2025-10-31')).toBe(true);
+    const votes = await depot.entre('2025-10-01', '2025-10-31', 10_000);
+    expect(jours).toEqual([...new Set(votes.map((v) => v.date))].sort());
+  });
+
+  it('jours filtrés (Accueil) : chambre du scrutin, dossier cité ; liste vide : aucun', async () => {
+    expect(await depot.jours('2026-10-01', '2026-10-31', { chambres: ['SENAT'], dossiers: null })).toEqual([
+      '2026-10-13', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-26', '2026-10-27', '2026-10-28',
+    ]);
+    const votes = await depot.entre('2026-10-01', '2026-10-31', 10_000);
+    const dossier = votes.find((v) => v.dossier)!.dossier!.id;
+    const attendus = [...new Set(votes.filter((v) => v.dossier?.id === dossier).map((v) => v.date))].sort();
+    expect(await depot.jours('2026-10-01', '2026-10-31', { chambres: null, dossiers: [dossier] })).toEqual(attendus);
+    expect(await depot.jours('2026-10-01', '2026-10-31', { chambres: null, dossiers: [] })).toEqual([]);
   });
 });
