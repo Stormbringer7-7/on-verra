@@ -225,6 +225,10 @@ erDiagram
         text modele
         text version_prompt
         timestamptz cree_le
+        text empreinte
+        uuid version_de FK
+        text consigne
+        jsonb controle
     }
     preuve {
         uuid affirmation_id PK, FK
@@ -250,6 +254,7 @@ erDiagram
     fusion }o--|| entite : "absorbee_id"
     cas_revue }o--o| enregistrement_source : "source_id"
     affirmation }o--|| entite : "sujet_id"
+    affirmation }o--o| affirmation : "version_de"
     preuve }o--|| affirmation : "affirmation_id"
     preuve }o--|| enregistrement_source : "source_id"
 ```
@@ -814,7 +819,89 @@ Banc de revue (`src/banc/`) : un lot d'un objet de revue, ses éléments, les r�
 relecteurs, l'issue de chaque élément et les travaux de génération.
 
 <!-- uml:revue -->
-(à régénérer depuis le schéma migré : `python -m src uml`)
+```mermaid
+erDiagram
+    relecture_synthese {
+        text synthese_id PK
+        text empreinte PK
+        text lot
+        text verdict
+        text commentaire
+        text juge_par
+        timestamptz juge_le
+    }
+    lot_revue {
+        uuid lot_id PK
+        text objet
+        text mode
+        text_array relecteurs
+        int8 graine
+        jsonb filtre
+        text cree_par
+        timestamptz cree_le
+        text statut
+    }
+    element_lot {
+        uuid element_id PK
+        uuid lot_id FK
+        int rang
+        text sujet_type
+        uuid sujet_id
+        text cas_cle FK
+        uuid affirmation_id FK
+        text empreinte
+    }
+    reponse_revue {
+        uuid reponse_id PK
+        uuid element_id FK
+        text relecteur
+        text empreinte
+        jsonb valeurs
+        jsonb requete
+        text signature
+        timestamptz recu_le
+    }
+    issue_revue {
+        uuid element_id PK, FK
+        text empreinte
+        jsonb issue
+        text par
+        text arbitre
+        text motif
+        text signature
+        timestamptz tranche_le
+    }
+    travail_generation {
+        uuid travail_id PK
+        text objet
+        text sujet_type
+        uuid sujet_id
+        uuid element_id FK
+        uuid precedente FK
+        text consigne
+        text statut
+        text poste
+        timestamptz bail_jusqu_a
+        int tentatives
+        uuid resultat FK
+        text demande_par
+        timestamptz demande_le
+        timestamptz rendu_le
+    }
+    nonce_revue {
+        text cle PK
+        text nonce PK
+        timestamptz expire_le
+    }
+    element_lot }o--o| affirmation : "affirmation_id"
+    element_lot }o--o| cas_revue : "cas_cle"
+    element_lot }o--|| lot_revue : "lot_id"
+    reponse_revue }o--|| element_lot : "element_id"
+    issue_revue }o--|| element_lot : "element_id"
+    travail_generation }o--o| element_lot : "element_id"
+    travail_generation }o--o| affirmation : "precedente"
+    travail_generation }o--o| affirmation : "resultat"
+```
 <!-- /uml -->
 
 ## 4. Des données brutes au canon, source par source
