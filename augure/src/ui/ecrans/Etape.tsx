@@ -1,31 +1,59 @@
-// Une case du parcours (canevas « Étape » et page « Les étapes des deux dossiers ») : en clair,
-// chiffres, ce que l'étape a changé (article ← amendement, avec le statut de l'attribution), votes,
-// « Qui intervient » avec un extrait de ce qui a été dit, documents officiels, étapes voisines.
-// Query `ConsulterEtape { dossier, cle }`. Sans aucune synthèse pour les changements, la mention
-// « Pas de synthèse disponible » est faite une fois pour la section, pas sous chaque article.
+// Une case du parcours (planche « Étape », 22 sortes en 6 familles : navette, accord, fin,
+// initiative, contrôle, Gouvernement). Mêmes blocs pour toutes : bande d'icônes du parcours avec
+// l'étape affichée, en-tête (lieu, titre, état, dates), chiffres clés, jauge (délai ou majorité),
+// personne, lien d'événement (déviation, dossier rattaché), fourche du droit commun, note de règle,
+// lignes (ce qu'elle a changé, votes, documents), étapes voisines. La sorte (clé et lieu de la case,
+// components/etape/regles.ts, précisée par le modèle du dossier) choisit les blocs ; les valeurs sont
+// celles de `ConsulterEtape` : les personnes publiées de l'étape (rapporteurs, président et membres
+// de la CMP, auteurs, Premier ministre) ; ce que la fiche ne publie pas est dit indisponible.
+// Une déviation s'ouvre dans la feuille Événement (FeuilleDeviation).
 
 import { RouteProp, useRoute } from '@react-navigation/native';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Linking, StyleSheet, View } from 'react-native';
 
-import { ConsulterEtape, type ChangementEtape, type DeviationParcours, type FicheEtape, type Intervenant } from '@/core';
+import { ConsulterEtape, type ChangementEtape, type DeviationParcours, type FicheEtape, type Intervenant, type PersonneEtape } from '@/core';
 import { useAller, type Pages } from '../../navigation';
-import { Action, BoutonSecondaire, IconeDeviation, Label, T } from '../components/base';
-import { BarreDossierVue } from '../components/commun/RappelDossier';
+import { Action, Label, T } from '../components/base';
 import { FeuilleDeviation } from '../components/commun/FeuilleDeviation';
 import { Signaler } from '../components/commun/Signaler';
 import { Source } from '../components/commun/Source';
-import { aSynthese, aucuneSynthese, casesVisibles, EFFET_DEVIATION, NATURE_ETAPE } from '../components/commun/statuts';
+import { aSynthese, aucuneSynthese, casesVisibles, NATURE_ETAPE, quandEtape } from '../components/commun/statuts';
 import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { Carte, Colonnes, LienExterne, Ligne, ListeChiffres, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
+import { Colonnes, Requete, Section } from '../components/dossiers/blocs';
 import { ExtraitVue, LigneScrutin, OrateurVue, OrigineVue } from '../components/dossiers/elements';
-import { ETAT_CASE, LIEU, titreOrigine, TYPE_DOCUMENT } from '../components/dossiers/presentation';
+import { ETAT_CASE, LIEU, nomOrateur, titreOrigine, TYPE_DOCUMENT } from '../components/dossiers/presentation';
+import {
+  BandeParcours,
+  ChiffresCles,
+  EnteteEtape,
+  FourcheVue,
+  JaugeVue,
+  LienEvenement,
+  LigneEtape,
+  Lignes,
+  Note,
+  PersonneBloc,
+  PersonneIndisponible,
+  Voisines,
+} from '../components/etape/blocs';
+import {
+  bandeParcours,
+  definitionEtape,
+  fourcheEtape,
+  iconeDeviation,
+  jaugesEtape,
+  membresEtape,
+  personnesAttendues,
+  sorteEtape,
+} from '../components/etape/regles';
+import { Apparition } from '../components/mouvement';
 import { sousLeDossier } from '../ariane';
 import { Ecran } from '../components/Ecran';
-import { date } from '../format';
+import { capitale, date, jourMois } from '../format';
 import { useCommand } from '../hooks/core';
 import { usePalette } from '../theme/ThemeProvider';
-import { radius, space } from '../theme/tokens';
+import { space } from '../theme/tokens';
 
 export function Etape() {
   const { dossier, cle } = useRoute<RouteProp<Pages, 'Etape'>>().params;
@@ -38,107 +66,124 @@ export function Etape() {
   );
 }
 
-function ContenuEtape({ fiche: f }: { fiche: FicheEtape }) {
-  const p = usePalette();
+/** Jour de référence des durées (« depuis le 17/10/2026 · 7 jours ») : aujourd'hui, par défaut. */
+const aujourdhui = () => new Date().toISOString().slice(0, 10);
+
+export function ContenuEtape({ fiche: f, jour = aujourdhui() }: { fiche: FicheEtape; jour?: string }) {
   const aller = useAller();
   const [deviation, setDeviation] = useState<DeviationParcours | null>(null);
   const c = f.case;
   const dossier = f.barre.dossier.id;
+  const sorte = sorteEtape(c.cle, c.lieu);
+  const modele = f.modele?.cle ?? null;
+  const def = definitionEtape(sorte, modele);
+  const membres = membresEtape(f.personnes);
   const sur = casesVisibles(f.barre.cases).length;
+  const ou = f.organe?.nom ?? (c.lieu ? LIEU[c.lieu] : null);
   const nature = NATURE_ETAPE[c.nature];
-  const statut = [
-    ETAT_CASE[c.etat],
-    c.debut ? `${c.fin && c.fin !== c.debut ? `du ${date(c.debut)} au ${date(c.fin)}` : `le ${date(c.debut)}`}` : null,
-    c.conclusion,
-    c.programmeeLe ? `programmée le ${date(c.programmeeLe)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const jauges = jaugesEtape(sorte, c, f.votes, jour, modele);
+  const fourche = fourcheEtape(sorte, c);
+
+  // Blocs de la colonne principale, dans l'ordre de la planche ; chacun apparaît en cascade.
+  const blocs: ReactNode[] = [
+    <BandeParcours
+      key="bande"
+      pas={bandeParcours(f.barre.cases, c.cle)}
+      libelle={`Parcours du dossier : étape ${f.numero} sur ${sur}, ${c.libelle}`}
+      onPas={(cle) => aller.etape(dossier, cle)}
+    />,
+    <View key="entete" style={{ gap: space[2] }}>
+      <EnteteEtape
+        icone={def.icone}
+        surtitre={`Étape ${f.numero} sur ${sur}${ou ? ` · ${ou}` : ''}`}
+        titre={c.libelle}
+        statut={c.conclusion ? capitale(c.conclusion) : ETAT_CASE[c.etat]}
+        quand={quandEtape(c, jour)}
+      />
+      {nature && <T variant="caption" ton="inkMuted">{`${nature} dans le droit commun : elle peut ne pas avoir lieu.`}</T>}
+      {c.programmeeLe && <T variant="caption" ton="inkMuted">{`Inscrite à l’ordre du jour le ${date(c.programmeeLe)} : une échéance, pas un acte accompli.`}</T>}
+    </View>,
+    <ChiffresCles key="chiffres" chiffres={f.chiffres} />,
+    ...jauges.map((j) => <JaugeVue key={`jauge-${j.libelle}`} jauge={j} />),
+    ...personnesAttendues(def, f.personnes).flatMap(({ role, trouvees }) =>
+      trouvees.length === 0
+        ? [<PersonneIndisponible key={`personne-${role}`} role={role} />]
+        : trouvees.map((x, i) => <PersonneEtapeVue key={`personne-${role}-${i}`} role={role} personne={x} />),
+    ),
+    membres.length > 0 && (
+      <Note key="membres">{`${membres.length} membre${membres.length > 1 ? 's' : ''} titulaire${membres.length > 1 ? 's' : ''} publié${membres.length > 1 ? 's' : ''} : ${membres.map((m) => nomOrateur(m.qui)).join(', ')}.`}</Note>
+    ),
+    ...f.deviations.map((d, i) => (
+      <LienEvenement
+        key={`deviation-${d.cle}-${i}`}
+        icone={iconeDeviation(d.cle, d.effet)}
+        libelle={d.libelle}
+        fin={d.debut ? `${jourMois(d.debut)} ›` : '›'}
+        accessibilityLabel={`Voir l’événement : ${d.libelle}`}
+        onPress={() => setDeviation(d)}
+      />
+    )),
+    ...f.enfants.map((k) => (
+      <LienEvenement
+        key={`enfant-${k.dossier.id}`}
+        icone="rejoint"
+        libelle={k.dossier.titre}
+        fin="›"
+        accessibilityLabel={`Dossier rattaché à cette étape : ${k.dossier.titre}`}
+        onPress={() => aller.dossier(k.dossier.id)}
+      />
+    )),
+    fourche && <FourcheVue key="fourche" fourche={fourche} />,
+    def.note && <Note key="note">{def.note}</Note>,
+    <SyntheseVue key="en-clair" synthese={f.resume} titre="En clair" />,
+    f.changements.length > 0 && (
+      <Lignes key="changements" titre="Ce qu’elle a changé">
+        {aucuneSynthese(f.changements.map((ch) => ch.resume)) && <SyntheseVue synthese={null} />}
+        {f.changements.map((ch, i) => (
+          <LigneChangement key={`${ch.article.id}-${i}`} changement={ch} />
+        ))}
+      </Lignes>
+    ),
+    f.votes.length > 0 && (
+      <Lignes key="votes" titre="Votes de l’étape">
+        {f.votes.map((s) => (
+          <LigneScrutin key={s.id} scrutin={s} />
+        ))}
+      </Lignes>
+    ),
+    <Lignes key="documents" titre="Documents">
+      {f.documents.length === 0 && <Note>Aucun document publié pour l’instant.</Note>}
+      {f.documents.map((d) => (
+        <LigneEtape
+          key={d.id}
+          libelle={d.titre}
+          detail={[TYPE_DOCUMENT[d.type], d.date ? date(d.date) : null, d.url ? null : 'adresse non publiée'].filter(Boolean).join(' · ')}
+          fin="↗"
+          onPress={d.url ? () => void Linking.openURL(d.url!).catch(() => {}) : undefined}
+          accessibilityLabel={`${d.titre}, ouvrir la page officielle`}
+        />
+      ))}
+    </Lignes>,
+    <Voisines
+      key="voisines"
+      precedente={f.precedente?.libelle ?? null}
+      suivante={f.suivante?.libelle ?? null}
+      onPrecedente={() => f.precedente && aller.etape(dossier, f.precedente.cle)}
+      onSuivante={() => f.suivante && aller.etape(dossier, f.suivante.cle)}
+    />,
+  ].filter(Boolean);
 
   return (
     <>
-      <BarreDossierVue barre={f.barre} />
-      <View style={{ gap: space[2] }}>
-        <Label>{`Étape ${f.numero} sur ${sur}${f.organe ? ` · ${f.organe.nom}` : c.lieu ? ` · ${LIEU[c.lieu]}` : ''}`}</Label>
-        <TitreEcran>{c.libelle}</TitreEcran>
-        <Label couleur={c.courante ? p.signal : p.ink}>{statut}</Label>
-        <T variant="caption" ton="inkMuted">
-          {nature ? `${nature} dans le droit commun : elle peut ne pas avoir lieu.` : 'Obligatoire dans le droit commun.'}
-        </T>
-        {c.programmeeLe && <T variant="caption" ton="inkMuted">Date inscrite à l’ordre du jour : une échéance, pas un acte accompli.</T>}
-      </View>
       <Colonnes
         principale={
-          <>
-            <Carte>
-              <SyntheseVue synthese={f.resume} titre="En clair" />
-            </Carte>
-            {f.deviations.length > 0 && (
-              <Section titre="Déviations à cette étape">
-                {f.deviations.map((d, i) => (
-                  <Pressable
-                    key={`${d.cle}-${i}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Voir la déviation : ${d.libelle}`}
-                    onPress={() => setDeviation(d)}
-                    style={[styles.deviation, { borderColor: p.lineFaint, backgroundColor: p.surfaceRaised }]}
-                  >
-                    <View style={styles.titreDeviation}>
-                      <IconeDeviation couleur={p.ink} />
-                      <T variant="heading" style={{ flex: 1 }}>{d.libelle}</T>
-                    </View>
-                    {d.conclusion && <T variant="small" ton="inkSoft">{d.conclusion}</T>}
-                    <T variant="caption" ton="inkMuted">{`${d.debut ? `${date(d.debut)} · ` : ''}${EFFET_DEVIATION[d.effet]}`}</T>
-                  </Pressable>
-                ))}
-              </Section>
-            )}
-            {f.enfants.length > 0 && (
-              <Section titre="Dossiers rattachés à cette étape">
-                {f.enfants.map((k) => (
-                  <Ligne key={k.dossier.id} onPress={() => aller.dossier(k.dossier.id)} accessibilityLabel={`Dossier rattaché : ${k.dossier.titre}`}>
-                    <T variant="heading">{k.dossier.titre}</T>
-                    <T variant="caption" ton="inkMuted">Lien établi par un document publié dans les deux dossiers</T>
-                  </Ligne>
-                ))}
-              </Section>
-            )}
-            <FeuilleDeviation
-              deviation={deviation}
-              etape={deviation ? c : null}
-              rattache={f.enfants[0] ?? null}
-              onFermer={() => setDeviation(null)}
-              onEtape={() => setDeviation(null)}
-              onDossier={(id) => {
-                setDeviation(null);
-                aller.dossier(id);
-              }}
-            />
-            {f.chiffres.length > 0 && <ListeChiffres chiffres={f.chiffres} />}
-            {f.changements.length > 0 && (
-              <Section titre="Ce que cette étape a changé">
-                {aucuneSynthese(f.changements.map((ch) => ch.resume)) && <SyntheseVue synthese={null} titre="En clair" />}
-                {f.changements.map((ch, i) => (
-                  <LigneChangement key={`${ch.article.id}-${i}`} changement={ch} />
-                ))}
-              </Section>
-            )}
-            {f.votes.length > 0 && (
-              <Section titre="Votes de l’étape">
-                {f.votes.map((s) => (
-                  <LigneScrutin key={s.id} scrutin={s} />
-                ))}
-              </Section>
-            )}
-            <View style={styles.voisines} accessibilityLabel="Étapes voisines">
-              {f.precedente && (
-                <BoutonSecondaire onPress={() => aller.etape(dossier, f.precedente!.cle)}>{`← ${f.precedente.libelle}`}</BoutonSecondaire>
-              )}
-              {f.suivante && (
-                <BoutonSecondaire onPress={() => aller.etape(dossier, f.suivante!.cle)}>{`${f.suivante.libelle} →`}</BoutonSecondaire>
-              )}
-            </View>
-          </>
+          <View style={{ gap: 18 }}>
+            {blocs.map((b, i) => (
+              <Apparition key={i} rang={Math.min(i, 4)}>
+                {b}
+              </Apparition>
+            ))}
+          </View>
         }
         laterale={
           <>
@@ -148,23 +193,8 @@ function ContenuEtape({ fiche: f }: { fiche: FicheEtape }) {
                 <LigneIntervenant key={i} intervenant={it} />
               ))}
               {f.quiIntervient.total > 0 && (
-                <Action onPress={() => aller.discussions({ type: 'etape', dossier, cle: c.cle })}>
-                  {`Toutes les interventions (${f.quiIntervient.total}) →`}
-                </Action>
+                <Action onPress={() => aller.discussions({ type: 'etape', dossier, cle: c.cle })}>{`Toutes les interventions (${f.quiIntervient.total}) →`}</Action>
               )}
-            </Section>
-            <Section titre="Documents officiels">
-              {f.documents.length === 0 && <T ton="inkMuted">Aucun document publié pour l’instant.</T>}
-              {f.documents.map((d) => (
-                <View key={d.id} style={{ gap: 4 }}>
-                  <T>{`${d.titre}${d.date ? ` · ${date(d.date)}` : ''}`}</T>
-                  <View style={styles.sources}>
-                    <Label style={{ fontSize: 10 }}>{TYPE_DOCUMENT[d.type]}</Label>
-                    <LienExterne url={d.url}>Lire</LienExterne>
-                    <Source provenance={d.provenance} compact />
-                  </View>
-                </View>
-              ))}
             </Section>
             {c.provenance.length > 0 && (
               <View style={{ gap: 4 }}>
@@ -174,11 +204,46 @@ function ContenuEtape({ fiche: f }: { fiche: FicheEtape }) {
                 ))}
               </View>
             )}
+            {f.documents.length > 0 && (
+              <View style={{ gap: 4 }}>
+                <Label>Sources des documents</Label>
+                {f.documents.map((d) => (
+                  <Source key={d.id} provenance={d.provenance} compact />
+                ))}
+              </View>
+            )}
             <Signaler cible={{ type: 'etape', id: `${dossier}/${c.cle}` }} ecran="Etape" />
           </>
         }
       />
+      <FeuilleDeviation
+        deviation={deviation}
+        dossier={f.barre.dossier}
+        etape={deviation ? c : null}
+        rattache={f.enfants[0] ?? null}
+        onFermer={() => setDeviation(null)}
+        onEtape={() => setDeviation(null)}
+        onDossier={(id) => {
+          setDeviation(null);
+          aller.dossier(id);
+        }}
+      />
     </>
+  );
+}
+
+/** Personne publiée de l'étape : pastille de son groupe, ouvre sa fiche quand elle est reliée. */
+function PersonneEtapeVue({ role, personne: x }: { role: string; personne: PersonneEtape }) {
+  const aller = useAller();
+  const p = usePalette();
+  const ref = x.qui.type === 'personne' ? x.qui.personne : null;
+  return (
+    <PersonneBloc
+      nom={nomOrateur(x.qui)}
+      detail={x.role === 'auteur' ? `${role} · ${x.detail}` : x.detail}
+      couleur={ref?.groupe?.couleur ?? p.lineStrong}
+      onPress={ref ? () => aller.personne(ref.id) : undefined}
+    />
   );
 }
 
@@ -186,25 +251,30 @@ function ContenuEtape({ fiche: f }: { fiche: FicheEtape }) {
 function LigneChangement({ changement: ch }: { changement: ChangementEtape }) {
   const aller = useAller();
   return (
-    <Ligne>
-      <Action onPress={() => aller.article(ch.article.id)}>{`Art. ${ch.article.numero} · ${titreOrigine(ch.origine)} →`}</Action>
+    <View style={styles.changement}>
+      <LigneEtape
+        libelle={`Article ${ch.article.numero}`}
+        detail={titreOrigine(ch.origine)}
+        onPress={() => aller.article(ch.article.id)}
+        accessibilityLabel={`Article ${ch.article.numero}, ${titreOrigine(ch.origine)}`}
+      />
       {aSynthese(ch.resume) && <SyntheseVue synthese={ch.resume} />}
       <OrigineVue origine={ch.origine} />
-    </Ligne>
+    </View>
   );
 }
 
-/** Une ligne de « Qui intervient » : l'orateur, son nombre de prises de parole, un extrait. */
+/** Une ligne de « Qui intervient » : l'orateur (pastille de son groupe), ses prises de parole, un extrait. */
 function LigneIntervenant({ intervenant: it }: { intervenant: Intervenant }) {
   return (
     <View style={{ gap: 4 }}>
       {it.extrait ? (
         <ExtraitVue extrait={it.extrait} />
       ) : (
-        <Ligne>
+        <View style={{ gap: 2 }}>
           <OrateurVue orateur={it.orateur} groupe={it.groupe} />
           <T variant="caption" ton="inkMuted">Aucun extrait publié.</T>
-        </Ligne>
+        </View>
       )}
       <Label>{`${it.interventions} prise${it.interventions > 1 ? 's' : ''} de parole dans l’étape`}</Label>
     </View>
@@ -212,8 +282,5 @@ function LigneIntervenant({ intervenant: it }: { intervenant: Intervenant }) {
 }
 
 const styles = StyleSheet.create({
-  voisines: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: space[2] },
-  deviation: { gap: space[1], padding: space[3], borderWidth: 1, borderRadius: radius.md },
-  titreDeviation: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
-  sources: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space[2] },
+  changement: { gap: space[1], paddingBottom: space[2] },
 });

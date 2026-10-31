@@ -1,6 +1,6 @@
 // Réglages et Mes suivis (gardés sur l'appareil) : lecture défensive du stockage, palette et taille
-// du texte des réglages, phrases de « Ce qui a bougé », et rendu sur les fixtures ; aucun élément
-// d'IA (lecture facile) ni de thème n'est proposé.
+// du texte des réglages, thèmes, phrases de « Ce qui a bougé », et rendu sur les fixtures ; aucun
+// élément d'IA (lecture facile) n'est proposé.
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
@@ -11,8 +11,9 @@ import { SuivreDossier } from '../src/ui/components/commun/Suivre';
 import { ECHELLES, lireReglages, REGLAGES_PAR_DEFAUT, ReglagesProvider } from '../src/ui/hooks/reglages';
 import { RUBRIQUES_METHODE } from '../src/ui/ecrans/Methode';
 import { ContenuSuivis, joursAvant, phraseEvenement } from '../src/ui/ecrans/Suivis';
-import { aLEchelle, paletteDes, ThemeProvider, usePalette } from '../src/ui/theme/ThemeProvider';
-import { palettes, type } from '../src/ui/theme/tokens';
+import { aLEchelle, ThemeProvider, usePalette, useStyles } from '../src/ui/theme/ThemeProvider';
+import { ORDRE_THEMES, paletteDu, THEMES } from '../src/ui/theme/Themes';
+import { type } from '../src/ui/theme/tokens';
 
 vi.mock('../src/navigation', () => ({
   useAller: () => new Proxy({}, { get: () => () => {} }),
@@ -34,21 +35,32 @@ describe('réglages gardés sur l’appareil', () => {
       ...REGLAGES_PAR_DEFAUT,
       dossiers: [{ id: 'd', titre: 'T' }],
     });
-    expect(lireReglages({ taille: 'tres_grande', theme: 'clair', contraste: true, vuLe: '2026-10-01' })).toMatchObject({
+    expect(lireReglages({ taille: 'tres_grande', theme: 'techno', contraste: true, vuLe: '2026-10-01' })).toMatchObject({
       taille: 'tres_grande',
-      theme: 'clair',
+      theme: 'techno',
       contraste: true,
       vuLe: '2026-10-01',
     });
   });
 
-  it('palette : sombre ou clair, contraste renforcé ou non', () => {
-    expect(paletteDes({ theme: 'sombre', contraste: false })).toBe('dark');
-    expect(paletteDes({ theme: 'sombre', contraste: true })).toBe('contraste');
-    expect(paletteDes({ theme: 'clair', contraste: false })).toBe('light');
-    expect(paletteDes({ theme: 'clair', contraste: true })).toBe('clairContraste');
-    // Toutes les palettes ont les mêmes couleurs que la palette par défaut.
-    for (const p of Object.values(palettes)) expect(Object.keys(p).sort()).toEqual(Object.keys(palettes.dark).sort());
+  it('thèmes : Oppression par défaut, anciens réglages sombre / clair repris', () => {
+    expect(REGLAGES_PAR_DEFAUT.theme).toBe('oppression');
+    expect(lireReglages({ theme: 'sombre' }).theme).toBe('oppression');
+    expect(lireReglages({ theme: 'clair' }).theme).toBe('propre');
+    expect(ORDRE_THEMES).toEqual(['oppression', 'vigilance', 'propre', 'techno']);
+  });
+
+  it('palette : chaque thème, contraste renforcé ou non, a toutes les couleurs', () => {
+    const cles = Object.keys(THEMES.oppression.palette).sort();
+    for (const id of ORDRE_THEMES) {
+      for (const contraste of [false, true]) {
+        const p = paletteDu(id, contraste);
+        expect(Object.keys(p).sort()).toEqual(cles);
+        for (const c of Object.values(p)) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    }
+    expect(paletteDu('propre', true).ink).toBe('#000000');
+    expect(paletteDu('techno', true).ink).toBe('#ffffff');
   });
 
   it('taille du texte : taille et interligne mis à l’échelle, rien d’autre', () => {
@@ -58,18 +70,21 @@ describe('réglages gardés sur l’appareil', () => {
 
   it('le ThemeProvider suit les réglages', () => {
     let lue = '';
+    let carte: unknown;
     function Sonde() {
       lue = usePalette().surface;
+      carte = useStyles().carte;
       return null;
     }
     rendre(
-      <ReglagesProvider initial={{ theme: 'clair', contraste: true }}>
+      <ReglagesProvider initial={{ theme: 'propre', contraste: true }}>
         <ThemeProvider>
           <Sonde />
         </ThemeProvider>
       </ReglagesProvider>,
     );
-    expect(lue).toBe(palettes.clairContraste.surface);
+    expect(lue).toBe(THEMES.propre.contraste.surface);
+    expect(carte).toMatchObject({ backgroundColor: THEMES.propre.contraste.surfaceRaised });
   });
 });
 

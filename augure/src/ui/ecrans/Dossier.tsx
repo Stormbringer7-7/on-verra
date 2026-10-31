@@ -1,78 +1,84 @@
-// Fiche d'un dossier (canevas « Dossier ») : en-tête, onglets Parcours, Le texte, Amendements,
-// Votes, Acteurs, Intérêts ; à côté, le dossier en chiffres et les sources officielles.
+// Fiche d'un dossier (maquette v3, planches « Dossier », « DossierTexte », « DossierAmendements »,
+// « DossierTypes ») : en-tête « <type> · <dépositaire> », titre, statut « depuis le … (n jours) »,
+// étiquettes (49.3, censure) ; onglets de sections selon le modèle de parcours (Parcours, Texte,
+// Amendements, Scrutins clés, Acteurs pour une loi) ; l'onglet Parcours est l'aperçu : chiffres clés,
+// « Ce qu'il propose », le rail, puis un aperçu de chaque section. À côté (en large) : sources
+// officielles, le dossier en chiffres, intérêts déclarés, « Signaler ». Un dossier publié comme événement d'un autre (49.3,
+// motion référendaire, prérogatives) s'affiche en sous-dossier (planche « SousDossier »).
 // Une seule query `ConsulterDossier` ; seule la liste d'amendements est filtrée (sort) et paginée.
-// Une synthèse absente sur toute une liste (« Ce qui a changé », étapes) est dite une fois pour le
-// bloc ; le titre officiel n'est rappelé que s'il diffère du titre affiché.
 
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
-import { ConsulterDossier, type ActeurDossier, type DeviationParcours, type FicheDossier, type SortAmendement } from '@/core';
+import { ConsulterDossier, type DeviationParcours, type FicheDossier, type SortAmendement } from '@/core';
 import { useAller, type Pages } from '../../navigation';
-import { Action, Label, Pastille, Puce, T } from '../components/base';
+import { parentDossier, parentEtape, RACINES } from '../ariane';
+import { Label, T, TitreSection } from '../components/base';
 import { FeuilleDeviation } from '../components/commun/FeuilleDeviation';
 import { RailParcours } from '../components/commun/RailParcours';
 import { Signaler } from '../components/commun/Signaler';
-import { SuivreDossier } from '../components/commun/Suivre';
 import { Source } from '../components/commun/Source';
-import { aSynthese, aucuneSynthese, evenementDe, PAS_DE_SYNTHESE } from '../components/commun/statuts';
-import { SyntheseVue } from '../components/commun/SyntheseVue';
-import { Avertissement, Carte, Colonnes, Ligne, ListeChiffres, OngletsDefilants, Pagination, Requete, Section, TitreEcran } from '../components/dossiers/blocs';
-import { LigneAmendement, LigneScrutin, ListeInterets } from '../components/dossiers/elements';
+import { Avertissement, Colonnes, ListeChiffres, Requete } from '../components/dossiers/blocs';
+import { ListeInterets } from '../components/dossiers/elements';
 import {
-  CHAMBRE_COURTE,
-  ETAT_CASE,
-  entreeDossier,
-  etatDossier,
-  faitsArticle,
-  nomAuteur,
-  nomOrateur,
-  personneAuteur,
-  personneOrateur,
-  SORT,
-} from '../components/dossiers/presentation';
-import { RACINES } from '../ariane';
+  ApercuActeurs,
+  ApercuAmendements,
+  ApercuTexte,
+  ChiffresEtProposition,
+  EnteteDossier,
+  OngletsDossier,
+  ScrutinsCles,
+  SectionActeurs,
+  SectionAmendements,
+  SectionNonPubliee,
+  SectionTexte,
+} from '../components/dossiers/fiche';
+import { SECTIONS_PUBLIEES, typeDossier, type SectionDossier } from '../components/dossiers/parcoursVue';
+import { entreeDossier } from '../components/dossiers/presentation';
+import { SousDossier } from '../components/dossiers/SousDossier';
 import { Ecran } from '../components/Ecran';
-import { date, titreOfficielDistinct } from '../format';
+import { animerMiseEnPage } from '../components/mouvement';
 import { useCommand } from '../hooks/core';
-import { usePalette } from '../theme/ThemeProvider';
-import { radius, space } from '../theme/tokens';
-
-type Onglet = 'parcours' | 'texte' | 'amendements' | 'votes' | 'acteurs' | 'interets';
-
-const ONGLETS: { cle: Onglet; libelle: string }[] = [
-  { cle: 'parcours', libelle: 'Parcours' },
-  { cle: 'texte', libelle: 'Le texte' },
-  { cle: 'amendements', libelle: 'Amendements' },
-  { cle: 'votes', libelle: 'Votes' },
-  { cle: 'acteurs', libelle: 'Acteurs' },
-  { cle: 'interets', libelle: 'Intérêts' },
-];
+import { useAnimationsReduites } from '../hooks/reglages';
+import { space } from '../theme/tokens';
 
 export function Dossier() {
   const { id } = useRoute<RouteProp<Pages, 'Dossier'>>().params;
-  const [onglet, setOnglet] = useState<Onglet>('parcours');
+  const [section, setSection] = useState<SectionDossier>('parcours');
   const [sort, setSort] = useState<SortAmendement | null>(null);
   const [page, setPage] = useState(1);
+  const [deviation, setDeviation] = useState<DeviationParcours | null>(null);
+  const reduites = useAnimationsReduites();
   const fiche = useCommand(ConsulterDossier(entreeDossier(id, sort, page)));
   const f = fiche.statut === 'erreur' ? undefined : fiche.donnees;
+  const parent = f?.parcours?.parent ?? null;
+  const parents = parent
+    ? [RACINES.lois, parentDossier(parent.dossier), ...(parent.etape && parent.etapeLibelle ? [parentEtape(parent.dossier.id, { cle: parent.etape, libelle: parent.etapeLibelle })] : [])]
+    : [RACINES.lois];
+  const choisir = (s: SectionDossier) => {
+    animerMiseEnPage(reduites);
+    setSection(s);
+  };
 
   return (
-    <Ecran largeur="pleine" titre={f?.entete.titre} parents={[RACINES.lois]}>
+    <Ecran largeur="pleine" titre={f?.entete.titre} parents={parents}>
       <Requete resultat={fiche}>
         {(f) => (
           <>
-            <Entete fiche={f} />
-            <OngletsDefilants<Onglet> options={ONGLETS} valeur={onglet} onChange={setOnglet} label="Sections du dossier" />
             <Colonnes
               principale={
-                <>
-                  {onglet === 'parcours' && <OngletParcours fiche={f} />}
-                  {onglet === 'texte' && <OngletTexte fiche={f} />}
-                  {onglet === 'amendements' && (
-                    <OngletAmendements
+                f.parcours?.parent ? (
+                  <SousDossier fiche={f} />
+                ) : (
+                  <>
+                    <EnteteDossier fiche={f} />
+                    <OngletsDossier fiche={f} valeur={section} onChange={choisir} />
+                    <Contenu
                       fiche={f}
+                      section={section}
+                      onSection={choisir}
+                      onDeviation={setDeviation}
                       sort={sort}
                       onSort={(s) => {
                         setSort(s);
@@ -80,28 +86,12 @@ export function Dossier() {
                       }}
                       onPage={setPage}
                     />
-                  )}
-                  {onglet === 'votes' && <OngletVotes fiche={f} />}
-                  {onglet === 'acteurs' && <OngletActeurs fiche={f} />}
-                  {onglet === 'interets' && <OngletInterets fiche={f} />}
-                </>
+                  </>
+                )
               }
-              laterale={
-                <>
-                  <Carte>
-                    <Label>Le dossier en chiffres</Label>
-                    <ListeChiffres chiffres={f.chiffres} />
-                  </Carte>
-                  <View style={{ gap: space[2] }}>
-                    <Label>Sources officielles</Label>
-                    {f.sources.map((s) => (
-                      <Source key={`${s.systeme}-${s.idNatif}`} provenance={s} />
-                    ))}
-                  </View>
-                  <Signaler cible={{ type: 'dossier', id: f.entete.id }} ecran="Dossier" />
-                </>
-              }
+              laterale={<Laterale fiche={f} />}
             />
+            <Feuille fiche={f} deviation={deviation} onFermer={() => setDeviation(null)} />
           </>
         )}
       </Requete>
@@ -109,287 +99,122 @@ export function Dossier() {
   );
 }
 
-function Entete({ fiche: { entete: e, parcours } }: { fiche: FicheDossier }) {
-  const p = usePalette();
-  const aller = useAller();
-  const parent = parcours?.parent ?? null;
-  const auteur = personneAuteur(e.auteur);
-  const titre = e.titreEnClair ?? e.titre;
-  const debut = [titreOfficielDistinct(titre, e.titreOfficiel), e.dateDepot ? `déposé le ${date(e.dateDepot)}` : null]
-    .filter(Boolean)
-    .join(' · ');
-  return (
-    <View style={{ gap: space[2] }}>
-      {parent && (
-        // Dossier publié comme événement d'un autre (un 49.3) : on remonte au parent, à son étape.
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={evenementDe(parent)}
-          onPress={() => (parent.etape ? aller.etape(parent.dossier.id, parent.etape) : aller.dossier(parent.dossier.id))}
-          style={[styles.parent, { borderColor: p.lineFaint, backgroundColor: p.surfaceRaised }]}
-        >
-          <T variant="small" couleur={p.inkQuote}>{evenementDe(parent)}</T>
-          <T variant="caption" ton="inkMuted">Lien établi par un document publié dans les deux dossiers</T>
-        </Pressable>
-      )}
-      <View style={styles.ligneEtiquettes}>
-        <Label>{e.type}</Label>
-        {e.procedure === 'acceleree' && (
-          <View style={[styles.badge, { borderColor: p.lineStrong }]}>
-            <Label ton="ink" style={{ fontSize: 10 }}>Procédure accélérée</Label>
-          </View>
-        )}
-      </View>
-      <TitreEcran>{titre}</TitreEcran>
-      <SuivreDossier id={e.id} titre={e.titre} />
-      <T ton="inkMuted">
-        {debut ? `${debut} · par ` : 'Par '}
-        <T
-          ton="ink"
-          accessibilityRole={auteur ? 'link' : undefined}
-          onPress={auteur ? () => aller.personne(auteur.id) : undefined}
-          style={auteur ? { textDecorationLine: 'underline' } : undefined}
-        >
-          {nomAuteur(e.auteur)}
-        </T>
-        {e.cosignataires ? ` et ${e.cosignataires} cosignataires` : ''}
-      </T>
-      <View style={styles.ligneEtiquettes}>
-        <Pastille couleur={e.etat === 'en_cours' ? p.signal : p.inkMuted} taille={8} />
-        <Label couleur={e.etat === 'en_cours' ? p.signal : p.inkMuted}>{etatDossier(e.etat)}</Label>
-      </View>
-      <Action onPress={() => aller.faits('dossier', e.id)}>Tous les faits de ce dossier →</Action>
-    </View>
-  );
-}
-
-function OngletParcours({ fiche: f }: { fiche: FicheDossier }) {
-  const p = usePalette();
-  const aller = useAller();
-  const [deviation, setDeviation] = useState<DeviationParcours | null>(null);
-  const parcours = f.parcours;
-  const navette = parcours?.modele.famille === 'legislatif' && parcours.procedure === 'normale';
-  const changementsSansSynthese = aucuneSynthese(f.ceQuiAChange.map((c) => c.resume));
-  const etapesSansSynthese = aucuneSynthese(f.etapes.map((e) => e.resume));
-  return (
-    <>
-      <Carte>
-        <SyntheseVue synthese={f.entete.resumeEnClair} titre="En clair" />
-        <Label>Ce qui a changé depuis le dépôt</Label>
-        {f.ceQuiAChange.length === 0 && <T ton="inkMuted">Aucun article modifié pour l’instant.</T>}
-        {changementsSansSynthese && <T ton="inkMuted">{PAS_DE_SYNTHESE}</T>}
-        {f.ceQuiAChange.map((c) => {
-          const faits = faitsArticle(f.articles.find((a) => a.article.id === c.article.id));
-          return (
-            <Pressable
-              key={c.article.id}
-              accessibilityRole="link"
-              accessibilityLabel={`Article ${c.article.numero}${faits ? `, ${faits}` : ''}`}
-              onPress={() => aller.article(c.article.id)}
-              style={styles.changement}
-            >
-              <View style={styles.entreDeux}>
-                <Label ton="signal">{`Art. ${c.article.numero} →`}</Label>
-                {faits && <Label>{faits}</Label>}
-              </View>
-              {aSynthese(c.resume) && <SyntheseVue synthese={c.resume} />}
-            </Pressable>
-          );
-        })}
-      </Carte>
-      <Section titre="Parcours">
-        {parcours ? (
-          <>
-            <RailParcours
-              parcours={parcours}
-              etapes={f.etapes}
-              onEtape={(cle) => aller.etape(f.entete.id, cle)}
-              onDeviation={setDeviation}
-              onDossier={aller.dossier}
-            />
-            {navette && (
-              <Avertissement>
-                Navette : le texte passe d’une chambre à l’autre jusqu’à un accord. Après l’échec d’une CMP, le Gouvernement peut
-                demander à l’Assemblée de statuer définitivement (Constitution, art. 45).
-              </Avertissement>
-            )}
-            <FeuilleDeviation
-              deviation={deviation}
-              etape={parcours.cases.find((c) => c.cle === deviation?.etape) ?? null}
-              rattache={parcours.enfants.find((e) => e.etape === deviation?.etape) ?? null}
-              onFermer={() => setDeviation(null)}
-              onEtape={() => {
-                const cle = deviation!.etape;
-                setDeviation(null);
-                aller.etape(f.entete.id, cle);
-              }}
-              onDossier={(id) => {
-                setDeviation(null);
-                aller.dossier(id);
-              }}
-            />
-          </>
-        ) : (
-          <Avertissement>Pas de parcours publié pour ce dossier : les étapes publiées sont listées ci-dessous.</Avertissement>
-        )}
-        {!parcours && etapesSansSynthese && <SyntheseVue synthese={null} titre="En clair" />}
-        {!parcours && f.etapes.map((e) => (
-          <Ligne key={e.cle} onPress={() => aller.etape(f.entete.id, e.cle)} accessibilityLabel={`Étape ${e.libelle}`}>
-            <View style={styles.entreDeux}>
-              <View style={styles.ligneEtiquettes}>
-                <Pastille couleur={e.courante ? p.signal : e.etat === 'faite' ? p.ink : p.line} taille={8} />
-                {e.lieu && <Label>{CHAMBRE_COURTE[e.lieu]}</Label>}
-                <T variant="heading">{e.libelle}</T>
-              </View>
-              <Label>{e.debut ? date(e.debut) : ETAT_CASE[e.etat]}</Label>
-            </View>
-            {e.organe && <T variant="caption" ton="inkMuted">{e.organe.nom}</T>}
-            {e.conclusion && <T variant="caption">{e.conclusion}</T>}
-            {aSynthese(e.resume) && <SyntheseVue synthese={e.resume} />}
-            {e.chiffres.length > 0 && (
-              <T variant="caption" ton="inkMuted">{e.chiffres.map((c) => `${c.libelle} : ${c.valeur}`).join(' · ')}</T>
-            )}
-          </Ligne>
-        ))}
-      </Section>
-    </>
-  );
-}
-
-function OngletTexte({ fiche: f }: { fiche: FicheDossier }) {
-  const aller = useAller();
-  return (
-    <Section titre="Le texte, article par article">
-      <T ton="inkMuted">
-        {`Le texte a connu ${f.versionsDuTexte} version${f.versionsDuTexte > 1 ? 's' : ''}. Touchez un article pour voir chaque modification, à quelle étape, et son origine quand elle est établie.`}
-      </T>
-      {f.articles.map((a) => (
-        <Ligne key={a.article.id} onPress={() => aller.article(a.article.id)} accessibilityLabel={`Article ${a.article.numero}`}>
-          <View style={styles.entreDeux}>
-            <T variant="data">{`Art. ${a.article.numero}`}</T>
-            <Label ton={a.etat === 'inchange' ? 'inkMuted' : 'ink'}>{faitsArticle(a)}</Label>
-          </View>
-          <T>{a.intitule ?? 'Intitulé non publié'}</T>
-        </Ligne>
-      ))}
-    </Section>
-  );
-}
-
-function OngletAmendements({
-  fiche: f,
-  sort,
-  onSort,
-  onPage,
-}: {
+function Contenu(props: {
   fiche: FicheDossier;
+  section: SectionDossier;
+  onSection(s: SectionDossier): void;
+  onDeviation(d: DeviationParcours): void;
   sort: SortAmendement | null;
   onSort(s: SortAmendement | null): void;
   onPage(p: number): void;
 }) {
-  const p = usePalette();
-  const sorts: SortAmendement[] = ['adopte', 'rejete', 'retire', 'tombe', 'irrecevable'];
+  const { fiche: f, section, onSection, onDeviation } = props;
+  const sections = typeDossier(f.parcours?.modele).sections;
+  switch (section) {
+    case 'parcours':
+      return (
+        <>
+          <ChiffresEtProposition fiche={f} />
+          <SectionParcours fiche={f} onDeviation={onDeviation} />
+          {sections.includes('texte') && <ApercuTexte fiche={f} onTout={() => onSection('texte')} />}
+          {sections.includes('amendements') && <ApercuAmendements fiche={f} onTout={() => onSection('amendements')} />}
+          {sections.includes('scrutins') && <ScrutinsCles fiche={f} onTout={() => onSection('scrutins')} />}
+          {sections.includes('acteurs') && <ApercuActeurs fiche={f} onTout={() => onSection('acteurs')} />}
+        </>
+      );
+    case 'texte':
+      return <SectionTexte fiche={f} />;
+    case 'amendements':
+      return <SectionAmendements fiche={f} sort={props.sort} onSort={props.onSort} onPage={props.onPage} onDeviation={onDeviation} />;
+    case 'scrutins':
+      return <ScrutinsCles fiche={f} complet />;
+    case 'acteurs':
+      return <SectionActeurs fiche={f} titre="Acteurs" />;
+    case 'membres':
+      return <SectionActeurs fiche={f} titre="Membres" />;
+    default:
+      return SECTIONS_PUBLIEES.includes(section) ? null : <SectionNonPubliee section={section} />;
+  }
+}
+
+function SectionParcours({ fiche: f, onDeviation }: { fiche: FicheDossier; onDeviation(d: DeviationParcours): void }) {
+  const aller = useAller();
+  const parcours = f.parcours;
   return (
-    <Section titre="Les amendements du dossier">
-      <View style={[styles.tableau, { borderColor: p.line }]}>
-        <View style={styles.rangee}>
-          <Label style={{ flex: 2 }}>Étape</Label>
-          <Label style={styles.nombre}>Déposés</Label>
-          <Label style={styles.nombre}>Adoptés</Label>
-        </View>
-        {f.amendements.parEtape.map((s) => (
-          <View key={s.cle} style={styles.rangee}>
-            <T style={{ flex: 2 }}>{s.libelle}</T>
-            <T variant="data" style={styles.nombre}>{s.deposes.toLocaleString('fr-FR')}</T>
-            <T variant="data" style={styles.nombre}>{s.adoptes.toLocaleString('fr-FR')}</T>
-          </View>
-        ))}
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-        <Puce actif={sort === null} onPress={() => onSort(null)}>Tous</Puce>
-        {sorts.map((s) => (
-          <Puce key={s} actif={sort === s} onPress={() => onSort(s)}>
-            {SORT[s]}
-          </Puce>
-        ))}
-      </ScrollView>
-      {f.amendements.liste.elements.length === 0 && <T ton="inkMuted">Aucun amendement pour ce filtre.</T>}
-      {f.amendements.liste.elements.map((a) => (
-        <LigneAmendement key={a.id} amendement={a} />
-      ))}
-      <Pagination {...f.amendements.liste} onPage={onPage} />
-    </Section>
+    <View style={{ gap: space[3] }}>
+      <TitreSection action={parcours ? <Label style={{ flexShrink: 1, textAlign: 'right' }}>{parcours.modele.libelle}</Label> : undefined}>
+        Parcours
+      </TitreSection>
+      {parcours ? (
+        <>
+          <T variant="caption" ton="inkMuted">{parcours.modele.fondement}</T>
+          <RailParcours
+            parcours={parcours}
+            etapes={f.etapes}
+            onEtape={(cle) => aller.etape(f.entete.id, cle)}
+            onDeviation={onDeviation}
+            onDossier={aller.dossier}
+          />
+        </>
+      ) : (
+        <Avertissement>Pas de parcours publié pour ce dossier : ses étapes ne peuvent pas être montrées sur le rail.</Avertissement>
+      )}
+    </View>
   );
 }
 
-function OngletVotes({ fiche: f }: { fiche: FicheDossier }) {
+/** Feuille de l'événement ouvert depuis le rail ou la chronologie des amendements. */
+function Feuille({ fiche: f, deviation, onFermer }: { fiche: FicheDossier; deviation: DeviationParcours | null; onFermer(): void }) {
+  const aller = useAller();
+  const parcours = f.parcours;
+  if (!parcours) return null;
   return (
-    <Section titre="Les votes du dossier">
-      <T ton="inkMuted">Scrutins publics de ce dossier, dans les deux chambres. Les autres votes se font à main levée et ne sont pas nominatifs.</T>
-      {f.scrutins.length === 0 && <T ton="inkMuted">Aucun scrutin public pour l’instant.</T>}
-      {f.scrutins.map((s) => (
-        <LigneScrutin key={s.id} scrutin={s} />
-      ))}
-    </Section>
+    <FeuilleDeviation
+      deviation={deviation}
+      dossier={{ id: f.entete.id, titre: f.entete.titre }}
+      etape={parcours.cases.find((c) => c.cle === deviation?.etape) ?? null}
+      rattache={parcours.enfants.find((e) => e.etape === deviation?.etape) ?? null}
+      onFermer={onFermer}
+      onEtape={() => {
+        const cle = deviation!.etape;
+        onFermer();
+        aller.etape(f.entete.id, cle);
+      }}
+      onDossier={(id) => {
+        onFermer();
+        aller.dossier(id);
+      }}
+    />
   );
 }
 
-function OngletActeurs({ fiche: f }: { fiche: FicheDossier }) {
+function Laterale({ fiche: f }: { fiche: FicheDossier }) {
   return (
     <>
-      {f.acteurs.map((g) => (
-        <Section key={g.role} titre={g.libelle}>
-          {g.acteurs.map((a, i) => (
-            <LigneActeur key={i} acteur={a} />
-          ))}
-          {g.total > g.acteurs.length && <T variant="caption" ton="inkMuted">{`et ${g.total - g.acteurs.length} autres`}</T>}
-        </Section>
-      ))}
+      {f.chiffres.length > 0 && (
+        <View style={{ gap: space[2] }}>
+          <Label>Le dossier en chiffres</Label>
+          <ListeChiffres chiffres={f.chiffres} />
+        </View>
+      )}
+      <View style={{ gap: space[2] }}>
+        <Label>Sources officielles</Label>
+        {f.sources.length === 0 && <T variant="small" ton="inkMuted">Aucune source publiée.</T>}
+        {f.sources.map((s) => (
+          <Source key={`${s.systeme}-${s.idNatif}`} provenance={s} />
+        ))}
+      </View>
+      {f.interets.length > 0 && (
+        <View style={{ gap: space[2] }}>
+          <TitreSection>Intérêts déclarés</TitreSection>
+          <Avertissement>
+            Rapprochements : ces organisations ont déclaré à la HATVP des actions de représentation d’intérêts sur ce sujet pendant
+            l’examen du texte. Cela n’établit ni une rencontre, ni une influence sur le texte.
+          </Avertissement>
+          <ListeInterets interets={f.interets} />
+        </View>
+      )}
+      <Signaler cible={{ type: 'dossier', id: f.entete.id }} ecran="Dossier" />
     </>
   );
 }
-
-/** Une personne reliée ouvre sa fiche ; un nom publié (auditionnée) reste du texte. */
-function LigneActeur({ acteur: a }: { acteur: ActeurDossier }) {
-  const aller = useAller();
-  const personne = personneOrateur(a.qui);
-  return (
-    <Ligne onPress={personne ? () => aller.personne(personne.id) : undefined}>
-      <View style={styles.entreDeux}>
-        <View style={[styles.ligneEtiquettes, { flex: 1 }]}>
-          {personne?.groupe?.couleur && <Pastille couleur={personne.groupe.couleur} />}
-          <View style={{ flex: 1 }}>
-            <T variant="heading">{nomOrateur(a.qui)}</T>
-            <T variant="caption" ton="inkMuted">
-              {[a.role, a.qui.qualite, a.qui.type === 'nom_publie' ? 'nom publié, aucune fiche reliée' : null].filter(Boolean).join(' · ')}
-            </T>
-          </View>
-        </View>
-        {a.activite && <T variant="data" ton="inkMuted">{`${a.activite.libelle} : ${a.activite.valeur}`}</T>}
-      </View>
-    </Ligne>
-  );
-}
-
-function OngletInterets({ fiche: f }: { fiche: FicheDossier }) {
-  return (
-    <Section titre="Les intérêts déclarés sur le dossier">
-      <Avertissement glyphe="⚠">
-        Rapprochements : ces organisations ont déclaré à la HATVP des actions de représentation d’intérêts sur ce sujet pendant
-        l’examen du texte. Cela n’établit ni une rencontre, ni une influence sur le texte.
-      </Avertissement>
-      <ListeInterets interets={f.interets} />
-    </Section>
-  );
-}
-
-const styles = StyleSheet.create({
-  ligneEtiquettes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space[2] },
-  badge: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 6, minHeight: 22, justifyContent: 'center' },
-  parent: { gap: space[1], paddingHorizontal: 14, paddingVertical: space[3], borderWidth: 1, borderRadius: radius.lg },
-  changement: { gap: space[1], minHeight: 44, justifyContent: 'center' },
-  entreDeux: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space[2] },
-  tableau: { borderWidth: 1, borderRadius: radius.md, padding: space[3], gap: space[2] },
-  rangee: { flexDirection: 'row', alignItems: 'baseline', gap: space[2] },
-  nombre: { flex: 1, textAlign: 'right' },
-});

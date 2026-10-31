@@ -34,6 +34,7 @@ const CIBLES: Record<TypeCible, true> = {
   personne: true,
   institution: true,
   representant: true,
+  question: true,
   autre: true,
 };
 

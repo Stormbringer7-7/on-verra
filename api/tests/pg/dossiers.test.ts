@@ -351,6 +351,124 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
     expect(senat.cosignataires.total).toBe(senat.cosignataires.personnes.length);
   });
 
+  it('amendement AC127 : versions comparées (dépôt → commission), discuté en commission le 14/01/2026', async () => {
+    const debut = Date.now();
+    const f = (await depot.amendement(await entite('AN', 'amendement', 'AMANR5L17PO419604B2107P0D1N000127')))!;
+    expect(Date.now() - debut).toBeLessThan(1_000);
+    expect(f.amendement.numero).toBe('AC127');
+    expect(f.dispositif.diff).not.toBeNull();
+    expect(f.dispositif.versions).toEqual({
+      avant: { etape: { cle: 'depot', libelle: 'Dépôt AN' }, date: '2025-11-18' },
+      apres: { etape: { cle: 'commission_1_o', libelle: 'Commission AN' }, date: '2026-01-14' },
+    });
+    expect(f.discussion).toMatchObject({
+      commission: { date: '2026-01-14', compteRendu: { url: 'https://www.assemblee-nationale.fr/dyn/opendata/CRCANR5L17S2026PO419604N031.html', ancre: null } },
+      seance: null,
+    });
+  });
+
+  it('amendement 1076 : séance de discussion publiée (seance_id) le 31/03/2026 et son compte rendu ; CE154 : sans diff, versions null', async () => {
+    const f = (await depot.amendement(await entite('AN', 'amendement', 'AMANR5L17PO838901BTC2250P0D1N001076')))!;
+    expect(f.dispositif.versions).toEqual({
+      avant: { etape: { cle: 'commission_1_s', libelle: 'Commission AN' }, date: '2025-12-17' },
+      apres: { etape: { cle: 'seance_1_s', libelle: 'Séance AN' }, date: null },
+    });
+    expect(f.discussion).toMatchObject({
+      commission: null,
+      seance: {
+        date: '2026-03-31',
+        compteRendu: { url: 'https://www.assemblee-nationale.fr/dyn/17/comptes-rendus/seance/CRSANR5L17S2026O1N187', provenance: { systeme: 'AN' } },
+      },
+    });
+    const ce154 = (await depot.amendement(await entite('AN', 'amendement', 'AMANR5L17PO419610B2632P0D1N000154')))!;
+    expect(ce154.dispositif).toMatchObject({ diff: null, versions: null });
+  });
+
+  it('dates de dépôt et de sort : CE154 déposé le 28/04/2026, tombé le 06/05/2026 ; Sénat n° 999 sans date de sort', async () => {
+    const ce154 = await entite('AN', 'amendement', 'AMANR5L17PO419610B2632P0D1N000154');
+    const s999 = await entite('SENAT', 'amendement', '1328039');
+    const r = await depot.resumesAmendements([ce154, s999]);
+    expect(r.get(ce154)).toMatchObject({ numero: 'CE154', sort: 'tombe', dateDepot: '2026-04-28', dateSort: '2026-05-06' });
+    expect(r.get(s999)).toMatchObject({ numero: '999', sort: 'non_soutenu', dateDepot: '2026-06-25', dateSort: null });
+  });
+
+  it('amendements du projet agricole par sort : dossier entier et Commission AN (base au 31/10/2026)', async () => {
+    const a = await depot.amendements(agricole, {}, { page: 1, taille: 1 });
+    expect(a.parSort).toEqual({ adopte: 842, rejete: 1728, retire: 516, tombe: 639, non_soutenu: 361, irrecevable: 1176, en_attente: 322 });
+    if (!projection) return;
+    const commission = a.parEtape.find((e) => e.cle === 'commission_1_o')!;
+    expect(commission).toMatchObject({ deposes: 1592, adoptes: 242 });
+    expect(commission.parSort).toEqual({ adopte: 242, rejete: 440, retire: 174, tombe: 220, non_soutenu: 80, irrecevable: 435, en_attente: 1 });
+    for (const e of a.parEtape) expect(e.parSort!.adopte).toBe(e.adoptes);
+  });
+
+  // ----- Rattachements (49.3), effet conditionnel -----
+
+  it('PLF 2026 : trois 49.3 rattachés, chacun avec ses motions de censure (voix pour, sort publié)', async () => {
+    if (!projection) return;
+    const plf = await entite('AN', 'dossier', 'DLR5L17N52428');
+    const p = (await depot.parcours(plf))!;
+    const premiere = p.enfants.find((e) => e.dossier.titre.startsWith('Engagement de la responsabilité du Gouvernement sur la première partie'))!;
+    expect(premiere).toMatchObject({ etape: 'nouvelle_lecture', etapeLibelle: 'Nouvelle lecture' });
+    expect(premiere.scrutins).toEqual([
+      expect.objectContaining({ numero: '5154', date: '2026-01-23', nature: 'motion_censure', sort: 'rejeté', adopte: false, pour: 269 }),
+      expect.objectContaining({ numero: '5155', date: '2026-01-23', nature: 'motion_censure', sort: 'rejeté', adopte: false, pour: 142 }),
+    ]);
+    const definitive = p.enfants.find((e) => e.etape === 'lecture_definitive')!;
+    expect(definitive.scrutins!.map((s) => [s.numero, s.pour])).toEqual([['5284', 260], ['5285', 135]]);
+    expect(p.enfants).toHaveLength(3);
+    // Le modèle loi ordinaire définit l'effet du 49.3 si une motion est adoptée : fin du parcours.
+    expect(p.deviations.filter((d) => d.cle === 'engagement_responsabilite').every((d) => d.effetSi === 'termine')).toBe(true);
+    // Vu du 49.3 : le même rattachement, les mêmes motions.
+    const enfant = (await depot.parcours(premiere.dossier.id))!;
+    expect(enfant.parent).toMatchObject({ dossier: { id: plf, titre: 'Projet de loi de finances pour 2026' }, etape: 'nouvelle_lecture' });
+    expect(enfant.parent!.scrutins!.map((s) => s.numero)).toEqual(['5154', '5155']);
+    // Procédure accélérée : aucun effet conditionnel dans le modèle.
+    expect((await depot.parcours(agricole))!.deviations[0].effetSi).toBeNull();
+  });
+
+  // ----- Personnes d'une étape -----
+
+  it('personnes des étapes du projet agricole : auteurs au dépôt, rapporteurs en commission, CMP présidée par Dominique Estrosi Sassone', async () => {
+    if (!projection) return;
+    const nom = (p: { qui: { type: string } & Record<string, any> }) => (p.qui.type === 'personne' ? p.qui.personne.nom : p.qui.nom);
+    const parRole = (liste: { role: string; qui: any }[], role: string) => liste.filter((p) => p.role === role).map(nom);
+    const depotAn = (await depot.etape(agricole, 'depot'))!;
+    expect(depotAn.modele).toMatchObject({ cle: 'loi_ordinaire', famille: 'legislatif' });
+    expect(parRole(depotAn.personnes!, 'auteur')).toEqual(['Sébastien Lecornu', 'Annie Genevard']);
+    const commission = (await depot.etape(agricole, 'commission_1_o'))!;
+    expect(parRole(commission.personnes!, 'rapporteur').sort()).toEqual(['Jean-René Cazeneuve', 'Julien Dive']);
+    expect(parRole(commission.personnes!, 'rapporteur_avis').sort()).toEqual(['Nathalie Coggia', 'Xavier Roseren']);
+    expect(commission.personnes!.find((p) => nom(p) === 'Nathalie Coggia')!.detail).toContain('rapporteure pour avis');
+    const cmp = (await depot.etape(agricole, 'cmp'))!;
+    expect(parRole(cmp.personnes!, 'president')).toEqual(['Dominique Estrosi Sassone']);
+    expect(cmp.personnes!.find((p) => p.role === 'president')!.detail).toContain('Présidente');
+    expect(parRole(cmp.personnes!, 'membre')).toHaveLength(14);
+    // 49.3 sur la première partie du PLF 2026 : l'initiateur est Premier ministre ce jour-là.
+    const premiere = (await depot.parcours(await entite('AN', 'dossier', 'DLR5L17N52428')))!.enfants.find((e) => e.etape === 'nouvelle_lecture')!;
+    const declaration = (await depot.etape(premiere.dossier.id, 'declaration'))!;
+    expect(declaration.modele?.cle).toBe('responsabilite_gouvernement');
+    expect(parRole(declaration.personnes!, 'premier_ministre')).toEqual(['Sébastien Lecornu']);
+  });
+
+  it('commission d’enquête TikTok : 29 membres publiés, présidée par Arthur Delaporte, rapporteure Laure Miller', async () => {
+    const tiktok = (await db.first<{ id: string }>(
+      `SELECT entite_id AS id FROM canon.dossier WHERE titre = 'Commission d’enquête sur les effets psychologiques de TikTok sur les mineurs'`,
+    ))!.id;
+    const chiffres = Object.fromEntries((await depot.chiffres(tiktok)).map((c) => [c.libelle, c]));
+    expect(chiffres.Membres.valeur).toBe(29);
+    const membres = (await depot.acteurs(tiktok)).find((g) => g.role === 'membres')!;
+    expect(membres.total).toBe(29);
+    expect(membres.acteurs[0]).toMatchObject({ qui: { personne: { nom: 'Arthur Delaporte' } } });
+    expect(membres.acteurs[0].role).toContain('Président');
+    if (!projection) return;
+    const nomination = (await depot.etape(tiktok, 'nomination'))!;
+    expect(nomination.modele?.cle).toBe('commission_enquete');
+    const nom = (p: { qui: any }) => p.qui.personne.nom;
+    expect(nomination.personnes!.filter((p) => p.role === 'president').map(nom)).toEqual(['Arthur Delaporte']);
+    expect(nomination.personnes!.filter((p) => p.role === 'rapporteur').map(nom)).toEqual(['Laure Miller']);
+  });
+
   // ----- Acteurs, chiffres -----
 
   it('acteurs du projet agricole : Gouvernement, rapporteurs, CMP présidée par Dominique Estrosi Sassone', async () => {
@@ -422,6 +540,88 @@ describe.skipIf(!URL_LECTURE)('PgDossiers (base réelle, lecture seule)', () => 
     expect(a.some((d) => d.id === agricole || d.id === finDeVie)).toBe(false);
     const echeances = a.flatMap((d) => (d.prochaineEcheance ? [d.prochaineEcheance.date] : []));
     expect(echeances).toEqual([...echeances].sort());
+  });
+
+  it('Accueil, un jour : dossiers sans parent qui y ont un acte, décidés ou qui avancent ; jours datés', async () => {
+    const jours = await depot.joursActifs('2026-09-28', '2026-11-15');
+    if (!projection) {
+      expect(jours).toEqual([]);
+      return expect(await depot.duJour('2026-10-14', 5)).toEqual({ decides: [], avancent: [] });
+    }
+    expect(jours).toEqual([...jours].sort());
+    expect(jours.every((j) => j >= '2026-09-28' && j <= '2026-11-15')).toBe(true);
+    const jour = jours.at(-1);
+    if (!jour) return;
+    const { decides, avancent } = await depot.duJour(jour, 5);
+    expect(decides.length + avancent.length).toBeGreaterThan(0);
+    expect(decides.length).toBeLessThanOrEqual(5);
+    expect([...decides, ...avancent].every((d) => d.parent === null)).toBe(true);
+    expect(decides.some((d) => avancent.some((x) => x.id === d.id))).toBe(false);
+  });
+
+  it('résumé compact (Accueil) : lieu et début de chaque case, déviations du parcours', async () => {
+    if (!projection) return;
+    const [agri] = await depot.resumesDe([agricole]);
+    const caseDe = (cle: string) => agri.barre.find((c) => c.cle === cle);
+    // Dépôt AN le 08/04/2026 (lieu AN), CMP, vote du texte de la CMP aux deux chambres (« AN+SENAT » : null), Conseil, JO.
+    expect(caseDe('depot')).toMatchObject({ lieu: 'AN', debut: '2026-04-08' });
+    expect(caseDe('commission_1_s')).toMatchObject({ lieu: 'SENAT', debut: '2026-06-03' });
+    expect(caseDe('cmp')).toMatchObject({ lieu: 'CMP', debut: '2026-07-06' });
+    expect(caseDe('conclusions_cmp')).toMatchObject({ lieu: null, debut: '2026-07-20' });
+    expect(caseDe('cc')).toMatchObject({ lieu: 'CC', debut: '2026-07-24' });
+    expect(caseDe('promulgation')).toMatchObject({ lieu: 'PR', debut: '2026-08-18' });
+    expect(caseDe('jo')).toMatchObject({ lieu: 'JO', debut: '2026-08-19' });
+    expect(caseDe('lecture_2_o')).toMatchObject({ lieu: 'AN', debut: null, etat: 'sans_objet' });
+    expect(agri.deviations).toEqual([{ cle: 'procedure_acceleree', libelle: 'Procédure accélérée', etape: 'depot', issue: null }]);
+
+    // PLF 2026 : deux 49.3, en nouvelle lecture et en lecture définitive (issue du modèle : rejeté si censure).
+    const [plf] = await depot.resumesDe([await entite('AN', 'dossier', 'DLR5L17N52428')]);
+    expect(plf.titreOfficiel).toBe('Projet de loi de finances pour 2026');
+    expect(plf.deviations).toEqual([
+      { cle: 'engagement_responsabilite', libelle: 'Engagement de la responsabilité du Gouvernement (49.3)', etape: 'nouvelle_lecture', issue: 'rejete' },
+      { cle: 'engagement_responsabilite', libelle: 'Engagement de la responsabilité du Gouvernement (49.3)', etape: 'lecture_definitive', issue: 'rejete' },
+    ]);
+
+    // Étape en cours datée : la séance AN des jeunes majeurs de l'ASE, depuis le 29/10/2026.
+    const [ase] = await depot.resumesDe([await entite('AN', 'dossier', 'DLR5L17N54298')]);
+    expect(ase.barre.find((c) => c.courante)).toMatchObject({ cle: 'seance_1_o', libelle: 'Séance AN', lieu: 'AN', debut: '2026-10-29' });
+  });
+
+  it('réunions du jour par chambre : commissions et séances ; commissions du Sénat non publiées (null)', async () => {
+    expect(await depot.reunionsDuJour('2026-10-27')).toEqual([
+      { chambre: 'AN', commissions: 9, seances: 3 },
+      { chambre: 'SENAT', commissions: null, seances: 1 },
+    ]);
+    expect(await depot.reunionsDuJour('2026-10-27', { chambres: ['SENAT'], dossiers: null })).toEqual([
+      { chambre: 'SENAT', commissions: null, seances: 1 },
+    ]);
+    expect(await depot.reunionsDuJour('2026-10-27', { chambres: [], dossiers: null })).toEqual([]);
+    // PLF 2027 à l'ordre du jour de deux séances et d'une commission de l'AN ce jour-là.
+    const plf2027 = await entite('AN', 'dossier', 'DLR5L17N54629');
+    expect((await depot.resumesDe([plf2027]))[0].titreOfficiel).toBe('Projet de loi de finances pour 2027');
+    expect(await depot.reunionsDuJour('2026-10-27', { chambres: null, dossiers: [plf2027] })).toEqual([
+      { chambre: 'AN', commissions: 1, seances: 2 },
+      { chambre: 'SENAT', commissions: null, seances: 0 },
+    ]);
+  });
+
+  it('Accueil filtré : chambre de séance des actes, dossiers suivis ; une liste vide ne garde rien', async () => {
+    if (!projection) return;
+    const tous = await depot.duJour('2026-10-27', 100);
+    const senat = await depot.duJour('2026-10-27', 100, { chambres: ['SENAT'], dossiers: null });
+    const ids = (r: typeof tous) => [...r.decides, ...r.avancent].map((d) => d.id);
+    expect(ids(senat).length).toBeGreaterThan(0);
+    expect(ids(senat).length).toBeLessThan(ids(tous).length);
+    expect(ids(senat).every((id) => ids(tous).includes(id))).toBe(true);
+    const un = ids(senat)[0];
+    expect(ids(await depot.duJour('2026-10-27', 100, { chambres: null, dossiers: [un] }))).toEqual([un]);
+    expect(await depot.duJour('2026-10-27', 100, { chambres: null, dossiers: [] })).toEqual({ decides: [], avancent: [] });
+
+    const jours = await depot.joursActifs('2026-10-01', '2026-10-31');
+    const joursSenat = await depot.joursActifs('2026-10-01', '2026-10-31', { chambres: ['SENAT'], dossiers: null });
+    expect(joursSenat).toContain('2026-10-27');
+    expect(joursSenat.every((j) => jours.includes(j))).toBe(true);
+    expect(await depot.joursActifs('2026-10-01', '2026-10-31', { chambres: null, dossiers: [] })).toEqual([]);
   });
 
   it('projets de loi déposés par le Gouvernement depuis le 1er avril 2026, le plus récent d’abord', async () => {

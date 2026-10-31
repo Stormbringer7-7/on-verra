@@ -23,12 +23,14 @@ import {
 } from './faits';
 import { SUIVIS_CAMILLE_MARS, SUIVIS_OCTOBRE } from './suivis';
 import { AVANCEMENT, AVANCEMENT_HORS_PARLEMENT, AVANCEMENT_NOUVELLE_LECTURE } from './avancement';
-import { ACCUEIL, AMENDEMENT_CE123, AMENDEMENT_COM56, ARTICLE_ENERGIE_3, ARTICLE_LOCATION_2, ETAPES, FICHE_ENERGIE, FICHE_LOCATION, LISTE_DOSSIERS, LISTE_DOSSIERS_PARLEMENTAIRES } from './dossiers';
+import { ACCUEIL, ACCUEIL_14_OCTOBRE, ACCUEIL_14_OCTOBRE_SENAT, ACCUEIL_22_OCTOBRE, ACCUEIL_28_OCTOBRE, AMENDEMENT_CE123, AMENDEMENT_COM56, ARTICLE_ENERGIE_3, ARTICLE_LOCATION_2, ETAPES, FICHE_ENERGIE, FICHE_LOCATION, LISTE_DOSSIERS, LISTE_DOSSIERS_PARLEMENTAIRES } from './dossiers';
 import { LISTE_INTERVENTIONS_CE123, LISTE_INTERVENTIONS_SEANCE_AN } from './discussions';
+import { ETAPE_ENGAGEMENT_DECLARATION, FICHE_ENGAGEMENT_PLF_2026, FICHE_PLF_2026 } from './engagement';
 import { A, ART, D, P } from './entites';
 import { INSTITUTIONS } from './institutions';
 import { FICHE_REPRESENTANT_ENR, R } from './interets';
 import { ANNUAIRE, ANNUAIRE_ELUS_LOCAUX, CLASSEMENT_AN_ECARTS, PERSONNES } from './personnes';
+import { QUESTION_QE_4521, QUESTION_QG_1201, QUESTION_QG_1202 } from './questions';
 import { EXEMPLES_FAMILLES, rechercheFixture } from './familles';
 import { ACCUSE_SIGNALEMENT, RECHERCHE_ENERGIE, RECHERCHE_VIDE } from './recherche';
 import { EXPLICATION_CAMILLE_1874, FICHE_SCRUTIN_1874, FICHE_SCRUTIN_SENAT_297, S } from './scrutins';
@@ -48,7 +50,13 @@ export type Fixtures = { [K in keyof Definitions]: Exemple<Definitions[K]>[] };
 const etape = (dossier: string, cle: string) => ETAPES[`${dossier}/${cle}`];
 
 export const fixtures: Fixtures = {
-  ConsulterAccueil: [{ titre: 'Accueil, semaine du 19 octobre 2026', input: {}, output: ACCUEIL }],
+  ConsulterAccueil: [
+    { titre: 'Accueil, aujourd’hui (samedi 24 octobre 2026, rien de publié ce jour-là)', input: {}, output: ACCUEIL },
+    { titre: 'Accueil, mercredi 14 octobre (deux étapes conclues au Sénat)', input: { jour: '2026-10-14' }, output: ACCUEIL_14_OCTOBRE },
+    { titre: 'Accueil, mercredi 14 octobre, filtre Sénat', input: { jour: '2026-10-14', chambres: ['SENAT'] }, output: ACCUEIL_14_OCTOBRE_SENAT },
+    { titre: 'Accueil, jeudi 22 octobre (le budget en séance)', input: { jour: '2026-10-22' }, output: ACCUEIL_22_OCTOBRE },
+    { titre: 'Accueil, mercredi 28 octobre (à venir : vote solennel inscrit)', input: { jour: '2026-10-28' }, output: ACCUEIL_28_OCTOBRE },
+  ],
   ListerDossiers: [
     { titre: 'Tous les dossiers', input: {}, output: LISTE_DOSSIERS },
     { titre: 'Proposés par des parlementaires', input: { origine: 'parlementaire' }, output: LISTE_DOSSIERS_PARLEMENTAIRES },
@@ -79,6 +87,8 @@ export const fixtures: Fixtures = {
   ConsulterDossier: [
     { titre: 'Énergie : procédure accélérée, CMP conclusive, Conseil saisi', input: { id: D.energie.id }, output: FICHE_ENERGIE },
     { titre: 'Location : navette, CMP en échec, dernier mot à l’AN (sans synthèse)', input: { id: D.location.id }, output: FICHE_LOCATION },
+    { titre: 'PLF 2026 (réel) : trois 49.3 rattachés et leurs motions de censure', input: { id: FICHE_PLF_2026.entete.id }, output: FICHE_PLF_2026 },
+    { titre: '49.3 sur la 1re partie du PLF 2026 (réel) : sous-dossier', input: { id: FICHE_ENGAGEMENT_PLF_2026.entete.id }, output: FICHE_ENGAGEMENT_PLF_2026 },
   ],
   ConsulterEtape: [
     { titre: 'Énergie · Commission AN (changements, à vérifier compris)', input: { dossier: D.energie.id, cle: 'commission_1_o' }, output: etape(D.energie.id, 'commission_1_o') },
@@ -87,6 +97,11 @@ export const fixtures: Fixtures = {
     { titre: 'Location · 1re lecture AN (auditionnée, nom publié)', input: { dossier: D.location.id, cle: 'lecture_1_o' }, output: etape(D.location.id, 'lecture_1_o') },
     { titre: 'Location · CMP en échec', input: { dossier: D.location.id, cle: 'cmp' }, output: etape(D.location.id, 'cmp') },
     { titre: 'Location · Lecture définitive programmée', input: { dossier: D.location.id, cle: 'lecture_definitive' }, output: etape(D.location.id, 'lecture_definitive') },
+    {
+      titre: '49.3 du PLF 2026 (réel) · déclaration du Gouvernement (Premier ministre)',
+      input: { dossier: FICHE_ENGAGEMENT_PLF_2026.entete.id, cle: 'declaration' },
+      output: ETAPE_ENGAGEMENT_DECLARATION,
+    },
   ],
   ListerInterventions: [
     { titre: 'Ce qui a été dit en commission sur CE123', input: { cible: { type: 'amendement', id: A.ce123.id } }, output: LISTE_INTERVENTIONS_CE123 },
@@ -132,6 +147,11 @@ export const fixtures: Fixtures = {
     { titre: 'Claire Exemple · ses choix (ne vote pas)', input: { id: P.claire.id, onglet: 'choix' }, output: PERSONNES['claire-exemple/choix'] },
     { titre: 'Nadia Specimen · parcours (élue locale)', input: { id: P.nadia.id }, output: PERSONNES['nadia-specimen/parcours'] },
     { titre: 'Fiche RNE seule', input: { id: 'rne-maire-099' }, output: PERSONNES['rne-maire-099/parcours'] },
+  ],
+  ConsulterQuestion: [
+    { titre: 'Question au Gouvernement n° 1201 (réponse en séance)', input: { id: QUESTION_QG_1201.id }, output: QUESTION_QG_1201 },
+    { titre: 'Question au Gouvernement n° 1202 (même séance que la 1201)', input: { id: QUESTION_QG_1202.id }, output: QUESTION_QG_1202 },
+    { titre: 'Question écrite n° 4521 (en attente de réponse)', input: { id: QUESTION_QE_4521.id }, output: QUESTION_QE_4521 },
   ],
   ConsulterInstitution: [
     { titre: 'Assemblée nationale', input: { institution: 'an' }, output: INSTITUTIONS.an },

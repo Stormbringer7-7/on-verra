@@ -3,6 +3,7 @@
 // distincts ; les étapes sont celles réellement publiées, la barre est une projection.
 
 import type {
+  Ancre,
   ArticleRef,
   Chambre,
   Chiffre,
@@ -20,7 +21,7 @@ import type {
   Synthese,
 } from './commun';
 import type { InterventionExtrait, Intervenant } from './discussions';
-import type { CaseCompacte, CaseParcours, CleCase, DeviationParcours, DossierLie, EtatCase, Echeance, Parcours, Procedure } from './parcours';
+import type { CaseCompacte, CaseParcours, CleCase, DeviationCompacte, DeviationParcours, DossierLie, EtatCase, Echeance, ModeleParcours, Parcours, Procedure } from './parcours';
 import type { ScrutinResume } from './scrutins';
 import type { LienInteret } from './transparence';
 
@@ -103,6 +104,11 @@ export interface DossierResume {
   dernierEvenement: { date: string; libelle: string } | null;
   /** Dossier dont celui-ci est un événement (« Événement de : … · étape »), sinon null. */
   parent: DossierLie | null;
+  /**
+   * Déviations du parcours (procédure accélérée, 49.3, motion de procédure, retrait…), dans l'ordre
+   * du parcours ; vide sans déviation publiée. Absent : service antérieur.
+   */
+  deviations?: DeviationCompacte[];
 }
 
 export interface Accueil {
@@ -112,6 +118,60 @@ export interface Accueil {
   dossiers: DossierResume[];
   /** Scrutins publics de la semaine, dans les deux chambres, du plus récent au plus ancien. */
   votes: ScrutinResume[];
+  /** Le jour choisi (aujourd'hui sans `jour` dans la demande) : ce qui y a été décidé, ce qui y avance. */
+  jour?: JourAccueil;
+  /** Jours de la fenêtre qui ont au moins un élément publié (acte d'un dossier, scrutin public). */
+  calendrier?: CalendrierAccueil;
+}
+
+/**
+ * Demande de l'Accueil : un jour (« AAAA-MM-JJ ») ; aujourd'hui sans jour. Filtres facultatifs du
+ * calendrier, appliqués aux jours actifs (`calendrier.jours`) et au contenu du jour (`jour`), pas
+ * à la semaine (`dossiers`, `votes`) : `chambres` garde les actes, scrutins et réunions qui ont lieu
+ * dans ces chambres (un acte de la CMP, du Conseil, de la promulgation n'y est dans aucune) ;
+ * `dossiers` (Mes suivis, 50 au plus) garde les actes et scrutins de ces dossiers et les réunions
+ * dont l'ordre du jour en traite un ; une liste vide ne garde rien.
+ */
+export interface DemandeAccueil {
+  jour?: string;
+  chambres?: Chambre[];
+  dossiers?: string[];
+}
+
+export interface JourAccueil {
+  /** AAAA-MM-JJ. */
+  date: string;
+  /**
+   * Dossiers sans parent dont un acte daté de ce jour conclut une étape (`lecture.parcours_acte.conclusif`).
+   * Les dossiers rattachés (49.3, motions) restent dans la carte de leur dossier d'origine.
+   */
+  decides: DossierResume[];
+  /** Dossiers sans parent avec un acte publié ou inscrit ce jour-là, sans conclusion d'étape. */
+  avancent: DossierResume[];
+  /** Scrutins publics du jour, dans les deux chambres, du plus récent au plus ancien. */
+  votes: ScrutinResume[];
+  /** Réunions du jour par chambre (AN puis Sénat, celles du filtre `chambres`). Absent : service antérieur. */
+  reunions?: ReunionsDuJour[];
+}
+
+/**
+ * Réunions d'une chambre un jour donné (`canon.reunion`, jour de Paris) : réunions de commission et
+ * séances publiques. null : la source ne publie pas ce type de réunion pour cette chambre (aucune
+ * en base, comme les réunions de commission du Sénat), ce qui n'est pas zéro.
+ */
+export interface ReunionsDuJour {
+  chambre: Chambre;
+  commissions: number | null;
+  seances: number | null;
+}
+
+export interface CalendrierAccueil {
+  /** Jour de référence du service (« aujourd'hui »). */
+  aujourdhui: string;
+  /** Fenêtre couverte par `jours` (au-delà : rien n'est dit, ni oui ni non). */
+  fenetre: { debut: string; fin: string };
+  /** Jours (AAAA-MM-JJ, croissants) avec au moins un acte de dossier ou un scrutin public. */
+  jours: string[];
 }
 
 export interface FiltreDossiers extends DemandePage {
@@ -214,13 +274,25 @@ export interface AmendementResume {
   objet: Synthese;
   auteur: Auteur | null;
   cosignataires: number;
+  /** Date de dépôt publiée (`canon.amendement.date_depot`, AAAA-MM-JJ), null si non publiée. */
+  dateDepot?: string | null;
+  /** Date du sort publiée (`canon.amendement.date_sort`, jour à Paris), null si non publiée. */
+  dateSort?: string | null;
 }
+
+/** Nombre d'amendements par sort publié (`canon.amendement.sort`) ; ceux sans sort ne sont dans aucun. */
+export type ComptesParSort = Record<SortAmendement, number>;
 
 export interface StatAmendementsEtape {
   cle: CleCase;
   libelle: string;
   deposes: number;
   adoptes: number;
+  /**
+   * Comptes de l'étape par sort publié (rejetés, retirés, tombés, irrecevables, non soutenus, en
+   * attente…) ; `deposes` moins leur somme : sans sort publié. Absent : comptes non fournis.
+   */
+  parSort?: ComptesParSort;
 }
 
 /** Rôles de la section « Acteurs » d'un dossier. */
@@ -231,7 +303,9 @@ export type RoleActeur =
   | 'cmp'
   | 'auteurs_amendements'
   | 'saisissants_cc'
-  | 'auditionnes';
+  | 'auditionnes'
+  /** Membres d'une commission d'enquête ou d'une mission (`canon.fonction` membre_commission de son organe). */
+  | 'membres';
 
 export interface ActeurDossier {
   qui: Orateur;
@@ -260,6 +334,8 @@ export interface FicheDossier {
   articles: ArticleResume[];
   amendements: {
     parEtape: StatAmendementsEtape[];
+    /** Comptes du dossier entier par sort publié (étape reliée ou non), pour les filtres. Absent : non fournis. */
+    parSort?: ComptesParSort;
     filtre: { sort?: SortAmendement };
     liste: Page<AmendementResume>;
   };
@@ -322,6 +398,25 @@ export interface FicheEtape {
   /** Étapes voisines affichées (les étapes sans objet sont sautées). */
   precedente: { cle: CleCase; libelle: string } | null;
   suivante: { cle: CleCase; libelle: string } | null;
+  /** Modèle de parcours du dossier (`lecture.parcours_acte.modele`) : l'écran en déduit la sorte d'étape. */
+  modele?: ModeleParcours | null;
+  /**
+   * Personnes de l'étape, telles que publiées : rapporteurs nommés à l'étape (`canon.lien`
+   * rapporteur), président et membres titulaires de son organe (`canon.fonction` de la CMP ou de la
+   * commission d'enquête), auteur du dépôt (initiateurs du dossier), Premier ministre seulement si
+   * l'initiateur l'est à cette date. Absent : non fourni ; vide : rien de publié.
+   */
+  personnes?: PersonneEtape[];
+}
+
+/** Rôle d'une personne sur une étape. */
+export type RolePersonneEtape = 'auteur' | 'rapporteur' | 'rapporteur_avis' | 'president' | 'membre' | 'premier_ministre';
+
+export interface PersonneEtape {
+  role: RolePersonneEtape;
+  qui: Orateur;
+  /** « Députée · EPR · rapporteure · Commission des affaires économiques ». */
+  detail: string;
 }
 
 // ---------- Article ----------
@@ -396,6 +491,12 @@ export interface FicheAmendement {
     texte: string | null;
     /** Effet sur l'article visé, null si son texte n'est pas chargé. */
     diff: SegmentDiff[] | null;
+    /**
+     * Les deux versions de l'article comparées par `diff` (`canon.modification_article` :
+     * version précédente → version modifiée, `canon.version_texte.etape_id` et `date`). null sans
+     * `diff` ; absent : fiche antérieure à ce champ.
+     */
+    versions?: { avant: VersionComparee | null; apres: VersionComparee } | null;
   };
   /** Exposé des motifs, extrait officiel tel que publié. */
   expose: string | null;
@@ -409,6 +510,29 @@ export interface FicheAmendement {
   vote: ModeDeVote;
   /** Interventions reliées à l'amendement (« ce qui a été dit en commission »). */
   discussions: { extraits: InterventionExtrait[]; total: number };
+  /**
+   * Où il a été discuté, par lien explicite : en commission (1re réunion de commission d'une
+   * intervention reliée à l'amendement) et en séance (`canon.amendement.seance_id`, séance de
+   * discussion publiée par l'AN ; à défaut 1re séance d'une intervention reliée). null : aucune
+   * discussion publiée à ce lieu ; absent : fiche antérieure à ce champ.
+   */
+  discussion?: { commission: LieuDeDiscussion | null; seance: LieuDeDiscussion | null };
   interets: LienInteret[];
   provenance: Provenance;
+}
+
+/** Une version d'article comparée : l'étape du parcours qui l'a produite et sa date, telles que publiées. */
+export interface VersionComparee {
+  /** Case du parcours de l'étape de la version (`version_texte.etape_id`), null si non reliée. */
+  etape: { cle: CleCase; libelle: string } | null;
+  /** Date du texte (`version_texte.date`), null si non publiée. */
+  date: string | null;
+}
+
+/** Réunion où l'amendement a été discuté : son jour et l'adresse publiée de son compte rendu. */
+export interface LieuDeDiscussion {
+  /** Jour de la réunion (heure de Paris), null si non publié. */
+  date: string | null;
+  /** Compte rendu de la réunion (`canon.reunion.compte_rendu_id`) ; null si non publié. */
+  compteRendu: Ancre | null;
 }

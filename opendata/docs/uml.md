@@ -808,6 +808,15 @@ erDiagram
 ```
 <!-- /uml -->
 
+### 3.7 Revue : lots, réponses signées, génération
+
+Banc de revue (`src/banc/`) : un lot d'un objet de revue, ses éléments, les réponses signées des
+relecteurs, l'issue de chaque élément et les travaux de génération.
+
+<!-- uml:revue -->
+(à régénérer depuis le schéma migré : `python -m src uml`)
+<!-- /uml -->
+
 ## 4. Des données brutes au canon, source par source
 
 Dans chaque tableau : **champ source** tel que publié (chemin JSON, colonne CSV, balise XML),

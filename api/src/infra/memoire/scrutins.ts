@@ -3,7 +3,7 @@
 
 import type { CleCase, ScrutinResume } from '@contrat/domain/model';
 
-import type { ScrutinsRepository } from '../../ports';
+import type { FiltreAccueil, ScrutinsRepository } from '../../ports';
 import { type DonneesMemoire, premier } from './donnees';
 
 export class ScrutinsMemoire implements ScrutinsRepository {
@@ -33,6 +33,18 @@ export class ScrutinsMemoire implements ScrutinsRepository {
       .filter((s) => s.date >= debut && s.date <= fin)
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, limite);
+  }
+
+  async jours(debut: string, fin: string, filtre?: FiltreAccueil) {
+    const jours = (await this.tous())
+      .filter(
+        (s) =>
+          (!filtre?.chambres || filtre.chambres.includes(s.chambre)) &&
+          (!filtre?.dossiers || (!!s.dossier && filtre.dossiers.includes(s.dossier.id))),
+      )
+      .map((s) => s.date)
+      .filter((j) => j >= debut && j <= fin);
+    return [...new Set(jours)].sort();
   }
 
   async duDossier(dossier: string, cle?: CleCase) {

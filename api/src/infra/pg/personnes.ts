@@ -23,6 +23,7 @@ import type {
   DossierRef,
   ElementAnnuaire,
   EntetePersonne,
+  FicheQuestion,
   FiltreAnnuaire,
   FonctionDatee,
   GroupeRef,
@@ -31,6 +32,7 @@ import type {
   Page,
   PersonneRef,
   Provenance,
+  QuestionDeLaSeance,
   QuestionResume,
   RoleDansLesDossiers,
   RolePersonne,
@@ -169,6 +171,50 @@ export function groupe(lu: GroupeLu | null | undefined): GroupeRef | null {
     sourceCouleur: lu.couleur ? sourceCouleur(lu.sourceCouleur) : 'arbitraire',
     chambre: chambre(lu.chambre),
   };
+}
+
+/** Ligne lue d'une question (`canon.question`, migrations 0005 et 0014). */
+interface LigneQuestion {
+  id: string;
+  type: FicheQuestion['type'];
+  chambre: string | null;
+  numero: string;
+  legislature: string | null;
+  titre: string | null;
+  rubrique: string | null;
+  ministereInterroge: string | null;
+  ministereAttributaire: string | null;
+  date: string | null;
+  dateReponse: string | null;
+  texteQuestion: string | null;
+  texteReponse: string | null;
+  cloture: string | null;
+  clotureLibelle: string | null;
+  dateCloture: string | null;
+  attributions: { libelle?: string | null; date_jo?: string | null }[] | null;
+  auteur: { id: string; nom: string } | null;
+  groupe: GroupeLu | null;
+  provenance: Provenance | null;
+}
+
+const ENTITES: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", rsquo: '’', lsquo: '‘', laquo: '«', raquo: '»', hellip: '…' };
+
+/**
+ * Texte publié en HTML (questions au Gouvernement et orales sans débat) → texte lisible : balises
+ * retirées, sauts de paragraphe gardés, entités décodées ; les mots restent ceux publiés.
+ */
+export function texteBrut(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (e, nom: string) => ENTITES[nom.toLowerCase()] ?? e)
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** Titres des dossiers : `titre_court` est un identifiant technique (« fin_de_vie_17e »), d'où le titre. */
@@ -1200,6 +1246,86 @@ export class PgPersonnes implements PersonnesRepository {
       pagination,
       total,
     );
+  }
+
+  async question(id: string): Promise<Omit<FicheQuestion, 'jour'> | null> {
+    if (!estUuid(id)) return null;
+    const l = await this.db.first<LigneQuestion>(
+      `SELECT q.entite_id::text AS id, q.type, q.chambre, q.numero, q.legislature, q.titre, q.rubrique,
+              q.ministere AS "ministereInterroge", q.ministere_attributaire AS "ministereAttributaire",
+              ${jour('q.date')} AS date, ${jour('q.date_reponse')} AS "dateReponse",
+              q.texte_question AS "texteQuestion", q.texte_reponse AS "texteReponse",
+              q.cloture, q.cloture_libelle AS "clotureLibelle", ${jour('q.date_cloture')} AS "dateCloture",
+              q.publication_jo -> 'attributions' AS attributions,
+              CASE WHEN p.entite_id IS NULL THEN NULL ELSE json_build_object('id', p.entite_id::text, 'nom', p.nom_affiche) END AS auteur,
+              CASE WHEN g.entite_id IS NULL THEN NULL ELSE ${groupeSql('g')} END AS groupe,
+              ${provenanceSql('q.entite_id')} AS provenance
+       FROM canon.question q
+       LEFT JOIN canon.personne p ON p.entite_id = q.auteur_id AND ${actif('p.entite_id')}
+       LEFT JOIN canon.organisation g ON g.entite_id = q.groupe_auteur_id
+       WHERE q.entite_id = $id AND q.type IN ('QG', 'QE', 'QOSD') AND ${actif('q.entite_id')}`,
+      { id },
+    );
+    if (!l) return null;
+    const memeSeance = l.type === 'QG' && l.date && l.chambre ? await this.questionsDuJour(l.id, l.chambre, l.date) : null;
+    const texteQuestion = l.texteQuestion ? texteBrut(l.texteQuestion) || null : null;
+    const texteReponse = l.texteReponse ? texteBrut(l.texteReponse) || null : null;
+    const repondue = !!(l.dateReponse || texteReponse);
+    const libelleCloture = l.clotureLibelle ?? l.cloture;
+    return {
+      id: l.id,
+      type: l.type,
+      chambre: chambre(l.chambre),
+      numero: l.numero,
+      legislature: l.legislature,
+      titre: l.titre,
+      rubrique: l.rubrique,
+      auteur: l.auteur ? { id: l.auteur.id, nom: l.auteur.nom, fonction: null, groupe: groupe(l.groupe) } : null,
+      ministereInterroge: l.ministereInterroge,
+      ministereAttributaire: l.ministereAttributaire,
+      attributions: (Array.isArray(l.attributions) ? l.attributions : []).map((a) => ({
+        ministere: a.libelle ?? null,
+        date: typeof a.date_jo === 'string' && /^\d{4}-\d{2}-\d{2}/.test(a.date_jo) ? a.date_jo.slice(0, 10) : null,
+      })),
+      date: l.date,
+      dateReponse: l.dateReponse,
+      texteQuestion,
+      texteReponse,
+      // Une clôture sans réponse publiée est une issue publiée (retirée, caduque…), pas un échec.
+      statut: repondue ? 'repondue' : libelleCloture ? 'close' : 'en_attente',
+      cloture: libelleCloture ? { libelle: libelleCloture, date: l.dateCloture } : null,
+      memeSeance,
+      provenance: provenance(l.provenance, 'question', l.id),
+    };
+  }
+
+  /**
+   * Les autres questions au Gouvernement de la même chambre, le même jour, par numéro. Règle sûre :
+   * les QG d'un jour sont posées dans la séance de questions au Gouvernement de ce jour (l'AN en
+   * tient une par jour de questions) ; aucune séance n'est cherchée par l'heure ni par le titre.
+   */
+  private async questionsDuJour(id: string, chambreQuestion: string, date: string): Promise<QuestionDeLaSeance[]> {
+    const lignes = await this.db.all<
+      Omit<QuestionResume, 'provenance'> & { provenance: Provenance | null; auteur: { id: string; nom: string } | null; groupe: GroupeLu | null }
+    >(
+      `SELECT q.entite_id::text AS id, q.type, q.numero, ${jour('q.date')} AS date, q.titre, q.rubrique,
+              COALESCE(q.ministere_attributaire, q.ministere) AS ministere, ${jour('q.date_reponse')} AS "dateReponse",
+              CASE WHEN p.entite_id IS NULL THEN NULL ELSE json_build_object('id', p.entite_id::text, 'nom', p.nom_affiche) END AS auteur,
+              CASE WHEN g.entite_id IS NULL THEN NULL ELSE ${groupeSql('g')} END AS groupe,
+              ${provenanceSql('q.entite_id')} AS provenance
+       FROM canon.question q
+       LEFT JOIN canon.personne p ON p.entite_id = q.auteur_id AND ${actif('p.entite_id')}
+       LEFT JOIN canon.organisation g ON g.entite_id = q.groupe_auteur_id
+       WHERE q.type = 'QG' AND q.chambre = $chambre AND q.date = $date::date AND q.entite_id <> $id
+         AND ${actif('q.entite_id')}
+       ORDER BY length(q.numero), q.numero`,
+      { id, chambre: chambreQuestion, date },
+    );
+    return lignes.map(({ provenance: p, auteur, groupe: g, ...q }) => ({
+      ...q,
+      auteur: auteur ? { id: auteur.id, nom: auteur.nom, fonction: null, groupe: groupe(g) } : null,
+      provenance: provenance(p, 'question', q.id),
+    }));
   }
 
   // ----- Ses actes sur un dossier (« Pourquoi ce vote ») -----

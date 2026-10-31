@@ -1,4 +1,4 @@
-// Handlers des personnes : annuaire, classements, fiche personne (en-tête et un onglet).
+// Handlers des personnes : annuaire, classements, fiche personne (en-tête et un onglet), question.
 
 import type {
   Chambre,
@@ -24,7 +24,8 @@ const ONGLETS: Record<OngletPersonne, true> = { parcours: true, choix: true, dos
 export function lecturesPersonnes({
   depots,
   synthetiseur,
-}: LecturesDeps): Pick<Handlers, 'ListerPersonnes' | 'ClasserPersonnes' | 'ConsulterPersonne'> {
+  horloge,
+}: LecturesDeps): Pick<Handlers, 'ListerPersonnes' | 'ClasserPersonnes' | 'ConsulterPersonne' | 'ConsulterQuestion'> {
   const r = remplirPar(synthetiseur);
   const { personnes, scrutins, transparence } = depots;
 
@@ -82,6 +83,12 @@ export function lecturesPersonnes({
       const entete = trouve(await personnes.entete(id), 'Personne');
       const contenu = await onglet(id, choisi, entete.identite);
       return REMPLIR.ConsulterPersonne(r, { entete, contenu });
+    },
+
+    ConsulterQuestion: async ({ id }) => {
+      texte(id, 'Identifiant de la question');
+      const question = trouve(await personnes.question(id), 'Question');
+      return REMPLIR.ConsulterQuestion(r, { ...question, jour: horloge.aujourdhui() });
     },
   };
 }

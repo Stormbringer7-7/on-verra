@@ -147,6 +147,11 @@ function suivantes(nom: NomCommande, s: any): Command[] {
         return [];
       });
     }
+    case 'ConsulterPersonne':
+      // Onglet « Dossiers » : la fiche de sa première question.
+      return s.contenu.onglet === 'dossiers'
+        ? (s.contenu.questions.elements as { id: string }[]).slice(0, 1).map((q) => commande('ConsulterQuestion', { id: q.id }))
+        : [];
     default:
       return [];
   }
@@ -154,6 +159,7 @@ function suivantes(nom: NomCommande, s: any): Command[] {
 
 const DEPART: Command[] = [
   commande('ConsulterAccueil', {}),
+  commande('ConsulterAccueil', { chambres: ['SENAT'] }),
   commande('ListerDossiers', {}),
   commande('ListerDossiers', { origine: 'parlementaire', taille: 3 }),
   commande('ConsulterAvancement', {}),
@@ -235,6 +241,14 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
       }
     });
 
+    it('Accueil filtré sur le Sénat : votes et réunions du jour au Sénat seulement', () => {
+      const r = reussis.find((x) => x.nom === 'ConsulterAccueil' && JSON.stringify(x.commande.input) === '{"chambres":["SENAT"]}');
+      expect(r, 'Accueil filtré').toBeDefined();
+      const jour = (r!.sortie as Record<string, any>).jour;
+      expect((jour.votes as { chambre: string }[]).every((v) => v.chambre === 'SENAT')).toBe(true);
+      expect(((jour.reunions ?? []) as { chambre: string }[]).every((x) => x.chambre === 'SENAT')).toBe(true);
+    });
+
     it('chaque fait porte une provenance complète', () => {
       for (const r of reussis) {
         visiter(r.sortie, (o, chemin) => {
@@ -314,6 +328,24 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
       expect(pages).toBeGreaterThan(0);
     });
 
+    it('amendements : comptes par sort dans les déposés, sort jamais daté avant le dépôt', () => {
+      const somme = (c: Record<string, number>) => Object.values(c).reduce((s, n) => s + n, 0);
+      for (const r of reussis.filter((x) => x.nom === 'ConsulterDossier')) {
+        const am = (r.sortie as Record<string, any>).amendements;
+        const ici = `${JSON.stringify(r.commande.input)}`;
+        for (const e of am.parEtape as { cle: string; deposes: number; adoptes: number; parSort?: Record<string, number> }[]) {
+          if (!e.parSort) continue;
+          expect(e.parSort.adopte, `${ici} ${e.cle} adoptés`).toBe(e.adoptes);
+          expect(somme(e.parSort), `${ici} ${e.cle} somme des sorts`).toBeLessThanOrEqual(e.deposes);
+        }
+        const deposes = ((r.sortie as Record<string, any>).chiffres as { libelle: string; valeur: unknown }[]).find((c) => c.libelle === 'Amendements déposés')?.valeur;
+        if (am.parSort && typeof deposes === 'number') expect(somme(am.parSort), `${ici} sorts du dossier`).toBeLessThanOrEqual(deposes);
+        for (const a of am.liste.elements as { numero: string; dateDepot?: string | null; dateSort?: string | null }[]) {
+          if (a.dateDepot && a.dateSort) expect(a.dateSort >= a.dateDepot, `${ici} n° ${a.numero}`).toBe(true);
+        }
+      }
+    });
+
     it('pagination bornée par le cœur (page ≥ 1, taille ≤ 100)', async () => {
       const bus = coreDeTest(depots, { horloge });
       const representant = reussis.find((r) => r.nom === 'ConsulterRepresentant')?.commande.input as { id: string } | undefined;
@@ -346,6 +378,7 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
         commande('ConsulterScrutin', { id: INCONNU }),
         commande('ExpliquerVote', { scrutin: INCONNU, personne: INCONNU }),
         commande('ConsulterPersonne', { id: INCONNU }),
+        commande('ConsulterQuestion', { id: INCONNU }),
         commande('ConsulterRepresentant', { id: INCONNU }),
         commande('ListerInterventions', { cible: { type: 'amendement', id: INCONNU } }),
       ];
@@ -364,8 +397,11 @@ export function suiteContrat(nom: string, fabrique: () => Depots, options: Optio
         scrutins.vote(INCONNU, INCONNU),
         scrutins.surAmendement(INCONNU),
         personnes.entete(INCONNU),
+        personnes.question(INCONNU),
         transparence.representant(INCONNU, pagination),
         discussions.interventions({ type: 'reunion', id: INCONNU }, pagination),
+        discussions.duScrutin(INCONNU, null, 5),
+        discussions.duScrutin(INCONNU, INCONNU, 5),
       ]) {
         expect(await fiche).toBeNull();
       }

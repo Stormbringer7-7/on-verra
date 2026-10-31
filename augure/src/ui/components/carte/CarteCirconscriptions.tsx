@@ -6,7 +6,7 @@
 // (Nouvelle-Calédonie, Polynésie : pas de découpage publié par l’INSEE) n’y
 // sont qu’en liste ; les Français établis hors de France ne sont pas sur la carte.
 
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { G, Path, Rect, Text as TexteSvg } from 'react-native-svg';
 
@@ -56,9 +56,13 @@ interface Props {
   onPersonne?: (id: string) => void;
   onDepartement?: (code: string) => void;
   largeurMax?: number;
+  /** Autre coloriage que la position (scrutin : couleur du groupe du député) ; défaut : position. */
+  colorier?: (v: ValeurCirconscription | undefined) => string;
+  /** Légende qui remplace celle des positions quand `colorier` est donné. */
+  legende?: ReactNode;
 }
 
-export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circonscriptions, onPersonne, onDepartement, largeurMax = 720 }: Props) {
+export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circonscriptions, onPersonne, onDepartement, largeurMax = 720, colorier, legende }: Props) {
   const p = usePalette();
   const [largeurDispo, setLargeurDispo] = useState(0);
   const [choisie, setChoisie] = useState<string | null>(null);
@@ -81,6 +85,7 @@ export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circo
     return n;
   }, [circonscriptions, parCode]);
 
+  const couleur = (v: ValeurCirconscription | undefined) => (colorier ? colorier(v) : couleurEtat(p, etatDe(v)));
   const toucher = (x: number, y: number, z: number) => setChoisie(contourSous(dessinees, x / k, y / k, 8 / (z * k)));
 
   const valeur = choisie ? parCode.get(choisie) : undefined;
@@ -108,7 +113,7 @@ export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circo
                 <Path
                   key={c.code}
                   d={c.d}
-                  fill={couleurEtat(p, etatDe(parCode.get(c.code)))}
+                  fill={couleur(parCode.get(c.code))}
                   stroke={c.code === choisie ? p.ink : p.surface}
                   strokeWidth={c.code === choisie ? 1.2 : 0.25}
                 />
@@ -125,7 +130,7 @@ export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circo
       {choisie && contour && (
         <View style={[styles.fiche, { borderColor: p.line, backgroundColor: p.surfaceRaised }]} accessibilityLiveRegion="polite">
           <View style={styles.ligne}>
-            <Pastille couleur={couleurEtat(p, etatDe(valeur))} />
+            <Pastille couleur={couleur(valeur)} />
             <T variant="heading" style={{ flex: 1 }}>{`${nomDepartement(contour.departement)}, ${libelleCirco(contour.numero)}`}</T>
             <Label ton="ink">{LIBELLES_ETAT[etatDe(valeur)]}</Label>
           </View>
@@ -140,15 +145,19 @@ export const CarteCirconscriptions = memo(function CarteCirconscriptions({ circo
         </View>
       )}
 
-      <View style={styles.legende} accessibilityLabel="Légende : position du député">
-        <Label>Position du député</Label>
-        {ORDRE.filter((e) => comptes.get(e)).map((e) => (
-          <View key={e} style={styles.ligne}>
-            <Pastille couleur={couleurEtat(p, e)} />
-            <T variant="caption" ton="inkMuted">{`${LIBELLES_ETAT[e]} : ${comptes.get(e)}`}</T>
-          </View>
-        ))}
-      </View>
+      {colorier && legende ? (
+        legende
+      ) : (
+        <View style={styles.legende} accessibilityLabel="Légende : position du député">
+          <Label>Position du député</Label>
+          {ORDRE.filter((e) => comptes.get(e)).map((e) => (
+            <View key={e} style={styles.ligne}>
+              <Pastille couleur={couleurEtat(p, e)} />
+              <T variant="caption" ton="inkMuted">{`${LIBELLES_ETAT[e]} : ${comptes.get(e)}`}</T>
+            </View>
+          ))}
+        </View>
+      )}
 
       {sansContour.length > 0 && (
         <View style={styles.legende}>

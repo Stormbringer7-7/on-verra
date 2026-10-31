@@ -294,9 +294,9 @@ ses objets citent A.
 
 Code : [RegistreIdentites.fusionner()](../src/identites.py#L96),
 [fusionner_si_meme_objet()](../src/revue.py#L161), [fusionner()](../src/revue.py#L191) (commande),
-[EntrepotPostgres.fusionner()](../src/adaptateurs/stockage/postgres/entrepot.py#L356),
-[EntrepotPostgres.references()](../src/adaptateurs/stockage/postgres/entrepot.py#L326),
-[EntrepotMemoire.fusionner()](../src/adaptateurs/stockage/memoire.py#L171) ·
+[EntrepotPostgres.fusionner()](../src/adaptateurs/stockage/postgres/entrepot.py#L390),
+[EntrepotPostgres.references()](../src/adaptateurs/stockage/postgres/entrepot.py#L360),
+[EntrepotMemoire.fusionner()](../src/adaptateurs/stockage/memoire.py#L197) ·
 Tests (rejoués sur Postgres) : [test_dossier_senat_cite_ensuite_par_l_an](../tests/test_fusion.py#L57),
 [test_membre_du_gouvernement_aucun_puis_relie](../tests/test_fusion.py#L118),
 [test_personne_rne_fusionnee_avec_un_parlementaire](../tests/test_fusion.py#L144),

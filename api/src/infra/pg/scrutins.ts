@@ -27,8 +27,9 @@ import type {
   DepartementRef,
   VoteIndividuel,
 } from '@contrat/domain/model';
+import { estSuppressionArticle } from '@contrat/domain/scrutins';
 import { exprimes, majoritaire } from '@contrat/domain/votes';
-import type { ScrutinsRepository, SqlDatabase, SqlParams } from '../../ports';
+import type { FiltreAccueil, ScrutinsRepository, SqlDatabase, SqlParams } from '../../ports';
 import { type GroupeLu, couleurGroupeSql, gaucheDroite, groupe, ordreHemicycle, positionsDesGroupes } from './personnes';
 
 // ---------- Fragments communs (discussions.ts, recherche.ts) ----------
@@ -275,6 +276,23 @@ export class PgScrutins implements ScrutinsRepository {
     return this.liste('s.date BETWEEN $debut::date AND $fin::date', { $debut: debut, $fin: fin }, limite);
   }
 
+  async jours(debut: string, fin: string, filtre?: FiltreAccueil): Promise<string[]> {
+    if (filtre?.chambres?.length === 0 || filtre?.dossiers?.length === 0) return [];
+    const chambres = filtre?.chambres ? 'AND s.chambre = ANY($chambres::text[])' : '';
+    const dossiers = filtre?.dossiers ? 'AND s.dossier_id = ANY($dossiers::uuid[])' : '';
+    const lignes = await this.db.all<{ jour: string }>(
+      `SELECT DISTINCT s.date::text AS jour ${FROM_SCRUTIN}
+       WHERE ${EN_L17} AND s.date BETWEEN $debut::date AND $fin::date ${chambres} ${dossiers} ORDER BY 1`,
+      {
+        $debut: debut,
+        $fin: fin,
+        ...(filtre?.chambres ? { $chambres: [...filtre.chambres] } : {}),
+        ...(filtre?.dossiers ? { $dossiers: filtre.dossiers.filter(estUuid) } : {}),
+      },
+    );
+    return lignes.map((l) => l.jour);
+  }
+
   async duDossier(dossier: string, cle?: CleCase): Promise<ScrutinResume[]> {
     if (!estUuid(dossier)) return [];
     if (!cle) return this.liste('s.dossier_id = $dossier::uuid', { $dossier: dossier }, null);
@@ -301,12 +319,13 @@ export class PgScrutins implements ScrutinsRepository {
         etape_id: string | null;
         non_votants: number | null;
         provenance: Provenance;
-        amendement: (AmendementRef & { article: ArticleRef | null }) | null;
+        amendement: AmendementLu | null;
       }
     >(
       `SELECT ${colonnesScrutin(avecParcours)}, s.etape_id, s.non_votants,
               ${sqlProvenance('s.entite_id', 'scrutin')} AS provenance,
               (SELECT json_build_object('id', a.entite_id, 'numero', a.numero, 'chambre', a.chambre,
+                        'dispositif', a.dispositif,
                         'article', CASE WHEN a.article_suivi_id IS NOT NULL AND ${estVivante('a.article_suivi_id')}
                                         THEN json_build_object('id', a.article_suivi_id,
                                                'numero', ${sqlNumeroArticle('a.article_suivi_id')}) END)
@@ -567,15 +586,17 @@ export class PgScrutins implements ScrutinsRepository {
   }
 }
 
-/** Ce que le scrutin met aux voix : l'amendement relié (lien explicite), la division citée, le texte, une motion. */
-function objetDuScrutin(
-  nature: NatureScrutin,
-  amendement: (AmendementRef & { article: ArticleRef | null }) | null,
-  titre: string,
-): ObjetScrutin {
+/** Amendement mis aux voix, lu avec son article (version la plus récente) et son dispositif publié. */
+type AmendementLu = AmendementRef & { article: ArticleRef | null; dispositif: string | null };
+
+/**
+ * Ce que le scrutin met aux voix : l'amendement relié (lien explicite), la division citée, le texte,
+ * une motion. Suppression : seulement le dispositif exact « Supprimer cet article. ».
+ */
+function objetDuScrutin(nature: NatureScrutin, amendement: AmendementLu | null, titre: string): ObjetScrutin {
   if (amendement) {
-    const { article, ...ref } = amendement;
-    return { type: 'amendement', amendement: ref, article };
+    const { article, dispositif, ...ref } = amendement;
+    return { type: 'amendement', amendement: ref, article, suppression: estSuppressionArticle(dispositif) };
   }
   switch (nature) {
     case 'ensemble':

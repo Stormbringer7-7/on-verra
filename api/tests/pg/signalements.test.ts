@@ -65,6 +65,22 @@ describe.skipIf(!URL_LECTURE)('PgSignalements (transaction annulée)', () => {
     expect(apres.rows[0].n).toBe(0);
   });
 
+  it('question (QG 1821) : cible_type « question », son UUID en cible_id', async () => {
+    const ligne = await annule(async (db) => {
+      const question = (await db.first<{ id: string }>(
+        `SELECT entite_id::text AS id FROM canon.correspondance
+         WHERE systeme = 'AN' AND type_source = 'question' AND id_source = 'QANR5L17QG1821' AND statut = 'VERIFIED'`,
+      ))!.id;
+      const { id } = await new PgSignalements(db).enregistrer({ cible: { type: 'question', id: question }, message: 'Ministère mal rattaché', ecran: 'Question' });
+      const l = await db.first<Record<string, unknown>>(
+        'SELECT cible_type, cible_id::text AS cible_id, message FROM analytique.signalement WHERE signalement_id = $id::uuid',
+        { $id: id },
+      );
+      return { ...l, attendu: question };
+    });
+    expect(ligne).toEqual({ cible_type: 'question', cible_id: ligne.attendu, message: 'Ministère mal rattaché\n— écran : Question', attendu: ligne.attendu });
+  });
+
   it('identifiant qui n’est pas un UUID : gardé dans le message, cible_id vide ; sans contact', async () => {
     const ligne = await annule(async (db) => {
       const { id } = await new PgSignalements(db).enregistrer({ cible: { type: 'autre', id: 'VTANR5L17V7259' }, message: 'Vote mal rattaché' });

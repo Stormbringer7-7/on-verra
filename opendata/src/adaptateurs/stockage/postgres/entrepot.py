@@ -293,6 +293,40 @@ class EntrepotPostgres:
                 "SELECT * FROM analytique.cas_revue WHERE (%s::text IS NULL OR type = %s) "
                 "AND (%s::text IS NULL OR statut = %s) ORDER BY type, cle", (type_, type_, statut, statut))]
 
+    def cas(self, cle: str) -> dict | None:
+        with self.cx.cursor(row_factory=dict_row) as cur:
+            ligne = cur.execute("SELECT * FROM analytique.cas_revue WHERE cle = %s", (cle,)).fetchone()
+            return dict(ligne) if ligne else None
+
+    def page_cas(self, type_: str | None, statut: str | None, limite: int, decalage: int = 0) -> list[dict]:
+        with self.cx.cursor(row_factory=dict_row) as cur:
+            return [dict(l) for l in cur.execute(
+                "SELECT * FROM analytique.cas_revue WHERE (%s::text IS NULL OR type = %s) "
+                "AND (%s::text IS NULL OR statut = %s) "
+                "ORDER BY COALESCE((contexte ->> 'priorite')::int, 9), cle LIMIT %s OFFSET %s",
+                (type_, type_, statut, statut, limite, decalage))]
+
+    def compter_cas(self) -> list[tuple[str, str, int]]:
+        return [tuple(l) for l in self.cx.execute(
+            "SELECT type, statut, count(*) FROM analytique.cas_revue GROUP BY type, statut ORDER BY type, statut")]
+
+    def juger_synthese(self, jugement: dict):
+        self.cx.execute(
+            "INSERT INTO analytique.relecture_synthese (synthese_id, empreinte, lot, verdict, commentaire, juge_par) "
+            "VALUES (%(synthese_id)s, %(empreinte)s, %(lot)s, %(verdict)s, %(commentaire)s, %(juge_par)s) "
+            "ON CONFLICT (synthese_id, empreinte) DO UPDATE SET lot = EXCLUDED.lot, verdict = EXCLUDED.verdict, "
+            "commentaire = EXCLUDED.commentaire, juge_par = EXCLUDED.juge_par, juge_le = now()", jugement)
+
+    def jugements_syntheses(self) -> list[dict]:
+        with self.cx.cursor(row_factory=dict_row) as cur:
+            return [dict(l) for l in cur.execute("SELECT * FROM analytique.relecture_synthese ORDER BY lot, synthese_id")]
+
+    def consommer_nonce(self, cle: str, nonce: str, expire_le) -> bool:
+        with self._atomique():
+            self.cx.execute("DELETE FROM analytique.nonce_revue WHERE expire_le < now()")
+            return self.cx.execute("INSERT INTO analytique.nonce_revue (cle, nonce, expire_le) VALUES (%s, %s, %s) "
+                                   "ON CONFLICT DO NOTHING RETURNING 1", (cle, nonce, expire_le)).fetchone() is not None
+
     def decider(self, cle: str, decision: dict, par: str):
         if not self.cx.execute("UPDATE analytique.cas_revue SET decision = %s, decide_par = %s, decide_le = now(), "
                                "statut = 'DECIDE' WHERE cle = %s RETURNING 1", (Jsonb(decision), par, cle)).fetchone():

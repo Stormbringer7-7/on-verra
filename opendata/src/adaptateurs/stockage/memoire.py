@@ -32,6 +32,8 @@ class EntrepotMemoire:
         self.tables: dict[str, list[dict]] = {}
         self.historique: list[tuple] = []          # (entite_id, type, valeurs remplacées, source)
         self.revue: dict[str, dict] = {}
+        self.relectures: dict[tuple[str, str], dict] = {}   # (synthese_id, empreinte) -> jugement
+        self.nonces: dict[tuple[str, str], datetime] = {}   # (clé, nonce) -> expiration
         self.affirmations: list[Affirmation] = []
         self.retraits: dict[uuid.UUID, datetime] = {}
         self.fusionnees: dict[uuid.UUID, uuid.UUID] = {}   # canon.entite.fusionnee_dans
@@ -135,6 +137,30 @@ class EntrepotMemoire:
     def cas_revue(self, type_=None, statut=None) -> list[dict]:
         return [dict(c) for c in self.revue.values()
                 if (type_ is None or c["type"] == type_) and (statut is None or c["statut"] == statut)]
+
+    def cas(self, cle: str) -> dict | None:
+        return dict(self.revue[cle]) if cle in self.revue else None
+
+    def page_cas(self, type_, statut, limite, decalage=0) -> list[dict]:
+        tries = sorted(self.cas_revue(type_, statut), key=lambda c: ((c["contexte"] or {}).get("priorite", 9), c["cle"]))
+        return tries[decalage:decalage + limite]
+
+    def compter_cas(self) -> list[tuple[str, str, int]]:
+        return sorted((t, s, n) for (t, s), n in Counter((c["type"], c["statut"]) for c in self.revue.values()).items())
+
+    def juger_synthese(self, jugement: dict):
+        self.relectures[(jugement["synthese_id"], jugement["empreinte"])] = {**jugement, "juge_le": datetime.now()}
+
+    def jugements_syntheses(self) -> list[dict]:
+        return [dict(j) for j in self.relectures.values()]
+
+    def consommer_nonce(self, cle: str, nonce: str, expire_le: datetime) -> bool:
+        maintenant = datetime.now(expire_le.tzinfo)
+        self.nonces = {k: v for k, v in self.nonces.items() if v > maintenant}
+        if (cle, nonce) in self.nonces:
+            return False
+        self.nonces[(cle, nonce)] = expire_le
+        return True
 
     def decider(self, cle: str, decision: dict, par: str):
         c = self.revue[cle]

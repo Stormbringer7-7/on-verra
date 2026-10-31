@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banc de revue</title>
+<style>
+/* Banc de revue (interne) : rapprochements à décider, synthèses à juger. Servi par src/banc. */
+:root {
+  --fond: #eef0f2; --surface: #ffffff; --encre: #1b2430; --encre-2: #536070; --trait: #d5dae0;
+  --accent: #2d4f8a; --oui: #1f7a4d; --non: #b3402a; --oui-fond: #e3f1e9; --non-fond: #f8e6e1;
+  --texte: Georgia, "Times New Roman", serif; --ui: system-ui, -apple-system, sans-serif; --mono: ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fond: #12161b; --surface: #1a2027; --encre: #e4e8ed; --encre-2: #9aa6b4; --trait: #2c3540;
+    --accent: #8fb0e8; --oui: #5fc493; --non: #ee8a73; --oui-fond: #17322a; --non-fond: #3a2019; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --fond: #12161b; --surface: #1a2027; --encre: #e4e8ed; --encre-2: #9aa6b4; --trait: #2c3540;
+  --accent: #8fb0e8; --oui: #5fc493; --non: #ee8a73; --oui-fond: #17322a; --non-fond: #3a2019; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--encre); font: 15px/1.5 var(--ui); padding: 20px 16px 40px; }
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+h1 { margin: 0; font: 600 22px/1.2 var(--ui); }
+.sous { color: var(--encre-2); font-size: 14px; margin: 4px 0 0; max-width: 70ch; }
+.relecteur { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--encre-2); }
+input[type=text], select, textarea {
+  font: 14px var(--ui); color: var(--encre); background: var(--surface); border: 1px solid var(--trait); border-radius: 6px; padding: 6px 9px;
+}
+textarea { width: 100%; background: var(--fond); resize: vertical; min-height: 60px; line-height: 1.45; }
+.onglets, .filtres { display: flex; gap: 6px; flex-wrap: wrap; }
+button {
+  font: 500 13px var(--ui); padding: 6px 11px; border-radius: 6px; border: 1px solid var(--trait);
+  background: transparent; color: var(--encre); cursor: pointer;
+}
+button[aria-pressed="true"], button.principal { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.barre { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: var(--surface); border: 1px solid var(--trait); border-radius: 8px; padding: 10px 14px; }
+.compte { font-variant-numeric: tabular-nums; font-size: 14px; }
+.jauge { flex: 1 1 160px; min-width: 120px; height: 6px; background: var(--trait); border-radius: 3px; overflow: hidden; display: flex; }
+.jauge span { display: block; height: 100%; }
+.j-oui { background: var(--oui); } .j-non { background: var(--non); }
+.fiche { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .fiche { grid-template-columns: minmax(0, 1fr); } }
+.colonne { background: var(--surface); border: 1px solid var(--trait); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gauche { position: sticky; top: 12px; }
+@media (max-width: 860px) { .gauche { position: static; } }
+.repere { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: 13px; color: var(--encre-2); }
+.num { font-family: var(--mono); color: var(--encre); font-size: 12.5px; overflow-wrap: anywhere; }
+.puce { font: 500 12px var(--ui); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--trait); color: var(--encre-2); }
+.titre { font: 600 16px/1.35 var(--ui); margin: 0; }
+.etiquette { font: 600 11px var(--ui); letter-spacing: .06em; text-transform: uppercase; color: var(--encre-2); margin: 0; }
+.synthese { font: 17px/1.6 var(--texte); margin: 0; }
+.regles { color: var(--encre-2); }
+.note { font-size: 12.5px; color: var(--encre-2); margin: 0; }
+.choix { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choix button { font: 600 16px var(--ui); padding: 12px; border-radius: 8px; border-width: 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: transparent; color: var(--encre); border-color: var(--trait); }
+.choix button small { font: 400 12px var(--ui); color: var(--encre-2); }
+.choix .b-oui[aria-pressed="true"] { border-color: var(--oui); background: var(--oui-fond); color: var(--oui); }
+.choix .b-non[aria-pressed="true"] { border-color: var(--non); background: var(--non-fond); color: var(--non); }
+.candidats { display: flex; flex-direction: column; gap: 8px; }
+.candidat { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; border: 1px solid var(--trait); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.candidat:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.candidat input { margin-top: 4px; }
+.indices { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--encre-2); }
+.texte-officiel { font: 15.5px/1.65 var(--texte); white-space: pre-wrap; margin: 0; max-height: 70vh; overflow: auto; overflow-wrap: anywhere; }
+pre.contexte { font: 12.5px/1.5 var(--mono); white-space: pre-wrap; margin: 0; max-height: 60vh; overflow: auto; overflow-wrap: anywhere; }
+.bloc { display: flex; flex-direction: column; gap: 8px; }
+.bloc + .bloc { border-top: 1px solid var(--trait); padding-top: 14px; }
+.nav { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.pos { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--encre-2); }
+.message { font-size: 12.5px; color: var(--encre-2); min-height: 1.2em; margin: 0; }
+.message.erreur, .etat.erreur { color: var(--non); }
+.etat { font-size: 13px; color: var(--encre-2); }
+.vide { text-align: center; color: var(--encre-2); padding: 48px 16px; }
+.decision { font-size: 13px; padding: 8px 10px; border-radius: 6px; background: var(--fond); }
+kbd { font: 500 11px var(--mono); border: 1px solid var(--trait); border-radius: 4px; padding: 0 5px; color: var(--encre-2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Banc de revue</h1>
+      <p class="sous">Outil interne. Rapprochements : choisir ce que la source désigne, jamais deviner. Synthèses : dire si la synthèse du modèle correspond au texte officiel. Chaque réponse est enregistrée en base avec votre nom.</p>
+    </div>
+    <label class="relecteur">Relecteur <input type="text" id="par" placeholder="votre nom" autocomplete="name"></label>
+  </header>
+
+  <div class="barre">
+    <div class="onglets" role="group" aria-label="Revue">
+      <button type="button" data-onglet="cas" aria-pressed="true">Rapprochements</button>
+      <button type="button" data-onglet="syntheses" aria-pressed="false">Synthèses</button>
+    </div>
+    <span class="etat" id="etat">Chargement…</span>
+  </div>
+
+  <div class="barre" id="outils"></div>
+  <main id="zone"></main>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const lire = (cle, defaut) => { try { return JSON.parse(localStorage.getItem("banc:" + cle)) ?? defaut; } catch (e) { return defaut; } };
+  const garder = (cle, v) => { try { localStorage.setItem("banc:" + cle, JSON.stringify(v)); } catch (e) {} };
+
+  const vue = { onglet: lire("onglet", "cas"), type: lire("type", ""), statut: lire("statut", "A_REVOIR"),
+                lot: lire("lot", "tous"), reste: lire("reste", true) };
+  let etat = null, cas = [], decalage = 0, suite = false, courant = 0;
+  let syntheses = [], jugements = {}, courantS = 0;
+
+  $("par").value = lire("par", "");
+  $("par").addEventListener("input", () => { garder("par", $("par").value.trim()); rendre(); });
+  const par = () => $("par").value.trim();
+
+  async function api(chemin, corps) {
+    const r = await fetch(chemin, corps === undefined ? {} :
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+    const d = await r.json().catch(() => ({ erreur: "réponse illisible" }));
+    if (!r.ok) throw new Error(d.erreur || r.statusText);
+    return d;
+  }
+
+  function erreurEtat(e) { $("etat").textContent = "Serveur injoignable : " + e.message; $("etat").classList.add("erreur"); }
+
+  // Rapprochements -------------------------------------------------------------------------
+  const STATUTS = [["A_REVOIR", "À revoir"], ["DECIDE", "Décidés"], ["APPLIQUE", "Appliqués"], ["CADUC", "Caducs"], ["", "Tous"]];
+  const titreType = (t) => etat?.types[t]?.titre || t;
+
+  function comptesParType() {
+    const m = {};
+    for (const [t, s, n] of etat?.comptes || []) { (m[t] ??= { total: 0 })[s] = n; m[t].total += n; }
+    return m;
+  }
+
+  async function chargerCas(garderPosition) {
+    const q = new URLSearchParams({ type: vue.type, statut: vue.statut, decalage: String(decalage) });
+    const d = await api("/api/cas?" + q);
+    cas = d.cas; suite = d.suite;
+    if (!garderPosition) courant = 0;
+    rendre();
+  }
+
+  function outilsCas() {
+    const o = $("outils"); o.replaceChildren();
+    const comptes = comptesParType();
+    const sel = el("select"); sel.setAttribute("aria-label", "Type de cas");
+    const tous = Object.values(comptes).reduce((a, c) => a + (c.A_REVOIR || 0), 0);
+    sel.append(new Option(`Tous les types (${tous.toLocaleString("fr-FR")} à revoir)`, ""));
+    const types = [...Object.keys(etat?.types || {}), ...Object.keys(comptes).filter((t) => !etat?.types[t])];
+    for (const t of types) {
+      if (!comptes[t]) continue;
+      sel.append(new Option(`${titreType(t)} (${(comptes[t].A_REVOIR || 0).toLocaleString("fr-FR")} à revoir / ${comptes[t].total.toLocaleString("fr-FR")})`, t));
+    }
+    sel.value = vue.type;
+    sel.onchange = () => { vue.type = sel.value; garder("type", vue.type); decalage = 0; chargerCas().catch(erreurEtat); };
+    const f = el("div", "filtres"); f.setAttribute("role", "group"); f.setAttribute("aria-label", "Statut");
+    for (const [s, lib] of STATUTS) {
+      const b = el("button", null, lib); b.type = "button"; b.setAttribute("aria-pressed", String(vue.statut === s));
+      b.onclick = () => { vue.statut = s; garder("statut", s); decalage = 0; chargerCas().catch(erreurEtat); };
+      f.append(b);
+    }
+    o.append(sel, f);
+  }
+
+  function rendreCas() {
+    outilsCas();
+    const zone = $("zone"); zone.replaceChildren();
+    if (!cas.length) { zone.append(el("p", "vide", vue.statut === "A_REVOIR" ? "Aucun cas à revoir pour ce filtre." : "Aucun cas pour ce filtre.")); return; }
+    if (courant >= cas.length) courant = cas.length - 1;
+    const c = cas[courant];
+    const fiche = el("div", "fiche");
+
+    const g = el("section", "colonne gauche"); g.setAttribute("aria-label", "Cas à décider");
+    const rep = el("div", "repere");
+    rep.append(el("span", "puce", titreType(c.type)), el("span", "puce", c.statut));
+    if (c.contexte?.priorite != null) rep.append(el("span", "puce", "Priorité " + c.contexte.priorite));
+    g.append(rep, el("p", "titre", c.constat));
+    if (etat?.types[c.type]) g.append(el("p", "note", etat.types[c.type].consigne));
+    if (c.decision) {
+      const choisi = c.decision.choix == null ? "aucun" : `[${c.decision.choix}] ${c.candidats[c.decision.choix]?.libelle || ""}`;
+      g.append(el("p", "decision", `Décidé par ${c.decide_par || "?"} le ${(c.decide_le || "").slice(0, 10)} : ${choisi}${c.decision.motif ? " — " + c.decision.motif : ""}`));
+    }
+
+    const liste = el("div", "candidats"); liste.setAttribute("role", "radiogroup"); liste.setAttribute("aria-label", "Candidats");
+    const option = (valeur, libelle, indices, identite) => {
+      const lab = el("label", "candidat");
+      const r = el("input"); r.type = "radio"; r.name = "choix"; r.value = valeur;
+      if (c.decision && String(c.decision.choix ?? "aucun") === valeur) r.checked = true;
+      const t = el("div"); t.append(el("div", null, libelle)); if (identite) t.append(el("div", "num", identite));
+      lab.append(r, t);
+      if (indices && Object.keys(indices).length) {
+        const ind = el("div", "indices");
+        for (const [k, v] of Object.entries(indices)) ind.append(el("span", null, `${k} : ${typeof v === "object" ? JSON.stringify(v) : v}`));
+        lab.append(ind);
+      }
+      liste.append(lab);
+    };
+    if (c.nature !== "constat") {
+      g.append(el("p", "etiquette", "Que désigne la source ?"));
+      c.candidats.forEach((k, i) => option(String(i), `${i + 1}. ${k.libelle || k.identite}`, k.indices, k.identite));
+    }
+    option("aucun", c.nature === "constat" ? "Constaté" : "Aucun de ces candidats", null, null);
+    g.append(liste);
+
+    const lab = el("label", "note"); lab.append(document.createTextNode("Motif (preuve vérifiable : fiche, date, source)"));
+    const motif = el("textarea"); motif.rows = 2; motif.value = c.decision?.motif || ""; lab.append(motif); g.append(lab);
+    const msg = el("p", "message"); msg.setAttribute("aria-live", "polite");
+    const decider = el("button", "principal", "Décider et appliquer"); decider.type = "button"; decider.id = "decider";
+    decider.disabled = !par();
+    if (!par()) msg.textContent = "Indiquez votre nom (en haut) pour décider.";
+    g.append(decider, msg);
+
+    decider.onclick = async () => {
+      const r = liste.querySelector("input:checked");
+      if (!r) { msg.textContent = "Choisissez un candidat, ou « aucun »."; return; }
+      decider.disabled = true; msg.classList.remove("erreur"); msg.textContent = "Enregistrement…";
+      try {
+        const d = await api("/api/decider", { cle: c.cle, choix: r.value === "aucun" ? null : Number(r.value), par: par(), motif: motif.value });
+        etat = await api("/api/etat");
+        if (vue.statut === "A_REVOIR") { cas.splice(courant, 1); if (!cas.length && suite) return chargerCas(); }
+        else { cas[courant] = d.cas; courant = Math.min(courant + 1, cas.length - 1); }
+        rendre(); window.scrollTo({ top: 0 });
+      } catch (e) { decider.disabled = false; msg.classList.add("erreur"); msg.textContent = "Pas enregistré : " + e.message; }
+    };
+
+    const nav = el("div", "nav");
+    const prec = el("button", null, "← Précédent"); prec.type = "button"; prec.id = "prec"; prec.disabled = courant === 0 && decalage === 0;
+    const suiv = el("button", null, "Suivant →"); suiv.type = "button"; suiv.id = "suiv"; suiv.disabled = courant >= cas.length - 1 && !suite;
+    nav.append(prec, el("span", "pos", `Cas ${(decalage + courant + 1).toLocaleString("fr-FR")}`), suiv);
+    prec.onclick = () => { if (courant > 0) { courant--; rendre(); } else { decalage = Math.max(0, decalage - 50); chargerCas().then(() => { courant = cas.length - 1; rendre(); }).catch(erreurEtat); } };
+    suiv.onclick = () => { if (courant < cas.length - 1) { courant++; rendre(); } else { decalage += cas.length; chargerCas().catch(erreurEtat); } };
+    g.append(nav);
+    const aide = el("p", "note"); aide.innerHTML = "Clavier : <kbd>1</kbd>…<kbd>9</kbd> candidat · <kbd>A</kbd> aucun · <kbd>Entrée</kbd> décider · <kbd>←</kbd> <kbd>→</kbd>";
+    g.append(aide);
+
+    const d = el("section", "colonne"); d.setAttribute("aria-label", "Preuves");
+    const b0 = el("div", "bloc"); b0.append(el("p", "etiquette", "Clé"), el("p", "num", c.cle));
+    if (c.sujet_identite) b0.append(el("p", "etiquette", "Sujet"), el("p", "num", `${c.sujet_type || ""} ${c.sujet_identite}`));
+    if (c.champ) b0.append(el("p", "etiquette", "Champ renseigné par la décision"), el("p", "num", c.champ));
+    if (c.cibles?.length) b0.append(el("p", "etiquette", `Cibles (${c.cibles.length})`), el("p", "num", c.cibles.slice(0, 20).map((x) => `${x.type} ${x.identite}`).join("\n") + (c.cibles.length > 20 ? "\n…" : "")));
+    d.append(b0);
+    const b1 = el("div", "bloc"); b1.append(el("p", "etiquette", "Contexte"), el("pre", "contexte", JSON.stringify(c.contexte, null, 2))); d.append(b1);
+    fiche.append(g, d); zone.append(fiche);
+  }
+
+  // Synthèses ------------------------------------------------------------------------------
+  const NOMS_LOTS = { lot1: "Lot 1", lot2: "Lot 2", textes: "Textes de loi" };
+  const lots = () => [...new Set(syntheses.map((s) => s.lot))];
+  const base = () => syntheses.filter((s) => vue.lot === "tous" || s.lot === vue.lot);
+  const visibles = () => base().filter((s) => !vue.reste || !jugements[s.id]);
+
+  function outilsSyntheses() {
+    const o = $("outils"); o.replaceChildren();
+    const f = el("div", "filtres"); f.setAttribute("role", "group"); f.setAttribute("aria-label", "Lot");
+    for (const l of ["tous", ...lots()]) {
+      const b = el("button", null, l === "tous" ? "Tous les lots" : NOMS_LOTS[l] || l); b.type = "button";
+      b.setAttribute("aria-pressed", String(vue.lot === l));
+      b.onclick = () => { vue.lot = l; garder("lot", l); courantS = 0; rendre(); };
+      f.append(b);
+    }
+    const r = el("button", null, "Seulement à juger"); r.type = "button"; r.setAttribute("aria-pressed", String(vue.reste));
+    r.onclick = () => { vue.reste = !vue.reste; garder("reste", vue.reste); courantS = 0; rendre(); };
+    const b = base(), oui = b.filter((s) => jugements[s.id]?.verdict === "fidele").length, non = b.filter((s) => jugements[s.id]?.verdict === "infidele").length;
+    const jauge = el("div", "jauge"); const jo = el("span", "j-oui"), jn = el("span", "j-non");
+    jo.style.width = (100 * oui / (b.length || 1)) + "%"; jn.style.width = (100 * non / (b.length || 1)) + "%"; jauge.append(jo, jn);
+    o.append(f, r, jauge, el("span", "compte", `${oui + non} / ${b.length} jugées · ${oui} fidèles · ${non} non`));
+  }
+
+  function rendreSyntheses() {
+    outilsSyntheses();
+    const zone = $("zone"); zone.replaceChildren();
+    if (!syntheses.length) { zone.append(el("p", "vide", "Aucun lot de synthèses : déposer les fichiers JSON dans opendata/data/relecture/ puis relancer le banc.")); return; }
+    const liste = visibles();
+    if (!liste.length) { zone.append(el("p", "vide", vue.reste ? "Tout est jugé pour ce filtre." : "Aucune synthèse pour ce filtre.")); return; }
+    if (courantS >= liste.length) courantS = liste.length - 1;
+    const s = liste[courantS], j = jugements[s.id];
+    const fiche = el("div", "fiche");
+    const g = el("section", "colonne gauche"); g.setAttribute("aria-label", "Synthèse à juger");
+    const nature = s.type === "amendement" ? "Amendement" : s.version === "initial" ? "Texte initial" : s.version === "final" ? "Texte final" : "Résumé de dossier";
+    const rep = el("div", "repere"); rep.append(el("span", "puce", NOMS_LOTS[s.lot] || s.lot), el("span", "puce", nature));
+    if (s.type === "amendement") rep.append(el("span", "num", s.libelle));
+    g.append(rep, el("p", "titre", s.dossier || s.libelle), el("p", "etiquette", "Synthèse du modèle"));
+    const syn = el("p", "synthese");
+    const i = s.regles ? s.synthese.search(/\.\s+Son auteur|\.\s+Selon son auteur/) : -1;
+    if (i > 0) { syn.append(el("span", "regles", s.synthese.slice(0, i + 1) + " "), document.createTextNode(s.synthese.slice(i + 1).trim())); }
+    else syn.textContent = s.synthese;
+    g.append(syn);
+    if (s.regles) g.append(el("p", "note", "En gris : « ce qu’il change », produit par les règles à partir du dispositif. Le reste est écrit par le modèle à partir de l’exposé des motifs."));
+
+    g.append(el("p", "titre", "La synthèse correspond-elle au texte ?"));
+    const choix = el("div", "choix");
+    const bOui = el("button", "b-oui"); bOui.type = "button"; bOui.id = "b-oui"; bOui.append(document.createTextNode("Oui"), el("small", null, "fidèle au texte"));
+    const bNon = el("button", "b-non"); bNon.type = "button"; bNon.id = "b-non"; bNon.append(document.createTextNode("Non"), el("small", null, "fausse, inversée ou trompeuse"));
+    bOui.setAttribute("aria-pressed", String(j?.verdict === "fidele")); bNon.setAttribute("aria-pressed", String(j?.verdict === "infidele"));
+    bOui.disabled = bNon.disabled = !par();
+    choix.append(bOui, bNon); g.append(choix);
+    const lab = el("label", "note"); lab.append(document.createTextNode("Commentaire (facultatif) : ce qui ne va pas, ou un doute"));
+    const ta = el("textarea"); ta.id = "commentaire"; ta.rows = 2; ta.value = j?.commentaire || ""; lab.append(ta); g.append(lab);
+    const msg = el("p", "message"); msg.setAttribute("aria-live", "polite");
+    msg.textContent = !par() ? "Indiquez votre nom (en haut) pour juger." : j ? `Jugée par ${j.juge_par}.` : "";
+    g.append(msg);
+
+    const nav = el("div", "nav");
+    const prec = el("button", null, "← Précédente"); prec.type = "button"; prec.id = "prec"; prec.disabled = courantS === 0;
+    const suiv = el("button", null, "Suivante →"); suiv.type = "button"; suiv.id = "suiv"; suiv.disabled = courantS >= liste.length - 1;
+    nav.append(prec, el("span", "pos", `${courantS + 1} / ${liste.length}`), suiv); g.append(nav);
+    const aide = el("p", "note"); aide.innerHTML = "Clavier : <kbd>O</kbd> oui · <kbd>N</kbd> non · <kbd>←</kbd> <kbd>→</kbd> naviguer"; g.append(aide);
+
+    const d = el("section", "colonne"); d.setAttribute("aria-label", "Texte officiel");
+    const bloc = (etiquette, texte) => { const b = el("div", "bloc"); b.append(el("p", "etiquette", etiquette), el("pre", "texte-officiel", texte || "")); d.append(b); };
+    if (s.type === "amendement") {
+      bloc("Amendement", s.entete || s.libelle); bloc("Dispositif (ce qu’il change)", s.dispositif); bloc("Exposé des motifs (pourquoi)", s.expose);
+    } else {
+      bloc(s.version === "initial" ? "Texte initial, tel que déposé" : s.version === "final" ? "Texte final, tel qu’adopté définitivement" : "Texte du dossier", s.texte);
+    }
+    fiche.append(g, d); zone.append(fiche);
+
+    const juger = async (verdict, resterIci) => {
+      msg.classList.remove("erreur"); msg.textContent = "Enregistrement…";
+      try {
+        const r = await api("/api/juger", { synthese_id: s.id, empreinte: s.empreinte, verdict, commentaire: ta.value, par: par() });
+        jugements[s.id] = r.jugement;
+        if (resterIci) { msg.textContent = "Commentaire enregistré."; outilsSyntheses(); return; }
+        if (!vue.reste) courantS = Math.min(courantS + 1, visibles().length - 1);
+        rendre(); window.scrollTo({ top: 0 });
+      } catch (e) { msg.classList.add("erreur"); msg.textContent = "Pas enregistré : " + e.message; }
+    };
+    bOui.onclick = () => juger("fidele");
+    bNon.onclick = () => juger("infidele");
+    ta.onchange = () => { if (jugements[s.id] && par()) juger(jugements[s.id].verdict, true); };
+    prec.onclick = () => { courantS--; rendre(); window.scrollTo({ top: 0 }); };
+    suiv.onclick = () => { courantS++; rendre(); window.scrollTo({ top: 0 }); };
+  }
+
+  // Commun ---------------------------------------------------------------------------------
+  function rendre() {
+    for (const b of document.querySelectorAll("[data-onglet]")) b.setAttribute("aria-pressed", String(b.dataset.onglet === vue.onglet));
+    if (vue.onglet === "cas") rendreCas(); else rendreSyntheses();
+  }
+
+  document.querySelectorAll("[data-onglet]").forEach((b) => b.onclick = () => { vue.onglet = b.dataset.onglet; garder("onglet", vue.onglet); rendre(); });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.target.closest("textarea, input[type=text], select") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const k = ev.key.toLowerCase();
+    if (ev.key === "ArrowRight") $("suiv")?.click();
+    else if (ev.key === "ArrowLeft") $("prec")?.click();
+    else if (vue.onglet === "syntheses") { if (k === "o") $("b-oui")?.click(); else if (k === "n") $("b-non")?.click(); }
+    else if (/^[1-9]$/.test(k)) { const r = document.querySelector(`input[name=choix][value="${Number(k) - 1}"]`); if (r) r.checked = true; }
+    else if (k === "a") { const r = document.querySelector('input[name=choix][value="aucun"]'); if (r) r.checked = true; }
+    else if (ev.key === "Enter") $("decider")?.click();
+  });
+
+  rendre();
+  Promise.all([api("/api/etat"), api("/api/syntheses")]).then(([e, s]) => {
+    etat = e; syntheses = s.syntheses; jugements = s.jugements;
+    const aRevoir = e.comptes.filter((c) => c[1] === "A_REVOIR").reduce((a, c) => a + c[2], 0);
+    $("etat").textContent = `${aRevoir.toLocaleString("fr-FR")} cas à revoir · ${e.syntheses} synthèse(s) chargée(s)`;
+    return chargerCas();
+  }).catch(erreurEtat);
+})();
+</script>
+</body>
+</html>

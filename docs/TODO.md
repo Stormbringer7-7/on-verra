@@ -21,6 +21,140 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
     de `amd` ; à tirer en cohérence (lignes des amendements retenus) si la validation le demande.
   - [ ] Adaptateur de stockage SQLite (tests sans serveur) ; le staging reste Postgres.
   - [ ] AN : le sous-état des amendements (motif d'irrecevabilité, retiré avant / après publication) est perdu dans `canon.amendement`.
+- **Banc de revue : générer, relire et trancher, objet par objet (planifié le 31/10/2026)**. Point
+  de départ : le banc interne (service `revue`) et l'essai `essais/syntheses-locales/` (Qwen 2.5 7B
+  par Ollama, prompt `syntheses-v1`, contrôle sans IA). Cet essai est sur `main`, pas encore sur
+  `design-v4`.
+  Décisions du 31/10/2026 : une clé Ed25519 par personne ; Everyone = unanimité, sinon
+  arbitrage ; génération directe et postes distants derrière le même port ; mode par défaut par
+  objet, choisi à la création du lot puis figé.
+  - **Vocabulaire**
+    - *Objet de revue* : une recette par type de sujet. Chacun déclare :
+      - sa source (sujets extraits de `canon`, ou cas de `analytique.cas_revue`) ;
+      - ses champs affichés ;
+      - son formulaire de réponse ;
+      - sa génération (aucune, ou un prompt versionné, un schéma de sortie et un contrôle automatique) ;
+      - son mode par défaut ;
+      - son effet une fois tranché.
+      Premiers objets : `synthese.expose_amendement`, `synthese.resume_dossier` (texte initial
+      ou final), `rapprochement.<type de cas>` (un par type de `revue.TYPES`).
+    - *Lot* : un échantillon d'éléments d'un objet. Il fixe :
+      - le mode (`OnlyOne`, `Majority`, `Everyone`) et la liste des relecteurs ;
+      - la graine du mélange : chaque relecteur reçoit les éléments dans son propre ordre
+        aléatoire, rejouable.
+    - *Réponse* : un relecteur, un élément, la version jugée (empreinte), les valeurs du
+      formulaire et la signature. Ajout seul : une nouvelle réponse du même relecteur remplace la
+      précédente pour le décompte, et l'historique reste.
+    - *Issue* : `OnlyOne`, la première réponse ; `Majority`, une option qui réunit plus de 50 %
+      des relecteurs du lot ; `Everyone`, tous répondent et sont d'accord. Si la majorité devient
+      impossible, ou au moindre désaccord en `Everyone`, l'élément part en **arbitrage admin**
+      (signé, motivé), jamais tranché par le code.
+  - **Synthèses : relire, corriger ou régénérer**
+    - Réponses possibles : fidèle ; non fidèle (fausse, inversée, trompeuse) ; **corrigée** (le
+      relecteur réécrit le texte) ; **à régénérer** (avec une consigne).
+    - Corrigée : nouvelle version, `methode = HUMAN`, nouvelle empreinte. En `OnlyOne`, la
+      correction tranche ; sinon la version corrigée revient dans le lot pour les autres
+      relecteurs.
+    - À régénérer : un travail de génération (même objet, consigne et sortie précédente jointes)
+      produit une nouvelle version, qui revient dans le lot ; l'ancienne est `REJETE`.
+    - Effet : `analytique.affirmation` passe de `GENERE` à `RELU` ou `REJETE`, avec le modèle, la
+      version du prompt, le contrôle et les preuves (`analytique.preuve`).
+    - Rapprochements : l'issue passe par `revue.decider`, avec les noms des relecteurs.
+  - **Ports et adaptateurs**
+    - Port `Modele`, générique : requête neutre (consignes, documents, schéma de sortie, options) ;
+      réponse neutre (texte ou JSON validé par nous, modèle, version, jetons, durée, raison de fin).
+      Même contrat que celui prévu pour le debatron.
+    - Adaptateurs du port `Modele` :
+      - `SansModele` ;
+      - `Factice` (tests, déterministe) ;
+      - `Ollama` (repris de `rediger.py`, par URL : le PC à GPU) ;
+      - HTTP « compatible OpenAI » (vLLM, LM Studio, fournisseurs).
+      Ils sont choisis par configuration, sans SDK de fournisseur, et chacun déclare ses
+      capacités.
+    - Port `Generateur`, **un adaptateur par objet** : il construit la requête depuis le sujet
+      (repris d'`exporter.py`), valide la sortie, puis lance le contrôle automatique (repris de
+      `controle.py`). Le port `Synthetiseur` actuel devient ce générateur pour les synthèses.
+    - Prompt `syntheses-v2` : `syntheses-v1` plus les corrections du compte rendu (ignorer le
+      gage financier, ne jamais nommer un auteur absent du texte).
+    - Exécution :
+      - directe, par le service ;
+      - ou par des **postes de génération** qui prennent un travail sous bail (reprise si le
+        poste tombe), le rédigent avec leur modèle et renvoient le résultat signé. Plusieurs PC
+        se partagent ainsi un lot. Sur Windows, il faut installer une bibliothèque Python
+        (signature).
+  - **API de revue signée (service `revue`)**
+    - Chaque requête est signée en Ed25519 par la clé privée de son auteur. Le service ne garde que
+      les **clés publiques** : un fichier monté en lecture seule, chaque clé avec un nom et un
+      rôle (`admin` ou `relecteur`).
+    - Format de signature :
+      - en-têtes `X-Revue-Cle`, `X-Revue-Date` (±5 min), `X-Revue-Nonce` et `X-Revue-Signature` ;
+      - message signé : méthode, chemin, date, nonce et sha256 du corps ;
+      - un nonce n'est accepté qu'une fois (anti-rejeu).
+    - `python -m src revue cles creer --nom X` crée une paire sur le poste de la personne : la clé
+      privée ne quitte jamais ce poste, la clé publique va dans le fichier du service.
+    - Routes :
+      - lots : lister ; créer (admin : objet, filtre, taille, mode, relecteurs, graine) ;
+        éléments suivants pour le relecteur qui signe ;
+      - réponses ; arbitrages (admin) ; bilan et export d'un lot ;
+      - génération : lancer (admin), prendre un travail, rendre un résultat (poste).
+    - L'écran du banc signe dans le navigateur (WebCrypto Ed25519) : la personne importe sa clé
+      privée une fois, conservée non exportable par le navigateur. Les routes non signées
+      d'aujourd'hui disparaissent. L'accès reste local (127.0.0.1, tunnel SSH), avec les contrôles
+      Host et Origin.
+    - Nouvelle dépendance Python : `cryptography` (Ed25519), la seule ajoutée.
+  - **Stockage**
+    - Migration `0024_banc_revue` : tables `analytique` `lot_revue`, `element_lot`,
+      `reponse_revue` (ajout seul, signature gardée), `issue_revue`, `travail_generation` et
+      `nonce_revue` ; `affirmation` gagne l'empreinte, la version précédente, la consigne et le
+      contrôle.
+    - `0023_relecture_synthese` reste le temps que le banc actuel serve : ses jugements sont repris
+      en réponses à l'étape 7, puis la table est retirée.
+    - `docs/uml.md` : bloc `revue` à régénérer (`python -m src uml`, Postgres requis).
+    - Contrôles d'invariants :
+      - jamais `RELU` sans issue ;
+      - jamais d'issue sans les réponses que le mode exige ;
+      - chaque signature gardée se revérifie.
+  - **Étapes**
+    1. [x] Ramener l'essai sur `design-v4` (fichiers repris de `main`, sans fusion). Registre des
+       objets de revue (`opendata/src/banc/objets.py` : deux synthèses et un objet par type de
+       cas). Schéma (`0024_banc_revue`).
+       - [ ] Appliquer les migrations sur une base d'essais, régénérer `docs/uml.md`, lancer les
+         tests Postgres (Docker arrêté le 31/10/2026).
+    2. [x] Signatures : création des clés, vérification, nonces, rôles ; tests sur les vecteurs
+       de la RFC 8032 (`opendata/src/banc/signature.py`, `revue cles creer|inscrire|verifier`).
+       Dépendances : `cryptography==50.0.2`, `gnupg` dans l'image.
+       - [x] Paire Ed25519 de l'utilisateur créée le 31/10/2026 (`~/.config/big-brother/revue/Fxst1.pem`,
+         empreinte `4a4aedd0…aeda607`) ; clé publique GPG exportée dans `opendata/data/revue/admins/fxst1.asc`.
+       - [ ] L'inscrire (l'utilisateur, phrase secrète GPG) et mettre `REVUE_ADMINS_GPG` dans `.env`.
+    3. [ ] API des lots, réponses, issues et arbitrages ; tests des trois modes (table de toutes
+       les combinaisons de réponses).
+    4. [ ] Banc sur l'API signée : import de la clé, formulaire par objet, corriger, régénérer.
+    5. [ ] Port `Modele` (adaptateurs `Factice`, `Ollama`, compatible OpenAI), un `Generateur` par
+       objet, contrôle automatique ; génération directe.
+    6. [ ] Postes de génération : bail, reprise, signature.
+    7. [ ] Reprendre le lot de 192 synthèses (`banc-2026-10.json`) comme affirmations `GENERE` dans
+       un premier lot.
+  - **Hors de ce chantier** : montrer des synthèses `RELU` dans l'app. La règle « Aucun LLM
+    branché » reste en vigueur, et en changer est une décision à part. Comparer des modèles, et le
+    jeu de référence annoté (« Avant toute confiance dans le modèle »).
+  - **Décidé le 31/10/2026 (suite)** :
+    - Pas de réponse « je ne sais pas » : un doute s'écrit dans la note de la réponse, et le
+      relecteur répond quand même.
+    - Mode par défaut : `OnlyOne` pour les synthèses d'amendement. Pas `OnlyOne` pour les textes
+      (`synthese.resume_dossier`), plus compliqués : `Majority` proposé, à confirmer.
+      Rapprochements d'identité : `Majority` (correspondances, identités Sénat et HATVP,
+      orateurs, élus RNE, fusions). Autres cas (amendement, étape ou article cité, constats) :
+      `OnlyOne` proposé.
+    - Un admin relit aussi (il compte comme un relecteur du lot), en plus d'arbitrer.
+    - Signatures en deux niveaux :
+      - **Ed25519 brut** pour signer chaque requête (navigateur, postes, scripts) ;
+      - **GPG** pour la confiance : un admin signe avec sa clé GPG la clé publique Ed25519 d'une
+        personne avant qu'elle entre dans le fichier du service. Révoquer une personne, c'est
+        retirer sa clé ou révoquer cette signature.
+    - Première clé : celle de l'utilisateur (`adm@fxst1.dev`), avec le rôle `admin`. Clé GPG créée
+      le 31/10/2026 : ed25519, empreinte `DB0DDB686511B319355C9F1F7DE9C1FD7D94AD4E`, expire le
+      30/10/2028. Sa paire Ed25519 sera créée par `revue cles creer` à l'étape 2, et sa clé publique sera
+      signée par sa clé GPG.
 - Liste des médias sources (côté utilisateur) : voir « Intervenants et sources médiatiques ».
 - À relire et commiter (25/10/2026, branche `design-v4`) : design v4 (voir « Design v4 » ci-dessous), migrations 0018 à 0020 et projections 11, 12, 60, 61, 65, déjà appliquées à la base locale.
 - À commiter (25/10/2026) : liens des comptes rendus AN (migration 0017), chargement de l'app web
@@ -134,7 +268,9 @@ une ligne si elle porte une décision utile ; sinon elle est retirée. Index de 
 
 - [ ] Bout en bout sur les deux dossiers prototypes (chaque écran a ses données, chaque fait remonte à sa source) — plusieurs passages prévus.
 - [ ] Législatures 14 à 16 dans le modèle canonique (l'ancienne chaîne SQLite, qui les couvrait pour les scrutins AN, est retirée depuis le 25/10/2026 ; elle reste dans l'historique git, commit `v2`).
-- [ ] Outil de revue humaine (écran triable par priorité) : 127 666 cas au 25/10/2026, plus le RNE.
+- [x] Outil de revue humaine : banc de revue interne (31/10/2026, service `revue`, profil `admin`, `http://127.0.0.1:8084`), rapprochements par type et priorité, synthèses du modèle jugées par empreinte. Remplace le banc de relecture publié sur claude.ai.
+  - [ ] Reprendre les jugements déjà saisis sur le banc claude.ai (non lisibles depuis le dépôt) : les ressaisir, ou les exporter en JSON pour import.
+  - [ ] Décider par lot les cas identiques (même constat, même candidat évident) : le banc ne décide qu'un cas à la fois.
 - [ ] Export SQLite de la base (adaptateur de sortie, par exemple `canon` et `lecture` d'une législature) : à garder possible, pas demandé pour l'instant.
 - [x] Rafraîchissement quotidien : service `donnees` (`opendata/docker/canon.sh` : migrations, chargement incrémental, projections, contrôles).
 
@@ -185,6 +321,21 @@ Relevé à l'intégration du 24/10/2026 ([contrat.md](contrat.md)).
 - [x] **Lot 2 v4** (25/10/2026) : Réglages (taille du texte, thème, contraste renforcé, animations réduites, exporter, tout effacer), Méthode, Bienvenue au premier lancement, Mes suivis gardés sur l'appareil (boutons Suivre), « Ce qui a bougé » (`ConsulterSuivis`, sans état côté serveur), liens Suivis et Réglages dans l'en-tête paysage, bouton Suivis en portrait, pied de page.
   - [ ] Taille du texte pour les styles qui n'utilisent pas `T`.
   - [ ] Mes suivis : `derniersEcarts` en une requête pour toutes les personnes (3,8 s au premier appel), actes regroupés par dossier.
+- [x] **Thèmes et écrans de la maquette v3** (31/10/2026, [maquette](https://claude.ai/artifact/2zeVRjfihwHAcztEWmhEnL)) : thèmes Oppression (par défaut), Vigilance, Propre, Techno dans Réglages (`ui/theme/Themes.ts`, `useTheme`), icônes (`components/Icone.tsx`) et mouvement (`components/mouvement.tsx`) ; Actualité par jour (bandeau, calendrier, `ConsulterAccueil({ jour })`), Dossier (onglets par type, rail à icônes, Texte, Amendements, Scrutins clés, Acteurs, sous-dossier), Étape (22 sortes), feuille Événement (8 déviations), Question (`ConsulterQuestion`, page `question/:id`), Scrutin (groupe, hémicycle, carte, 3 modes), vote à main levée, Amendement.
+  - [x] SQL du jour de l'Accueil (`duJour`, `joursActifs`, `jours`) et `PgPersonnes.question` lancés sur la vraie base (31/10/2026).
+  - [x] **Données manquantes des écrans v3** (31/10/2026), champs optionnels, liens publiés seulement :
+    - Actualité : `CaseCompacte.lieu` et `debut`, `DossierResume.deviations`, `JourAccueil.reunions` (commissions du Sénat : null, pas 0), filtres `chambres` / `dossiers` de `ConsulterAccueil`.
+    - Dossier et Étape : dates et comptes par sort des amendements (par étape et par dossier ; « non débattus » seulement si le dossier est retiré ou caduc), motions d'un sous-dossier (`DossierLie.scrutins`), fixture réelle `fixtures/engagement.ts` (PLF 2026 et son 49.3), membres d'une commission d'enquête, `FicheEtape.modele` et `personnes`, `DeviationParcours.effetSi` (49.3 et motions de procédure, d'après le modèle).
+    - Scrutin, Amendement, Question : `FicheScrutin.interventions` (amendement, ou séance citée par l'étape le jour du vote : environ 220 scrutins AN), versions comparées avec étape et date, discussion en commission / en séance avec compte rendu, phrase « l'article reste » par `estSuppressionArticle`, `FicheQuestion.memeSeance` (QG), `TypeCible` « question ».
+  - [ ] Manques qui restent, sans source ou sans lien sûr :
+    - propositions de résolution européenne : non distinguées des autres résolutions ;
+    - interventions d'un sous-dossier (`intervention.dossier_id` ne pointe jamais vers un sous-dossier) ; interventions des scrutins du Sénat ;
+    - `point_odj.etape_id` et `intervention.point_odj_id` jamais remplis (0 ligne) ; `version_texte.etape_id` non plus ;
+    - majorité requise (`suffragesRequis` de l'AN non chargé) ; auditions de commission d'enquête (`canon.audition` vide) ; soutiens RIP (aucune source) ;
+    - fusion : aucun événement dans la projection (`canon.fusion` ne fusionne que deux fiches d'un même dossier) ;
+    - date d'inscription d'une QOSD : absente des 828 fichiers AN ; mois écoulés d'une commission d'enquête : date de création publiée incohérente ;
+    - rôle d'un orateur : `intervention.role` ne porte que des codes techniques, le rôle vient de `qualite`.
+  - [ ] Glyphes restants à remplacer par `Icone` : familles de l'Explorer et de la Recherche (§ ◐ ▥ ⌖ ✎ ◇), avertissement IA (✦), Classements (★ ☆), Guide.
   - [ ] Thèmes et code postal dans Bienvenue et Réglages, une fois les thèmes attribués et `TrouverRepresentants` faits.
 - [x] **Recherche v4** (25/10/2026) : `ChercherParFamilles` (6 familles, 21 déclinaisons comptées, numéros officiels exacts ou ambigus), contrat, fixtures, API mémoire et Postgres, écran. Toucher un résultat ouvre l'Explorer filtré, « Fiche » ouvre l'objet seul. Numéros 0,003 à 0,3 s, une déclinaison 0,3 à 0,7 s, parcourir 2 à 3 s.
   - [ ] Index plein texte des amendements (colonne `texte_recherche` + GIN), puis remettre le dispositif dans la recherche (aujourd'hui : numéro ou titre du dossier).

@@ -14,6 +14,7 @@ import type {
   Intervenant,
   Intervention,
   InterventionExtrait,
+  InterventionsDuScrutin,
   Orateur,
   OrganisationRef,
   Page,
@@ -389,5 +390,46 @@ export class PgDiscussions implements DiscussionsRepository {
     const ordre = 'r.debut DESC, i.ordre DESC';
     const lignes = await this.lignes(selection, { $scrutin: scrutin, $personne: personne, $limite: limite }, ordre, 'LIMIT $limite');
     return lignes.map(extrait);
+  }
+
+  /**
+   * Interventions reliées à un scrutin : sur l'amendement voté (comme `surAmendement`), sinon celles
+   * sur son dossier dans la séance que cite son étape (acte → réunion `reunionRef`), le jour du vote.
+   * Lien structurel seulement : sans étape ni dossier publiés (Sénat, la plupart des scrutins sur un
+   * article), null ; jamais de séance choisie par l'heure ni d'intervention par son texte.
+   */
+  async duScrutin(scrutin: string, amendement: string | null, limite: number): Promise<InterventionsDuScrutin | null> {
+    if (!estUuid(scrutin)) return null;
+    if (amendement) {
+      // L'amendement doit être celui que le scrutin met aux voix (lien publié `amendement_id`).
+      const vote = estUuid(amendement)
+        ? await this.db.first<{ ok: boolean }>(
+            'SELECT true AS ok FROM canon.scrutin WHERE entite_id = $scrutin::uuid AND amendement_id = $amendement::uuid',
+            { $scrutin: scrutin, $amendement: amendement },
+          )
+        : null;
+      if (!vote) return null;
+      return { portee: 'amendement', ...(await this.surAmendement(amendement, limite)), reunion: null };
+    }
+    const reunions = await this.db.all<{ id: string; dossier: string }>(
+      `SELECT DISTINCT r.entite_id AS id, s.dossier_id AS dossier
+       FROM canon.scrutin s ${vivante('s.entite_id', 'xs')}
+       JOIN canon.lien l ON l.de_id = s.etape_id AND l.nature = 'reunion'
+       JOIN canon.reunion r ON r.entite_id = l.vers_id AND r.type = 'seance' AND ${JOUR} = s.date
+       ${vivante('r.entite_id', 'xr')}
+       WHERE s.entite_id = $scrutin::uuid AND s.dossier_id IS NOT NULL AND ${estVivante('s.dossier_id')}`,
+      { $scrutin: scrutin },
+    );
+    if (!reunions.length) return null;
+    const params = { $reunions: reunions.map((r) => r.id), $dossier: reunions[0].dossier };
+    const selection: Selection = {
+      source: 'SELECT entite_id FROM canon.intervention WHERE reunion_id = ANY($reunions::uuid[])',
+      filtre: `${SUR_LE_DOSSIER} AND ${HORS_PRESIDENCE} AND ${UN_ORATEUR}`,
+    };
+    const [total, lignes] = await Promise.all([
+      this.compter(selection, params),
+      this.lignes(selection, { ...params, $limite: limite }, ORDRE, 'LIMIT $limite'),
+    ]);
+    return { portee: 'seance', extraits: lignes.map(extrait), total, reunion: reunions.length === 1 ? reunions[0].id : null };
   }
 }

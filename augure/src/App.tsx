@@ -60,12 +60,13 @@ import { Personnes } from './ui/ecrans/Personnes';
 import { PourquoiVote } from './ui/ecrans/PourquoiVote';
 import { Recherche } from './ui/ecrans/Recherche';
 import { Departement } from './ui/ecrans/Departement';
+import { Question } from './ui/ecrans/Question';
 import { Representant } from './ui/ecrans/Representant';
-import { Scrutin } from './ui/ecrans/Scrutin';
+import { Scrutin, VoteMainLevee } from './ui/ecrans/Scrutin';
 import { ArianeProvider, useTitres } from './ui/hooks/ariane';
 import { CoreProvider } from './ui/hooks/core';
 import { useLarge } from './ui/hooks/miseEnPage';
-import { ThemeProvider, usePalette } from './ui/theme/ThemeProvider';
+import { ThemeProvider, usePalette, useTheme } from './ui/theme/ThemeProvider';
 import { Bienvenue } from './ui/ecrans/Bienvenue';
 import { Methode } from './ui/ecrans/Methode';
 import { Reglages } from './ui/ecrans/Reglages';
@@ -115,11 +116,13 @@ const FICHES: Record<Page, ComponentType> = {
   Article,
   Amendement,
   Scrutin,
+  VoteMainLevee,
   PourquoiVote,
   Personne,
   Institution,
   Representant,
   Departement,
+  Question,
 };
 
 /** Un lien profond vers une fiche garde les onglets en dessous : le retour y mène. */
@@ -174,11 +177,11 @@ function Application() {
   );
 }
 
-/** Barre d'état du système : claire sur le thème sombre, sombre sur le thème clair. */
+/** Barre d'état du système : claire sur un thème sombre, sombre sur un thème clair. */
 function BarreEtat() {
   return (
     <StatusBar
-      style={useReglages().reglages.theme === "clair" ? "dark" : "light"}
+      style={useTheme().theme.sombre ? "light" : "dark"}
     />
   );
 }
@@ -190,10 +193,10 @@ function Fond() {
 function Navigateurs() {
   const p = usePalette();
   const titres = useTitres();
-  const { reglages } = useReglages();
+  const sombre = useTheme().theme.sombre;
   const theme: Theme = {
     ...DarkTheme,
-    dark: reglages.theme !== "clair",
+    dark: sombre,
     colors: {
       ...DarkTheme.colors,
       background: p.surface,

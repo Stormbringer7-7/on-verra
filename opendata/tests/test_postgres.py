@@ -99,7 +99,8 @@ class RevuePostgres(_Postgres, ContratRevue, unittest.TestCase):
 
     def fabrique(self):
         from src.adaptateurs.stockage.postgres import EntrepotPostgres
-        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite, analytique.affirmation, analytique.cas_revue CASCADE")
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite, analytique.affirmation, analytique.cas_revue, "
+                   "analytique.relecture_synthese, analytique.nonce_revue CASCADE")
         return EntrepotPostgres(CX)
 
 
@@ -114,7 +115,8 @@ class RevueRnePostgres(_Postgres, ContratRevueRne, unittest.TestCase):
 
     def fabrique(self):
         from src.adaptateurs.stockage.postgres import EntrepotPostgres
-        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite, analytique.affirmation, analytique.cas_revue CASCADE")
+        CX.execute("TRUNCATE brut.enregistrement_source, canon.entite, analytique.affirmation, analytique.cas_revue, "
+                   "analytique.relecture_synthese, analytique.nonce_revue CASCADE")
         return EntrepotPostgres(CX)
 
 

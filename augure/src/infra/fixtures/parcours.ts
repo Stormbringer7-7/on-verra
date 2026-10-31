@@ -83,6 +83,8 @@ export const PARCOURS_AGRICOLE: Parcours = {
       debut: null,
       conclusion: null,
       provenance: [AN('DLR5L17N54085')],
+      // canon.parcours_deviation : aucun effet conditionnel pour la procédure accélérée
+      effetSi: null,
     },
   ],
   branches: [{ de: 'conclusions_cmp', vers: 'cc', libelle: 'Texte de la CMP adopté : fin de la navette' }],
@@ -144,6 +146,11 @@ export const PARCOURS_ENGAGEMENT: Parcours = {
     dossier: { id: 'DLR5L17N52428', titre: 'Projet de loi de finances pour 2026' },
     etape: 'nouvelle_lecture',
     etapeLibelle: 'Nouvelle lecture',
+    // Motions de censure déposées sur ce 49.3 (canon.etape sous l'acte ANNLEC-DGVT du 20/01/2026).
+    scrutins: [
+      { id: 'VTANR5L17V5154', numero: '5154', date: '2026-01-23', nature: 'motion_censure', sort: 'rejeté', adopte: false, pour: 269, contre: 0 },
+      { id: 'VTANR5L17V5155', numero: '5155', date: '2026-01-23', nature: 'motion_censure', sort: 'rejeté', adopte: false, pour: 142, contre: 0 },
+    ],
   },
   enfants: [],
   dateReference: '2026-10-27',
@@ -187,6 +194,7 @@ export const PARCOURS_CADUC_SENAT: Parcours = {
       debut: null,
       conclusion: null,
       provenance: [SENAT('ppl23-694')],
+      effetSi: null,
     },
   ],
   branches: [],

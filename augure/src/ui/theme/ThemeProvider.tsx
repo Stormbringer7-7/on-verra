@@ -1,36 +1,61 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { TextStyle } from 'react-native';
 
 import type { Position } from '@/core';
 import { ECHELLES, useReglages } from '../hooks/reglages';
-import { palettes, type Palette } from './tokens';
+import { creerStyles, ORDRE_THEMES, paletteDu, THEME_PAR_DEFAUT, THEMES, type IdTheme, type Styles, type Theme } from './Themes';
+import type { Palette } from './tokens';
 
-const ThemeContext = createContext<Palette>(palettes.dark);
-const EchelleContext = createContext(1);
+interface ContexteTheme {
+  theme: Theme;
+  palette: Palette;
+  styles: Styles;
+  echelle: number;
+}
 
-/** Palette des réglages : thème sombre (salle de contrôle) ou clair (dossier papier), contraste renforcé ou non. */
-export function paletteDes({ theme, contraste }: { theme: 'sombre' | 'clair'; contraste: boolean }): keyof typeof palettes {
-  if (theme === 'clair') return contraste ? 'clairContraste' : 'light';
-  return contraste ? 'contraste' : 'dark';
+const parDefaut = THEMES[THEME_PAR_DEFAUT];
+const ThemeContext = createContext<ContexteTheme>({ theme: parDefaut, palette: parDefaut.palette, styles: creerStyles(parDefaut.palette), echelle: 1 });
+
+/**
+ * Thème de l'app : thème, contraste et taille du texte lus dans les réglages de l'appareil ;
+ * `theme` et `contraste` forcent une palette (tests, aperçus).
+ */
+export function ThemeProvider({ theme, contraste, children }: { theme?: IdTheme; contraste?: boolean; children: ReactNode }) {
+  const { reglages } = useReglages();
+  const id = theme ?? reglages.theme;
+  const renforce = contraste ?? reglages.contraste;
+  const echelle = ECHELLES[reglages.taille];
+  const valeur = useMemo<ContexteTheme>(() => {
+    const palette = paletteDu(id, renforce);
+    return { theme: THEMES[id], palette, styles: creerStyles(palette, echelle), echelle };
+  }, [id, renforce, echelle]);
+  return <ThemeContext.Provider value={valeur}>{children}</ThemeContext.Provider>;
 }
 
 /**
- * Thème de l'app : palette et taille du texte lues dans les réglages de l'appareil ; `scheme` force
- * une palette (tests, aperçus).
+ * Thème actif, ses couleurs et ses styles réutilisables ; `choisir` change le thème (gardé dans les
+ * réglages de l'appareil).
  */
-export function ThemeProvider({ scheme, children }: { scheme?: keyof typeof palettes; children: ReactNode }) {
-  const { reglages } = useReglages();
-  return (
-    <ThemeContext.Provider value={palettes[scheme ?? paletteDes(reglages)]}>
-      <EchelleContext.Provider value={ECHELLES[reglages.taille]}>{children}</EchelleContext.Provider>
-    </ThemeContext.Provider>
+export function useTheme() {
+  const contexte = useContext(ThemeContext);
+  const { modifier } = useReglages();
+  return useMemo(
+    () => ({
+      ...contexte,
+      themes: ORDRE_THEMES.map((id) => THEMES[id]),
+      choisir: (id: IdTheme) => modifier({ theme: id }),
+    }),
+    [contexte, modifier],
   );
 }
 
-export const usePalette = () => useContext(ThemeContext);
+export const usePalette = () => useContext(ThemeContext).palette;
+
+/** Styles réutilisables du thème actif (`creerStyles`, Themes.ts). */
+export const useStyles = () => useContext(ThemeContext).styles;
 
 /** Facteur de taille du texte choisi dans les réglages (1 : normale). */
-export const useEchelle = () => useContext(EchelleContext);
+export const useEchelle = () => useContext(ThemeContext).echelle;
 
 /** Style de texte mis à l'échelle des réglages (taille et interligne). */
 export function aLEchelle<S extends TextStyle>(style: S, echelle: number): S {

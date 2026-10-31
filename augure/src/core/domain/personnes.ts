@@ -11,6 +11,7 @@ import type {
   Indicateur,
   Page,
   Periode,
+  PersonneRef,
   Provenance,
   RapprochementVerifie,
   Synthese,
@@ -161,6 +162,65 @@ export interface QuestionResume {
   ministere: string | null;
   dateReponse: string | null;
   provenance: Provenance;
+}
+
+/**
+ * Où en est une question : réponse publiée ; close sans réponse, d'après la clôture publiée
+ * (retirée, caduque…, libellé tel quel) ; en attente : ni réponse ni clôture publiées.
+ */
+export type StatutQuestion = 'repondue' | 'close' | 'en_attente';
+
+/** Attribution publiée au JO : le ministère chargé de répondre, jamais une personne. */
+export interface AttributionQuestion {
+  ministere: string | null;
+  date: string | null;
+}
+
+/**
+ * Fiche d'une question (`canon.question`) : textes de la question et de la réponse tels que publiés
+ * (balises retirées), ministère interrogé et attributaire tels que publiés, jamais la personne du
+ * ministre (l'AN ne la publie pas ; son nom ne figure que dans le texte de la réponse). Aucun lien
+ * vers la séance : l'AN n'en publie pas pour les questions (ni date d'inscription d'une QOSD) ; les
+ * QG du même jour en tiennent lieu (`memeSeance`).
+ */
+export interface FicheQuestion {
+  id: string;
+  type: QuestionResume['type'];
+  chambre: Chambre;
+  numero: string;
+  legislature: string | null;
+  /** Analyse publiée. */
+  titre: string | null;
+  rubrique: string | null;
+  /** Auteur, avec le groupe publié sur la question ; null si non relié. */
+  auteur: PersonneRef | null;
+  ministereInterroge: string | null;
+  /** Dernière attribution publiée, null si aucune. */
+  ministereAttributaire: string | null;
+  attributions: AttributionQuestion[];
+  /** QE : publication au JO ; QG : jour de l'échange en séance ; QOSD : dépôt. */
+  date: string | null;
+  dateReponse: string | null;
+  texteQuestion: string | null;
+  texteReponse: string | null;
+  statut: StatutQuestion;
+  /** Clôture publiée (« Réponse publiée », « Retirée »…), telle quelle ; null si aucune. */
+  cloture: { libelle: string; date: string | null } | null;
+  /** Jour de référence (durée d'attente d'une réponse). */
+  jour: string;
+  /**
+   * QG seulement : les autres questions au Gouvernement de la même chambre et du même jour (`date`),
+   * par numéro. Règle sûre : les QG d'un jour sont posées dans la séance de questions au
+   * Gouvernement de ce jour (une par jour de questions). null pour une QE ou une QOSD (aucune séance
+   * publiée avec la question) ; absent : fiche antérieure à ce champ.
+   */
+  memeSeance?: QuestionDeLaSeance[] | null;
+  provenance: Provenance;
+}
+
+/** Une autre question de la même séance : son résumé et son auteur relié (null sinon). */
+export interface QuestionDeLaSeance extends QuestionResume {
+  auteur: PersonneRef | null;
 }
 
 export type OngletPersonne = 'parcours' | 'choix' | 'dossiers' | 'declarations';

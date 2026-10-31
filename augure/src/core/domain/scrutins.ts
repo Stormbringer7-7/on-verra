@@ -71,7 +71,18 @@ export interface PositionDeGroupe {
 
 /** Ce que le scrutin met aux voix, par lien explicite (intitulé, `voteRefs`, `amescr`). */
 export type ObjetScrutin =
-  | { type: 'amendement'; amendement: AmendementRef; article: ArticleRef | null }
+  | {
+      type: 'amendement';
+      amendement: AmendementRef;
+      article: ArticleRef | null;
+      /**
+       * Amendement de suppression de l'article visé : son dispositif publié est exactement
+       * « Supprimer cet article. » (`estSuppressionArticle`). false sinon, ou sans dispositif publié ;
+       * absent : fiche antérieure à ce champ. Seule règle qui autorise « pour la suppression » et la
+       * phrase de conséquence sous le résultat.
+       */
+      suppression?: boolean;
+    }
   | { type: 'article'; article: ArticleRef | null; division: string | null }
   | { type: 'texte' }
   | { type: 'motion' }
@@ -126,7 +137,47 @@ export interface FicheScrutin {
    */
   votes: VoteNominatif[];
   compteRendu: Ancre | null;
+  /**
+   * Interventions reliées au vote par un lien structurel sûr, jamais par l'heure ni par le texte.
+   * null : aucun lien sûr (l'écran dit « aucune intervention reliée ») ; absent : fiche antérieure.
+   */
+  interventions?: InterventionsDuScrutin | null;
   provenance: Provenance;
+}
+
+/**
+ * Ce qui a été dit autour d'un scrutin :
+ *   - `amendement` : les interventions qui discutent l'amendement mis aux voix (colonne
+ *     `canon.intervention.amendement_id` ou lien intervention → amendement), commission comprise ;
+ *   - `seance` : scrutin sur un article, l'ensemble d'un texte ou une motion : les interventions sur
+ *     le dossier du scrutin (`intervention.dossier_id` ou lien) dans la séance que cite l'étape du
+ *     scrutin (acte → réunion), le jour du vote. Ce sont les « interventions de la séance sur ce
+ *     texte » : aucune n'est attribuée au vote lui-même.
+ */
+export interface InterventionsDuScrutin {
+  portee: 'amendement' | 'seance';
+  /** Premiers extraits, dans l'ordre de la discussion (commission d'abord pour un amendement). */
+  extraits: InterventionExtrait[];
+  total: number;
+  /** `seance` : la réunion quand elle est unique (lien « toute la séance ») ; null sinon. */
+  reunion: string | null;
+}
+
+/** « Supprimer cet article. » : dispositif d'un amendement de suppression, balises et espaces retirés. */
+const SUPPRIMER_CET_ARTICLE = 'Supprimer cet article.';
+
+/**
+ * Amendement de suppression de l'article visé : seulement si le dispositif publié (HTML) se réduit
+ * exactement à « Supprimer cet article. ». Aucune autre formulation n'est interprétée.
+ */
+export function estSuppressionArticle(dispositif: string | null): boolean {
+  if (!dispositif) return false;
+  const texte = dispositif
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;|&#x0*a0;|\u00a0/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return texte === SUPPRIMER_CET_ARTICLE;
 }
 
 export interface VoteIndividuel {

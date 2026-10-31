@@ -8,6 +8,7 @@ import type {
   Annuaire,
   AvancementDesTextes,
   Carte,
+  DemandeAccueil,
   DemandeAvancement,
   DemandeFamilles,
   DemandeCarte,
@@ -27,6 +28,7 @@ import type {
   FicheDossier,
   FicheEtape,
   FichePersonne,
+  FicheQuestion,
   FicheRepresentant,
   FicheScrutin,
   FiltreAnnuaire,
@@ -45,10 +47,11 @@ import type {
 } from '../domain/model';
 import { defineCommand, defineQuery } from './bus';
 
-type Vide = Record<string, never>;
-
-/** Dossiers à suivre et votes de la semaine dans les deux chambres. */
-export const ConsulterAccueil = defineQuery<Vide, Accueil>('accueil/consulter');
+/**
+ * Dossiers à suivre et votes de la semaine dans les deux chambres ; le jour choisi (aujourd'hui par
+ * défaut) : ce qui y a été décidé, ce qui y avance, ses votes ; les jours qui ont un élément.
+ */
+export const ConsulterAccueil = defineQuery<DemandeAccueil, Accueil>('accueil/consulter');
 
 /** Dossiers de la législature (17e par défaut), filtrés par état, origine et thème. */
 export const ListerDossiers = defineQuery<FiltreDossiers, ListeDossiers>('dossiers/lister');
@@ -103,6 +106,12 @@ export const ClasserPersonnes = defineQuery<DemandeClassement, Classement>('pers
 export const ConsulterPersonne = defineQuery<{ id: string; onglet?: OngletPersonne }, FichePersonne>(
   'personne/consulter',
 );
+
+/**
+ * Une question (au Gouvernement, écrite, orale sans débat) : textes de la question et de la réponse,
+ * ministère interrogé et attributaire tels que publiés, clôture, auteur et son groupe.
+ */
+export const ConsulterQuestion = defineQuery<{ id: string }, FicheQuestion>('question/consulter');
 
 export const ConsulterInstitution = defineQuery<{ institution: TypeInstitution }, Institution>('institution/consulter');
 

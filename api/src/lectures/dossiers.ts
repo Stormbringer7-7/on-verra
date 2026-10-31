@@ -2,7 +2,9 @@
 // Chacun assemble les morceaux rendus par les dépôts (DossiersRepository surtout, plus les votes,
 // les discussions et les intérêts), puis remplit les synthèses (REMPLIR).
 
-import type { EtatDossier, Origine, SortAmendement } from '@contrat/domain/model';
+import type { Chambre, DemandeAccueil, EtatDossier, Origine, SortAmendement } from '@contrat/domain/model';
+
+import type { FiltreAccueil } from '../ports';
 
 import {
   cleEtape,
@@ -10,6 +12,7 @@ import {
   type LecturesDeps,
   Introuvable,
   RequeteInvalide,
+  TAILLE_MAX,
   barreObligatoire,
   borner,
   parmi,
@@ -52,6 +55,35 @@ const SORTS: Record<SortAmendement, true> = {
   en_attente: true,
 };
 
+/** Dossiers de chaque liste du jour (décidés, qui avancent) au plus. */
+export const LIMITE_DU_JOUR = 20;
+/** Semaines couvertes par le calendrier de l'Accueil, avant et après celle du jour choisi. */
+export const SEMAINES_AUTOUR = 3;
+
+const JOUR = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Jour facultatif « AAAA-MM-JJ », date réelle (400 sinon). */
+export function jourFacultatif(valeur: unknown): string | undefined {
+  if (valeur === undefined || valeur === null) return undefined;
+  const t = typeof valeur === 'string' && JOUR.test(valeur) ? Date.parse(`${valeur}T00:00:00Z`) : NaN;
+  // 2026-02-30 : rejeté (Date.parse le rendrait au 2 mars, ou NaN selon le moteur).
+  if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== valeur) {
+    throw new RequeteInvalide('Jour : date « AAAA-MM-JJ » attendue');
+  }
+  return valeur;
+}
+
+/** Fenêtre du calendrier : du lundi trois semaines avant celle du jour au dimanche trois semaines après. */
+export function fenetreDe(jour: string): { debut: string; fin: string } {
+  const { debut, fin } = semaineDe(jour);
+  const decaler = (j: string, n: number) => {
+    const d = new Date(`${j}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  return { debut: decaler(debut, -7 * SEMAINES_AUTOUR), fin: decaler(fin, 7 * SEMAINES_AUTOUR) };
+}
+
 /** Semaine (lundi → dimanche) qui contient le jour donné (« AAAA-MM-JJ »). */
 export function semaineDe(jour: string): { debut: string; fin: string } {
   const d = new Date(`${jour}T00:00:00Z`);
@@ -60,6 +92,29 @@ export function semaineDe(jour: string): { debut: string; fin: string } {
   const dimanche = new Date(lundi);
   dimanche.setUTCDate(lundi.getUTCDate() + 6);
   return { debut: lundi.toISOString().slice(0, 10), fin: dimanche.toISOString().slice(0, 10) };
+}
+
+const CHAMBRES: Record<Chambre, true> = { AN: true, SENAT: true };
+/** Dossiers suivis acceptés dans le filtre de l'Accueil, au plus (comme Mes suivis). */
+export const MAX_DOSSIERS_FILTRE = 50;
+
+/**
+ * Filtres de l'Accueil vérifiés : chambres du vocabulaire (sans doublon), identifiants de dossiers
+ * (texte, 50 au plus) ; absents : null (pas de filtre). 400 sinon.
+ */
+export function filtreAccueil(demande: DemandeAccueil | undefined): FiltreAccueil {
+  const liste = (valeur: unknown, nom: string): unknown[] | null => {
+    if (valeur === undefined || valeur === null) return null;
+    if (!Array.isArray(valeur)) throw new RequeteInvalide(`${nom} : liste attendue`);
+    return valeur;
+  };
+  const chambres = liste(demande?.chambres, 'Chambres');
+  const ids = liste(demande?.dossiers, 'Dossiers');
+  if (ids && ids.length > MAX_DOSSIERS_FILTRE) throw new RequeteInvalide(`Dossiers : ${MAX_DOSSIERS_FILTRE} au plus`);
+  return {
+    chambres: chambres && [...new Set(chambres.map((c) => parmi(c, CHAMBRES, 'Chambre')))],
+    dossiers: ids && [...new Set(ids.map((id) => texte(id, 'Identifiant du dossier')))],
+  };
 }
 
 type HandlersDossiers = Pick<
@@ -72,13 +127,37 @@ export function lecturesDossiers({ depots, synthetiseur, horloge }: LecturesDeps
   const { dossiers, scrutins, discussions, transparence } = depots;
 
   return {
-    ConsulterAccueil: async () => {
-      const { debut, fin } = semaineDe(horloge.aujourdhui());
-      const [aSuivre, votes] = await Promise.all([
+    ConsulterAccueil: async (demande) => {
+      const aujourdhui = horloge.aujourdhui();
+      const jour = jourFacultatif(demande?.jour) ?? aujourdhui;
+      const filtre = filtreAccueil(demande);
+      const filtreActif = filtre.chambres || filtre.dossiers ? filtre : undefined;
+      const { debut, fin } = semaineDe(jour);
+      const fenetre = fenetreDe(jour);
+      const [aSuivre, votes, duJour, votesDuJour, reunions, actes, scrutes] = await Promise.all([
         dossiers.aSuivre(LIMITE_A_SUIVRE),
         scrutins.entre(debut, fin, LIMITE_VOTES_SEMAINE),
+        dossiers.duJour(jour, LIMITE_DU_JOUR, filtreActif),
+        // Filtrés ici (chambre, dossier cité) : tous ceux du jour d'abord, puis la borne.
+        scrutins.entre(jour, jour, filtreActif ? TAILLE_MAX : LIMITE_VOTES_SEMAINE),
+        dossiers.reunionsDuJour(jour, filtreActif),
+        dossiers.joursActifs(fenetre.debut, fenetre.fin, filtreActif),
+        scrutins.jours(fenetre.debut, fenetre.fin, filtreActif),
       ]);
-      return REMPLIR.ConsulterAccueil(r, { semaine: { debut, fin }, dossiers: aSuivre, votes });
+      const votesGardes = votesDuJour
+        .filter(
+          (v) =>
+            (!filtre.chambres || filtre.chambres.includes(v.chambre)) &&
+            (!filtre.dossiers || (!!v.dossier && filtre.dossiers.includes(v.dossier.id))),
+        )
+        .slice(0, LIMITE_VOTES_SEMAINE);
+      return REMPLIR.ConsulterAccueil(r, {
+        semaine: { debut, fin },
+        dossiers: aSuivre,
+        votes,
+        jour: { date: jour, ...duJour, votes: votesGardes, reunions },
+        calendrier: { aujourdhui, fenetre, jours: [...new Set([...actes, ...scrutes])].sort() },
+      });
     },
 
     ListerDossiers: async (filtre) => {
@@ -114,7 +193,12 @@ export function lecturesDossiers({ depots, synthetiseur, horloge }: LecturesDeps
         etapes,
         versionsDuTexte: articles.versionsDuTexte,
         articles: articles.articles,
-        amendements: { parEtape: amendements.parEtape, filtre, liste: amendements.liste },
+        amendements: {
+          parEtape: amendements.parEtape,
+          ...(amendements.parSort ? { parSort: amendements.parSort } : {}),
+          filtre,
+          liste: amendements.liste,
+        },
         scrutins: votes,
         acteurs,
         interets,

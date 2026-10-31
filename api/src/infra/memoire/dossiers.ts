@@ -9,12 +9,20 @@ import type {
   DossierResume,
   FicheDossier,
   FiltreDossiers,
+  ReunionsDuJour,
   SortAmendement,
   TexteEnAttente,
 } from '@contrat/domain/model';
 
-import type { ActeSuivi, DossiersRepository, Pagination, PositionTexte } from '../../ports';
+import type { ActeSuivi, DossiersRepository, FiltreAccueil, Pagination, PositionTexte } from '../../ports';
 import { type DonneesMemoire, paginer, premier } from './donnees';
+
+/** Le résumé passe-t-il le filtre de l'Accueil ce jour-là ? (chambre : case de ce lieu en cours ou commencée ce jour) */
+function garder(d: DossierResume, jour: string, filtre: FiltreAccueil | undefined): boolean {
+  if (filtre?.dossiers && !filtre.dossiers.includes(d.id)) return false;
+  if (!filtre?.chambres) return true;
+  return d.barre.some((c) => !!c.lieu && (filtre.chambres as string[]).includes(c.lieu) && (c.courante || c.debut === jour));
+}
 
 export class DossiersMemoire implements DossiersRepository {
   constructor(private readonly donnees: Promise<DonneesMemoire>) {}
@@ -38,6 +46,45 @@ export class DossiersMemoire implements DossiersRepository {
   async aSuivre(limite: number) {
     const { exemples } = await this.donnees;
     return (exemples.ConsulterAccueil[0]?.output.dossiers ?? []).slice(0, limite);
+  }
+
+  /**
+   * La maquette fixe ce qui a été décidé et ce qui avance pour les jours de ses exemples : rien les
+   * autres jours. Filtre sans exemple qui le porte : les dossiers suivis ; une chambre, les dossiers
+   * dont une case de ce lieu est en cours ou commence ce jour-là (les fixtures n'ont pas les actes).
+   */
+  async duJour(jour: string, limite: number, filtre?: FiltreAccueil) {
+    const { exemples } = await this.donnees;
+    const meme = (a: unknown[] | null | undefined, b: unknown[] | null | undefined) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    // L'exemple de ce jour avec ce filtre, tel quel ; sinon celui sans filtre, filtré ici.
+    const exact = premier(
+      exemples.ConsulterAccueil,
+      (e) => e.output.jour?.date === jour && meme(e.input.chambres, filtre?.chambres) && meme(e.input.dossiers, filtre?.dossiers),
+    )?.output.jour;
+    if (exact) return { decides: exact.decides.slice(0, limite), avancent: exact.avancent.slice(0, limite) };
+    const j = premier(exemples.ConsulterAccueil, (e) => !e.input.chambres && !e.input.dossiers && e.output.jour?.date === jour)?.output.jour;
+    const garde = (d: DossierResume) => garder(d, jour, filtre);
+    return {
+      decides: (j?.decides ?? []).filter(garde).slice(0, limite),
+      avancent: (j?.avancent ?? []).filter(garde).slice(0, limite),
+    };
+  }
+
+  /** Jours datés des résumés connus : dernier acte publié, prochaine échéance ; filtrés comme `duJour`. */
+  async joursActifs(debut: string, fin: string, filtre?: FiltreAccueil) {
+    const jours = (await this.resumes()).flatMap((d) =>
+      [d.dernierEvenement?.date, d.prochaineEcheance?.date].filter((j): j is string => !!j && garder(d, j, filtre)),
+    );
+    return [...new Set(jours.filter((j) => j >= debut && j <= fin))].sort();
+  }
+
+  /** Réunions du jour de l'exemple sans filtre, par chambre du filtre ; suivis : inconnu (pas d'ordre du jour en fixtures). */
+  async reunionsDuJour(jour: string, filtre?: FiltreAccueil): Promise<ReunionsDuJour[]> {
+    const { exemples } = await this.donnees;
+    const j = premier(exemples.ConsulterAccueil, (e) => !e.input.chambres && !e.input.dossiers && e.output.jour?.date === jour)?.output.jour;
+    return (j?.reunions ?? [])
+      .filter((r) => !filtre?.chambres || filtre.chambres.includes(r.chambre))
+      .map((r) => (filtre?.dossiers ? { chambre: r.chambre, commissions: null, seances: null } : r));
   }
 
   async lister(filtre: FiltreDossiers, pagination: Pagination) {
@@ -94,7 +141,8 @@ export class DossiersMemoire implements DossiersRepository {
   async amendements(id: string, filtre: { sort?: SortAmendement }, pagination: Pagination) {
     const f = await this.fiche(id);
     const liste: AmendementResume[] = (f?.amendements.liste.elements ?? []).filter((a) => !filtre.sort || a.sort === filtre.sort);
-    return { parEtape: f?.amendements.parEtape ?? [], liste: paginer(liste, pagination) };
+    const parSort = f?.amendements.parSort;
+    return { parEtape: f?.amendements.parEtape ?? [], ...(parSort ? { parSort } : {}), liste: paginer(liste, pagination) };
   }
 
   async acteurs(id: string) {

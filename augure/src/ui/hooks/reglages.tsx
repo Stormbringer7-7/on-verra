@@ -9,10 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
+import { estTheme, THEME_PAR_DEFAUT, type IdTheme } from '../theme/Themes';
+
 export const CLE_STOCKAGE = 'augure.reglages.v1';
 
 export type TailleTexte = 'normale' | 'grande' | 'tres_grande';
-export type Theme = 'sombre' | 'clair';
 
 /** Facteur appliqué aux tailles de texte (et à leur interligne). */
 export const ECHELLES: Record<TailleTexte, number> = { normale: 1, grande: 1.15, tres_grande: 1.3 };
@@ -30,7 +31,7 @@ export interface Reglages {
   taille: TailleTexte;
   contraste: boolean;
   animationsReduites: boolean;
-  theme: Theme;
+  theme: IdTheme;
   /** Bienvenue déjà vue (premier lancement passé). */
   bienvenueVue: boolean;
   dossiers: DossierSuivi[];
@@ -43,12 +44,18 @@ export const REGLAGES_PAR_DEFAUT: Reglages = {
   taille: 'normale',
   contraste: false,
   animationsReduites: false,
-  theme: 'sombre',
+  theme: THEME_PAR_DEFAUT,
   bienvenueVue: false,
   dossiers: [],
   personnes: [],
   vuLe: null,
 };
+
+/** Thème lu : les anciens réglages « sombre » / « clair » deviennent Oppression / Propre. */
+function lireTheme(v: unknown): IdTheme {
+  if (v === 'clair') return 'propre';
+  return estTheme(v) ? v : THEME_PAR_DEFAUT;
+}
 
 /** Garde des valeurs lues seulement ce qui a la bonne forme (stockage d'une autre version, modifié à la main). */
 export function lireReglages(brut: unknown): Reglages {
@@ -59,7 +66,7 @@ export function lireReglages(brut: unknown): Reglages {
     taille: r.taille === 'grande' || r.taille === 'tres_grande' ? r.taille : 'normale',
     contraste: r.contraste === true,
     animationsReduites: r.animationsReduites === true,
-    theme: r.theme === 'clair' ? 'clair' : 'sombre',
+    theme: lireTheme(r.theme),
     bienvenueVue: r.bienvenueVue === true,
     dossiers: liste<DossierSuivi>(r.dossiers, (x) => typeof x.id === 'string' && typeof x.titre === 'string'),
     personnes: liste<PersonneSuivie>(r.personnes, (x) => typeof x.id === 'string' && typeof x.nom === 'string'),
